@@ -10,7 +10,9 @@ class Settings(Tap):
     fragment_predictions: (
         Path  # path to .tsv table that shall contain the per fragment predictions
     )
-    sequence_prediction: Path  # path to .fasta file that shall contain the predicted sequence
+    sequence_prediction: (
+        Path  # path to .fasta file that shall contain the predicted sequence
+    )
     sequence_name: str
 
 
@@ -25,4 +27,4 @@ def main():
     # save predicted sequence
     with open(settings.sequence_prediction, "w") as f:
         print(f">{settings.sequence_name}", file=f)
-        print("".join(prediction.sequence))
+        print("".join(prediction.sequence), file=f)
