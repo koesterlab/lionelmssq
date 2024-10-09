@@ -13,7 +13,6 @@ class Prediction:
     fragments: pl.DataFrame
 
 
-
 def predict_seq(fragments: pl.DataFrame, seq_len: int) -> Prediction:
     # TODO: get rid of the requirement to pass the length of the sequence
     # and instead infer it from the fragments
@@ -42,10 +41,14 @@ def predict_seq(fragments: pl.DataFrame, seq_len: int) -> Prediction:
     nucleoside_masses = dict(masses.iter_rows())
 
     if not start_fragments:
-        logger.warning("No start fragments provided, this will likely lead to suboptimal results.")
+        logger.warning(
+            "No start fragments provided, this will likely lead to suboptimal results."
+        )
 
     if not end_fragments:
-        logger.warning("No end fragments provided, this will likely lead to suboptimal results.")
+        logger.warning(
+            "No end fragments provided, this will likely lead to suboptimal results."
+        )
 
     # x: binary variables indicating fragment j presence at position i
     x = [
@@ -97,7 +100,6 @@ def predict_seq(fragments: pl.DataFrame, seq_len: int) -> Prediction:
 
     # select one base per position
     for i in range(seq_len):
-
         prob += lpSum([y[i][b] for b in nucleosides]) == 1
 
     # fill z with the product of binary variables x and y

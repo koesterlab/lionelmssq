@@ -20,7 +20,7 @@ jobs:
     - uses: Gr1N/setup-poetry@v8
     - name: Test with pytest
       run: |
-        poetry run black .
+        poetry run ruff format --check
 
   lint:
     runs-on: ubuntu-latest
@@ -32,7 +32,7 @@ jobs:
     - uses: Gr1N/setup-poetry@v8
     - name: Test with pytest
       run: |
-        poetry run flake8 .
+        poetry run ruff check
 
   test:
     runs-on: ubuntu-latest
@@ -44,4 +44,4 @@ jobs:
     - uses: Gr1N/setup-poetry@v8
     - name: Test with pytest
       run: |
-        poetry run pytest
+        poetry run pytest -v

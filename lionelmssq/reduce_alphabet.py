@@ -4,12 +4,8 @@ import polars as pl
 
 
 def reduce_alphabet_by_fragments(fragments: pl.DataFrame):
-    start_masses = (
-        fragments.filter(pl.col("is_start")).get_column("observed_mass")
-    )
-    end_masses = (
-        fragments.filter(pl.col("is_end")).get_column("observed_mass")
-    )
+    start_masses = fragments.filter(pl.col("is_start")).get_column("observed_mass")
+    end_masses = fragments.filter(pl.col("is_end")).get_column("observed_mass")
 
     # determine mass diffs
     diffs = sorted(
@@ -21,12 +17,12 @@ def reduce_alphabet_by_fragments(fragments: pl.DataFrame):
     # explain mass diffs
     explanations = _explain_diffs(diffs)
 
-    # unexplained differences, only consider those
-    unexplained = [
-        diff
-        for diff, expls in explanations.items()
-        if not expls and diff > _MIN_PLAUSIBLE_NUCLEOSIDE_DIFF
-    ]
+    # unexplained differences
+    # unexplained = [
+    #     diff
+    #     for diff, expls in explanations.items()
+    #     if not expls and diff > _MIN_PLAUSIBLE_NUCLEOSIDE_DIFF
+    # ]
     # TODO can we do something with the unexplained differences?
     # for example consider more than two bases as difference?
     # at least we should log them and warn the user
@@ -88,7 +84,9 @@ def _explain_diffs(diffs):
         {
             diff: [
                 (item_a["nucleoside"], item_b["nucleoside"])
-                for item_a, item_b in combinations(UNIQUE_MASSES.iter_rows(named=True), 2)
+                for item_a, item_b in combinations(
+                    UNIQUE_MASSES.iter_rows(named=True), 2
+                )
                 if _is_similar(
                     diff, item_a["monoisotopic_mass"] + item_b["monoisotopic_mass"]
                 )

@@ -32,5 +32,3 @@ def test_testcase(testcase):
     )
 
     assert prediction.sequence == true_seq
-
-
