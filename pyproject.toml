@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "lionelmssq"
+version = "0.1.0"
+description = ""
+authors = ["Johannes Koester <johannes.koester@uni-due.de>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+polars = "^1.9.0"
+pulp = "^2.9.0"
+pytest = "^8.3.3"
+typed-argument-parser = "^1.10.1"
+altair = "^5.4.1"
+pyyaml = "^6.0.2"
+loguru = "^0.7.2"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
