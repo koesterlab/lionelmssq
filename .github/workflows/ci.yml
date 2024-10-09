@@ -45,6 +45,9 @@ jobs:
         python-version: "3.12"
     - uses: Gr1N/setup-poetry@v8
     - run: poetry install
+    - uses: prefix-dev/setup-pixi@v0.8.1
+    - run: |
+        pixi global install -c Gurobi gurobi
     - name: Test with pytest
       run: |
         poetry run pytest -v
