@@ -13,7 +13,9 @@ class Prediction:
     fragments: pl.DataFrame
 
 
-def predict_seq(fragments: pl.DataFrame, seq_len: int) -> Prediction:
+def predict_seq(
+    fragments: pl.DataFrame, seq_len: int, solver: str, threads: int
+) -> Prediction:
     # TODO: get rid of the requirement to pass the length of the sequence
     # and instead infer it from the fragments
     masses = reduce_alphabet_by_fragments(fragments)
@@ -147,7 +149,13 @@ def predict_seq(fragments: pl.DataFrame, seq_len: int) -> Prediction:
 
     import pulp
 
-    gurobi = pulp.getSolver("GUROBI_CMD")
+    match solver:
+        case "gurobi":
+            solver = "GUROBI_CMD"
+        case "cbc":
+            solver = "PULP_CBC_CMD"
+
+    gurobi = pulp.getSolver(solver, threads=threads)
     gurobi.msg = False
     # TODO the returned value resembles the accuracy of the prediction
     _ = prob.solve(gurobi)

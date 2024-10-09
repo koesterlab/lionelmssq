@@ -1,4 +1,5 @@
 import importlib.resources
+import os
 
 import pytest
 from lionelmssq.predict_seq import predict_seq
@@ -25,7 +26,9 @@ def test_testcase(testcase):
     with pl.Config(tbl_rows=30):
         print(fragments)
 
-    prediction = predict_seq(fragments, len(true_seq))
+    prediction = predict_seq(
+        fragments, len(true_seq), os.environ.get("SOLVER", "cbc"), threads=16
+    )
 
     plot_prediction_with_truth(prediction, true_seq, fragments).save(
         base_path / "plot.html"
