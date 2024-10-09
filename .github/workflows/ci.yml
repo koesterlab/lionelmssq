@@ -18,6 +18,7 @@ jobs:
       with:
         python-version: "3.12"
     - uses: Gr1N/setup-poetry@v8
+    - run: poetry install
     - name: Test with pytest
       run: |
         poetry run ruff format --check
@@ -30,6 +31,7 @@ jobs:
       with:
         python-version: "3.12"
     - uses: Gr1N/setup-poetry@v8
+    - run: poetry install
     - name: Test with pytest
       run: |
         poetry run ruff check
@@ -42,6 +44,7 @@ jobs:
       with:
         python-version: "3.12"
     - uses: Gr1N/setup-poetry@v8
+    - run: poetry install
     - name: Test with pytest
       run: |
         poetry run pytest -v
