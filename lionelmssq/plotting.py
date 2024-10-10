@@ -1,5 +1,5 @@
 from typing import List
-from lionelmssq.predict_seq import Prediction
+from lionelmssq.prediction import Prediction
 import polars as pl
 import altair as alt
 

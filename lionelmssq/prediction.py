@@ -1,8 +1,9 @@
 from dataclasses import dataclass
 from itertools import combinations
-from typing import List
+from pathlib import Path
+from typing import List, Self
 from pulp import LpProblem, LpMinimize, LpInteger, LpContinuous, LpVariable, lpSum
-from lionelmssq.reduce_alphabet import reduce_alphabet_by_fragments
+from lionelmssq.alphabet import reduce_alphabet_by_fragments
 import polars as pl
 from loguru import logger
 
@@ -11,6 +12,15 @@ from loguru import logger
 class Prediction:
     sequence: List[str]
     fragments: pl.DataFrame
+
+    @classmethod
+    def from_files(cls, sequence_path: Path, fragments_path: Path) -> Self:
+        with open(sequence_path) as f:
+            head, seq = f.readlines()
+            assert head.startswith(">")
+        
+        fragments = pl.read_csv(fragments_path, separator="\t")
+        return Prediction(sequence=seq.strip(), fragments=fragments)
 
 
 def predict_seq(

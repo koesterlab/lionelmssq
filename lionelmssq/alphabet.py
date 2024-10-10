@@ -2,6 +2,12 @@ from itertools import combinations
 from lionelmssq.masses import UNIQUE_MASSES
 import polars as pl
 
+# TODO:
+# also consider that the observations are not complete and that we probably don't see all the letters as diffs or singletons.
+# Hence, maybe do the following: solver first with the reduced alphabet, and if the optimization does not yield a sufficiently
+# good result, then try again with an extended alphabet.
+
+
 
 def reduce_alphabet_by_fragments(fragments: pl.DataFrame):
     start_masses = fragments.filter(pl.col("is_start")).get_column("observed_mass")

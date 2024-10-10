@@ -2,7 +2,7 @@ import importlib.resources
 import os
 
 import pytest
-from lionelmssq.predict_seq import predict_seq
+from lionelmssq.prediction import predict_seq
 from lionelmssq.common import parse_nucleosides
 from lionelmssq.plotting import plot_prediction_with_truth
 import polars as pl

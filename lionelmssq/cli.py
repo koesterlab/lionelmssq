@@ -1,6 +1,6 @@
 from pathlib import Path
 from typing import Literal
-from lionelmssq.predict_seq import predict_seq
+from lionelmssq.prediction import predict_seq
 from tap import Tap
 import polars as pl
 
