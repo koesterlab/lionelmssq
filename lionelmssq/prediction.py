@@ -231,6 +231,9 @@ class Predictor:
             ]
             for diff in diffs
         }
+        # TODO it can happen that both two and one nucleoside are good explanations of a diff
+        # this is currently ignored, also three nucleosides are not considered
+        # one should rather infer the min and max number of possible nucleosides that test all explanations in between
         # explain with two nucleosides
         self.explanations.update(
             {
@@ -260,3 +263,11 @@ class Predictor:
         reduced = UNIQUE_MASSES.filter(pl.col("nucleoside").is_in(observed_nucleosides))
 
         return reduced
+    
+    def _predict_skeleton(self, side: str) -> List[str]:
+        skeleton_seq = [None] * self.seq_len
+        for i, diff in enumerate(self.mass_diffs[side]):
+            expl = self.explanations[diff]
+            # if there is only one single nucleoside explanation, we can directly assign the nucleoside
+            # if there are tuples, we have to assign a possibility to the current and next position
+            # and take care of expressing that both permutations are possible
