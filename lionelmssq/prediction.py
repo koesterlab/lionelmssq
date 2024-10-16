@@ -26,7 +26,7 @@ class Prediction:
 
 class Predictor:
     def __init__(self, fragments: pl.DataFrame, seq_len: int, solver: str, threads: int):
-        self.fragments = fragments
+        self.fragments = fragments.sort("observed_mass")
         self.seq_len = seq_len
         self.solver = solver
         self.threads = threads
