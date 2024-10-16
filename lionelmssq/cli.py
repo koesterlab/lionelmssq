@@ -1,6 +1,6 @@
 from pathlib import Path
 from typing import Literal
-from lionelmssq.prediction import predict_seq
+from lionelmssq.prediction import Predictor, predict_seq
 from tap import Tap
 import polars as pl
 
@@ -24,9 +24,9 @@ class Settings(Tap):
 def main():
     settings = Settings(underscores_to_dashes=True).parse_args()
     fragments = pl.read_csv(settings.fragments, separator="\t")
-    prediction = predict_seq(
+    prediction = Predictor(
         fragments, settings.seq_len, settings.solver, settings.threads
-    )
+    ).predict()
 
     # save fragment predictions
     prediction.fragments.write_csv(settings.fragment_predictions, separator="\t")

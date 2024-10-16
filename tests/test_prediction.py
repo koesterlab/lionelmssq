@@ -2,7 +2,7 @@ import importlib.resources
 import os
 
 import pytest
-from lionelmssq.prediction import predict_seq
+from lionelmssq.prediction import Predictor
 from lionelmssq.common import parse_nucleosides
 from lionelmssq.plotting import plot_prediction_with_truth
 import polars as pl
@@ -26,9 +26,9 @@ def test_testcase(testcase):
     with pl.Config(tbl_rows=30):
         print(fragments)
 
-    prediction = predict_seq(
+    prediction = Predictor(
         fragments, len(true_seq), os.environ.get("SOLVER", "cbc"), threads=16
-    )
+    ).predict()
 
     plot_prediction_with_truth(prediction, true_seq, fragments).save(
         base_path / "plot.html"
