@@ -1,9 +1,10 @@
 from dataclasses import dataclass
-from itertools import combinations
+from itertools import chain, combinations, groupby, permutations
 from pathlib import Path
-from typing import List, Self
+from typing import List, Optional, Self, Set, Tuple
 from pulp import LpProblem, LpMinimize, LpInteger, LpContinuous, LpVariable, lpSum
 from lionelmssq.alphabet import MAX_PLAUSILE_NUCLEOSIDE_DIFF, is_similar
+from lionelmssq.common import Side, get_singleton_set_item
 from lionelmssq.masses import UNIQUE_MASSES
 import polars as pl
 from loguru import logger
@@ -19,13 +20,15 @@ class Prediction:
         with open(sequence_path) as f:
             head, seq = f.readlines()
             assert head.startswith(">")
-        
+
         fragments = pl.read_csv(fragments_path, separator="\t")
         return Prediction(sequence=seq.strip(), fragments=fragments)
 
 
 class Predictor:
-    def __init__(self, fragments: pl.DataFrame, seq_len: int, solver: str, threads: int):
+    def __init__(
+        self, fragments: pl.DataFrame, seq_len: int, solver: str, threads: int
+    ):
         self.fragments = fragments.sort("observed_mass")
         self.seq_len = seq_len
         self.solver = solver
@@ -39,8 +42,8 @@ class Predictor:
         # and instead infer it from the fragments
 
         self._collect_singleton_masses()
-        self._collect_diffs("start")
-        self._collect_diffs("end")
+        self._collect_diffs(Side.START)
+        self._collect_diffs(Side.END)
         self._collect_diff_explanations()
 
         # TODO:
@@ -48,6 +51,11 @@ class Predictor:
         # Hence, maybe do the following: solve first with the reduced alphabet, and if the optimization does not yield a sufficiently
         # good result, then try again with an extended alphabet.
         masses = self._reduce_alphabet()
+
+        skeleton_seq, start_min_fragment_ends = self._predict_skeleton(Side.START)
+        _, end_min_fragment_ends = self._predict_skeleton(
+            Side.END, skeleton_seq=skeleton_seq
+        )
 
         prob = LpProblem("RNA sequencing", LpMinimize)
         # i = 1,...,n: positions in the sequence
@@ -101,7 +109,9 @@ class Predictor:
         z = [
             [
                 {
-                    b: LpVariable(f"z_{i},{j},{b}", lowBound=0, upBound=1, cat=LpInteger)
+                    b: LpVariable(
+                        f"z_{i},{j},{b}", lowBound=0, upBound=1, cat=LpInteger
+                    )
                     for b in nucleosides
                 }
                 for j in range(n_fragments)
@@ -153,14 +163,18 @@ class Predictor:
                     )
 
         # ensure that start fragments are aligned at the beginning of the sequence
-        for j in start_fragments:
-            x[0][j].setInitialValue(1)
-            x[0][j].fixValue()
+        for j, min_end in zip(start_fragments, start_min_fragment_ends):
+            # min_end is exclusive
+            for i in range(min_end):
+                x[i][j].setInitialValue(1)
+                x[i][j].fixValue()
 
         # ensure that end fragments are aligned at the end of the sequence
-        for j in end_fragments:
-            x[self.seq_len - 1][j].setInitialValue(1)
-            x[self.seq_len - 1][j].fixValue()
+        for j, min_end in zip(end_fragments, end_min_fragment_ends):
+            # min_end is exclusive
+            for i in range(min_end + 1, 0):
+                x[i][j].setInitialValue(1)
+                x[i][j].fixValue()
 
         # ensure that inner fragments are neither aligned at the beginning or the end of the sequence
         for j in set(range(n_fragments)) - set(start_fragments) - set(end_fragments):
@@ -174,18 +188,34 @@ class Predictor:
             prob += predicted_mass_diff_abs[j] >= predicted_mass_diff[j]
             prob += predicted_mass_diff_abs[j] >= -predicted_mass_diff[j]
 
+        # use skeleton seq to fix bases
+        for i, nucs in enumerate(skeleton_seq):
+            if not nucs:
+                # nothing known, do not constrain
+                continue
+            for b in nucleosides:
+                if b not in nucs:
+                    # do not allow bases that are not observed in the skeleton
+                    y[i][b].setInitialValue(0)
+                    y[i][b].fixValue()
+            if len(nucs) == 1:
+                nuc = get_singleton_set_item(nucs)
+                # only one base is possible, already set it to 1
+                y[i][nuc].setInitialValue(1)
+                y[i][nuc].fixValue()
+
         import pulp
 
         match self.solver:
             case "gurobi":
-                solver = "GUROBI_CMD"
+                solver_name = "GUROBI_CMD"
             case "cbc":
-                solver = "PULP_CBC_CMD"
+                solver_name = "PULP_CBC_CMD"
 
-        gurobi = pulp.getSolver(solver, threads=self.threads)
-        gurobi.msg = False
+        solver = pulp.getSolver(solver_name, threads=self.threads)
+        # gurobi.msg = False
         # TODO the returned value resembles the accuracy of the prediction
-        _ = prob.solve(gurobi)
+        _ = prob.solve(solver)
 
         def get_base(i):
             for b in nucleosides:
@@ -200,7 +230,8 @@ class Predictor:
                 {
                     "left": min(i for i in range(self.seq_len) if x[i][j].value() == 1),
                     # right bound shall be exclusive, hence add 1
-                    "right": max(i for i in range(self.seq_len) if x[i][j].value() == 1) + 1,
+                    "right": max(i for i in range(self.seq_len) if x[i][j].value() == 1)
+                    + 1,
                     "observed_mass": fragment_masses[j],
                     "predicted_mass_diff": predicted_mass_diff[j].value(),
                 }
@@ -212,20 +243,28 @@ class Predictor:
             sequence=seq,
             fragments=fragment_predictions,
         )
-    
-    def _collect_diffs(self, side: str) -> None:
+
+    def _collect_diffs(self, side: Side) -> None:
         masses = self.fragments.filter(pl.col(f"is_{side}")).get_column("observed_mass")
         self.mass_diffs[side] = [masses[0]] + (masses[1:] - masses[:-1]).to_list()
-    
+
     def _collect_singleton_masses(self) -> None:
-        masses = self.fragments.filter(~(pl.col(f"is_start") | pl.col("is_end"))).get_column("observed_mass")
-        self.singleton_masses = set(mass for mass in masses if mass <= MAX_PLAUSILE_NUCLEOSIDE_DIFF)
-    
+        masses = self.fragments.filter(
+            ~(pl.col("is_start") | pl.col("is_end"))
+        ).get_column("observed_mass")
+        self.singleton_masses = set(
+            mass for mass in masses if mass <= MAX_PLAUSILE_NUCLEOSIDE_DIFF
+        )
+
     def _collect_diff_explanations(self) -> None:
-        diffs = set(self.mass_diffs["start"]) | set(self.mass_diffs["end"]) | self.singleton_masses
+        diffs = (
+            set(self.mass_diffs[Side.START])
+            | set(self.mass_diffs[Side.END])
+            | self.singleton_masses
+        )
         self.explanations = {
             diff: [
-                item["nucleoside"]
+                Explanation(item["nucleoside"])
                 for item in UNIQUE_MASSES.iter_rows(named=True)
                 if is_similar(diff, item["monoisotopic_mass"])
             ]
@@ -238,10 +277,12 @@ class Predictor:
         self.explanations.update(
             {
                 diff: [
-                    (item_a["nucleoside"], item_b["nucleoside"])
+                    Explanation(item_a["nucleoside"], item_b["nucleoside"])
                     for item_a, item_b in combinations(
                         UNIQUE_MASSES.iter_rows(named=True), 2
                     )
+                    # TODO: for two fragments, shouldn't is_similar be double as tolerant
+                    # regarding the error rate?
                     if is_similar(
                         diff, item_a["monoisotopic_mass"] + item_b["monoisotopic_mass"]
                     )
@@ -252,22 +293,87 @@ class Predictor:
         )
 
     def _reduce_alphabet(self) -> pl.DataFrame:
-        def get_nucleosides():
-            for expls in self.explanations.values():
-                for expl in expls:
-                    if isinstance(expl, tuple):
-                        yield from expl
-                    else:
-                        yield expl
-        observed_nucleosides = set(get_nucleosides())
+        observed_nucleosides = {
+            nuc
+            for expls in self.explanations.values()
+            for expl in expls
+            for nuc in expl
+        }
         reduced = UNIQUE_MASSES.filter(pl.col("nucleoside").is_in(observed_nucleosides))
 
         return reduced
-    
-    def _predict_skeleton(self, side: str) -> List[str]:
-        skeleton_seq = [None] * self.seq_len
-        for i, diff in enumerate(self.mass_diffs[side]):
-            expl = self.explanations[diff]
-            # if there is only one single nucleoside explanation, we can directly assign the nucleoside
-            # if there are tuples, we have to assign a possibility to the current and next position
+
+    def _predict_skeleton(
+        self, side: Side, skeleton_seq: Optional[List[Set[str]]] = None
+    ) -> Tuple[List[Set[str]], List[int]]:
+        if skeleton_seq is None:
+            skeleton_seq = [set() for _ in range(self.seq_len)]
+
+        factor = 1 if side == Side.START else -1
+
+        def get_possible_nucleosides(pos: int, i: int) -> Set[str]:
+            return skeleton_seq[pos + factor * i]
+
+        pos = {0} if side == Side.START else {-1}
+
+        min_fragment_ends = []
+        for diff in self.mass_diffs[side]:
+            explanations = self.explanations[diff]
+            # METHOD: if there is only one single nucleoside explanation, we can
+            # directly assign the nucleoside if there are tuples, we have to assign a
+            # possibility to the current and next position
             # and take care of expressing that both permutations are possible
+            # Further, we consider multiple possible start positions, depending on
+            # whether the previous explanations had different lengths.
+            if explanations:
+                alphabet_per_expl_len = {
+                    expl_len: set(chain(*expls))
+                    for expl_len, expls in groupby(explanations, len)
+                }
+                if side == Side.START:
+                    min_fragment_end = min(pos) + min(alphabet_per_expl_len)
+                else:
+                    min_fragment_end = max(pos) - min(alphabet_per_expl_len)
+
+                # constrain already existing sets in the range of the expl
+                # by the nucs that are given in the explanations
+                for p in pos:
+                    for expl_len, alphabet in alphabet_per_expl_len.items():
+                        for i in range(expl_len):
+                            possible_nucleosides = get_possible_nucleosides(p, i)
+                            if possible_nucleosides.issuperset(alphabet):
+                                # the expl sharpens the possibilities
+                                # clear the possibilities so far, the expl will add
+                                # the sharpened ones ones below
+                                possible_nucleosides.clear()
+
+                for expl in explanations:
+                    for p in pos:
+                        for perm in permutations(expl):
+                            for i, nuc in enumerate(perm):
+                                get_possible_nucleosides(p, i).add(nuc)
+
+                # add possible follow up positions
+                pos = {
+                    p + factor * expl_len
+                    for p in pos
+                    for expl_len in alphabet_per_expl_len
+                }
+            else:
+                min_fragment_end = min(pos) if side == Side.START else max(pos)
+            min_fragment_ends.append(min_fragment_end)
+        return skeleton_seq, min_fragment_ends
+
+
+class Explanation:
+    def __init__(self, *nucleosides):
+        self.nucleosides = tuple(sorted(nucleosides))
+
+    def __iter__(self):
+        yield from self.nucleosides
+
+    def __len__(self):
+        return len(self.nucleosides)
+
+    def __repr__(self):
+        return f"{{{",".join(self.nucleosides)}}}"

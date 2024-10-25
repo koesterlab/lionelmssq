@@ -12,7 +12,8 @@ def plot_prediction_with_truth(
     seq_data = pl.DataFrame(
         {
             "nucleoside": true_sequence + prediction.sequence,
-            "pos": list(range(len(true_sequence))) + list(range(len(prediction.sequence))),
+            "pos": list(range(len(true_sequence)))
+            + list(range(len(prediction.sequence))),
             "type": ["truth"] * len(true_sequence)
             + ["predicted"] * len(prediction.sequence),
         }
