@@ -52,8 +52,10 @@ class Predictor:
         # good result, then try again with an extended alphabet.
         masses = self._reduce_alphabet()
 
-        skeleton_seq, start_min_fragment_ends = self._predict_skeleton(Side.START)
-        _, end_min_fragment_ends = self._predict_skeleton(
+        skeleton_seq, start_min_fragment_ends, start_max_fragment_ends = (
+            self._predict_skeleton(Side.START)
+        )
+        _, end_min_fragment_ends, end_max_fragment_ends = self._predict_skeleton(
             Side.END, skeleton_seq=skeleton_seq
         )
 
@@ -163,25 +165,35 @@ class Predictor:
                     )
 
         # ensure that start fragments are aligned at the beginning of the sequence
-        for j, min_end in zip(start_fragments, start_min_fragment_ends):
+        for j, min_end, max_end in zip(
+            start_fragments, start_min_fragment_ends, start_max_fragment_ends
+        ):
             # min_end is exclusive
             for i in range(min_end):
                 x[i][j].setInitialValue(1)
                 x[i][j].fixValue()
+            for i in range(max_end, self.seq_len):
+                x[i][j].setInitialValue(0)
+                x[i][j].fixValue()
 
         # ensure that end fragments are aligned at the end of the sequence
-        for j, min_end in zip(end_fragments, end_min_fragment_ends):
+        for j, min_end, max_end in zip(
+            end_fragments, end_min_fragment_ends, end_max_fragment_ends
+        ):
             # min_end is exclusive
             for i in range(min_end + 1, 0):
                 x[i][j].setInitialValue(1)
                 x[i][j].fixValue()
+            for i in range(-self.seq_len, max_end + 1):
+                x[i][j].setInitialValue(0)
+                x[i][j].fixValue()
 
-        # ensure that inner fragments are neither aligned at the beginning or the end of the sequence
+        # ensure that inner fragments are neither aligned at the beginning nor the end of the sequence
         for j in set(range(n_fragments)) - set(start_fragments) - set(end_fragments):
             x[0][j].setInitialValue(0)
             x[0][j].fixValue()
-            x[self.seq_len - 1][j].setInitialValue(0)
-            x[self.seq_len - 1][j].fixValue()
+            x[-1][j].setInitialValue(0)
+            x[-1][j].fixValue()
 
         # constrain weight_diff_abs to be the absolute value of weight_diff
         for j in range(n_fragments):
@@ -305,7 +317,7 @@ class Predictor:
 
     def _predict_skeleton(
         self, side: Side, skeleton_seq: Optional[List[Set[str]]] = None
-    ) -> Tuple[List[Set[str]], List[int]]:
+    ) -> Tuple[List[Set[str]], List[int], List[int]]:
         if skeleton_seq is None:
             skeleton_seq = [set() for _ in range(self.seq_len)]
 
@@ -317,6 +329,7 @@ class Predictor:
         pos = {0} if side == Side.START else {-1}
 
         min_fragment_ends = []
+        max_fragment_ends = []
         for diff in self.mass_diffs[side]:
             explanations = self.explanations[diff]
             # METHOD: if there is only one single nucleoside explanation, we can
@@ -332,8 +345,10 @@ class Predictor:
                 }
                 if side == Side.START:
                     min_fragment_end = min(pos) + min(alphabet_per_expl_len)
+                    max_fragment_end = max(pos) + max(alphabet_per_expl_len)
                 else:
                     min_fragment_end = max(pos) - min(alphabet_per_expl_len)
+                    max_fragment_end = min(pos) - max(alphabet_per_expl_len)
 
                 # constrain already existing sets in the range of the expl
                 # by the nucs that are given in the explanations
@@ -360,9 +375,15 @@ class Predictor:
                     for expl_len in alphabet_per_expl_len
                 }
             else:
-                min_fragment_end = min(pos) if side == Side.START else max(pos)
+                if side == Side.START:
+                    min_fragment_end = min(pos)
+                    max_fragment_end = max(pos)
+                else:
+                    min_fragment_end = max(pos)
+                    max_fragment_end = min(pos)
             min_fragment_ends.append(min_fragment_end)
-        return skeleton_seq, min_fragment_ends
+            max_fragment_ends.append(max_fragment_end)
+        return skeleton_seq, min_fragment_ends, max_fragment_ends
 
 
 class Explanation:
