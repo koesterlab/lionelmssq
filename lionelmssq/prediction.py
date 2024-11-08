@@ -58,6 +58,17 @@ class Predictor:
         _, end_min_fragment_ends, end_max_fragment_ends = self._predict_skeleton(
             Side.END, skeleton_seq=skeleton_seq
         )
+        logger.info(f"Prior skeleton sequence: {skeleton_seq}")
+
+        def fmt_ends(min_ends, max_ends):
+            return " ".join(f"[{l}, {u}]" for l, u in zip(min_ends, max_ends))
+
+        logger.info(
+            f"Start fragment ends: {fmt_ends(start_min_fragment_ends, start_max_fragment_ends)}"
+        )
+        logger.info(
+            f"End fragment ends: {fmt_ends(end_min_fragment_ends, end_max_fragment_ends)}"
+        )
 
         prob = LpProblem("RNA sequencing", LpMinimize)
         # i = 1,...,n: positions in the sequence
@@ -387,7 +398,7 @@ class Predictor:
 
 
 class Explanation:
-    def __init__(self, *nucleosides):
+    def __init__(self, *nucleosides: str):
         self.nucleosides = tuple(sorted(nucleosides))
 
     def __iter__(self):
@@ -398,3 +409,15 @@ class Explanation:
 
     def __repr__(self):
         return f"{{{",".join(self.nucleosides)}}}"
+
+
+def explain_mass(mass: float, max_error: float) -> List[Explanation]:
+    """Return all reasonable explanations for the given mass, using the alphabet of
+    nucleosides.
+    """
+    # TODO use the alphabet of nucleosides:
+    UNIQUE_MASSES
+    # TODO and dynamic programming to find the best explanations
+    # Return the best explanations as list of Explanation objects, each of which
+    # delivers the combination of nucleosides and an implied length of the fragment.
+    ...
