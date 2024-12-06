@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Set, Tuple
-import numpy as np
-from lionelmssq.masses import MASSES
+
+#from lionelmssq.masses import MASSES
 import polars as pl
 
 from lionelmssq.masses import EXPLANATION_MASSES
