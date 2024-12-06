@@ -4,8 +4,8 @@ import polars as pl
 _COLS = ["nucleoside", "monoisotopic_mass"]
 
 MASSES = pl.read_csv(
-    #(importlib.resources.files(__package__) / "assets" / "masses.tsv"), separator="\t"
-    ("assets/masses.tsv"), separator="\t"
+    (importlib.resources.files(__package__) / "assets" / "masses.tsv"), separator="\t"
+    #("assets/masses.tsv"), separator="\t"
 )
 
 assert MASSES.columns == _COLS
