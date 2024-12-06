@@ -68,14 +68,16 @@ def explain_mass(mass: float) -> MassExplanations:
     solution_names  = set()
 
     for combo in solution_coins:
+                
+        #Store the nucleoside names (as tuples of strings (alphabets)) for the given coins in the set solution_names
         
-        #solution_names.add(tuple(EXPLANATION_MASSES.filter(pl.col("coins").is_in(combo)).select(pl.col("nucleoside")).to_numpy().flatten().tolist()))
-        #TODO: Avoid this loop, somehow get column values directly from the polars dataframe!
-        temp_list  = []
-        for coin_val in combo:
-            temp_list.append(EXPLANATION_MASSES.filter(pl.col("coins") == coin_val).select(pl.col("nucleoside")).item())
+        solution_names.add(tuple(EXPLANATION_MASSES.join(pl.DataFrame({"coins":combo}),on="coins",how="right").select(pl.col("nucleoside")).to_numpy().flatten().tolist()))
 
-        solution_names.add(tuple(temp_list))
+        #Alternate solution old (with loop):
+        #temp_list  = []
+        #for coin_val in combo:
+        #    temp_list.append(EXPLANATION_MASSES.filter(pl.col("coins") == coin_val).select(pl.col("nucleoside")).item())
+        #solution_names.add(tuple(temp_list))
     
     #Return the desired Dataclass object
     return MassExplanations(explanations = solution_names)
@@ -84,5 +86,5 @@ def explain_mass(mass: float) -> MassExplanations:
 
 #Test Cases!
 #print(explain_mass(1563.52067))
-#print(explain_mass(267.09675*2)) #This case doesn't properly work!
-#print(explain_mass(283.09167*2))
+#print(explain_mass(267.09675*2)) #This case doesn't properly work with 10**-2 tolerance! (2A)
+print(explain_mass(283.09167*2)) #This case doesn't properly work with 10**-3 tolerance! (2G)
