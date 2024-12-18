@@ -2,7 +2,7 @@
 # import os
 import itertools
 import pytest
-import yaml
+#import yaml
 
 from lionelmssq.mass_explanation import explain_mass
 
