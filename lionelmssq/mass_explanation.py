@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from typing import Set, Tuple
-from itertools import product, chain
+from itertools import product
 
 # from lionelmssq.masses import MASSES
 import polars as pl

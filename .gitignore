@@ -4,3 +4,4 @@ poetry.lock
 tests/testcases/*/plot.html
 lionelmssq/playground.ipynb
 tests/self_test.py
+.DS_Store
