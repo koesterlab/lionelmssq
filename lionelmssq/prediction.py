@@ -80,7 +80,9 @@ class Predictor:
             .to_list()
         )
         n_fragments = len(fragment_masses)
-        nucleosides = masses.get_column("nucleoside").to_list()
+        nucleosides = masses.get_column(
+            "nucleoside"
+        ).to_list()  # TODO: Handle the case of multiple nucleosides with the same mass when using "aggregate" grouping in the masses table
         nucleoside_masses = dict(masses.iter_rows())
 
         if not start_fragments:
