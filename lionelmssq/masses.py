@@ -4,15 +4,15 @@ import polars as pl
 _COLS = ["nucleoside", "monoisotopic_mass"]
 
 MASSES = pl.read_csv(
-    # (importlib.resources.files(__package__) / "assets" / "masses.tsv"),
-    # separator="\t",
-    (importlib.resources.files(__package__) / "assets" / "masses_all.tsv"),
+    (importlib.resources.files(__package__) / "assets" / "masses.tsv"),
     separator="\t",
-    # ("assets/masses4.tsv"), separator="\t"
 )
-# Note: "masses_all.tsv" has multiples nucleosides with the same mass!
+# Note: "masses.tsv" has multiples nucleosides with the same mass!
 
 assert MASSES.columns == _COLS
+
+# Uncomment if we only want to consider the natural (unmodified) nucleosides i.e. [A,G,U,C]!
+# MASSES = MASSES.filter(pl.col("nucleoside").is_in(["A", "G", "U", "C"]))
 
 ROUND_DECIMAL = 5  # The precision (after decimal points) to which to consider the nucleoside masses.
 # In the nucleoside table, it can happen that the same masses may be reported with different precision values. So UNIQUE MASSES after rounding may not be unique without doing the above step!
