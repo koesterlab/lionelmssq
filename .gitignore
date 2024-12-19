@@ -2,3 +2,5 @@ __pycache__
 .pytest_cache
 poetry.lock
 tests/testcases/*/plot.html
+self_test.py
+.DS_Store
