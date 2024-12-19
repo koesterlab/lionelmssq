@@ -12,11 +12,6 @@ _TESTCASES = importlib.resources.files("tests") / "testcases"
 
 MATCHING_THRESHOLD = 10  # Import this from masses.py later!
 
-
-def fmt_mass(cols):
-    return pl.Series([f"{row[0]:.2f} ({row[1]:.2f})" for row in zip(*cols)])
-
-
 @pytest.mark.parametrize("testcase", _TESTCASES.iterdir())
 def test_testcase(testcase):
     base_path = _TESTCASES / testcase
