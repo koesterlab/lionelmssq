@@ -20,12 +20,9 @@ def explain_mass(mass: float) -> MassExplanations:
     Returns all the possible combinations of nucleosides that could sum up to the given mass.
     """
 
-    tolerated_integer_masses = (
+    tolerated_integer_masses = pl.Series(
         EXPLANATION_MASSES.select(pl.col("tolerated_integer_masses"))
-        .to_numpy()
-        .flatten()
-        .tolist()
-    )
+    ).to_list()
 
     # Convert the targets and tolerated_integer_masses to integers for easy opearations
     target = int(round(mass / TOLERANCE, 0))
@@ -43,9 +40,8 @@ def explain_mass(mass: float) -> MassExplanations:
         if (remaining, start) in memo:
             return memo[(remaining, start)]
 
-        # Base case: if target is less than Matching Threshold, but still greater than zero, return a list with one empty combination
-        # We consider -MATCHING_THRESHOLD < remaining < MATCHING_THRESHOLD to be matched!
-        if remaining < MATCHING_THRESHOLD and remaining > -MATCHING_THRESHOLD:
+        # Base case: if abs(target) is less than MATCHING_THRESHOLD, return a list with one empty combination
+        if abs(remaining) < MATCHING_THRESHOLD:
             return [[]]
 
         # Base case: if target is zero, return a list with one empty combination

@@ -8,7 +8,6 @@ MASSES = pl.read_csv(
     # separator="\t",
     (importlib.resources.files(__package__) / "assets" / "masses_all.tsv"),
     separator="\t",
-    # ("assets/masses_all.tsv"), separator="\t"
     # ("assets/masses4.tsv"), separator="\t"
 )
 # Note: "masses_all.tsv" has multiples nucleosides with the same mass!
