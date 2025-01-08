@@ -43,16 +43,18 @@ class Predictor:
         # TODO: get rid of the requirement to pass the length of the sequence
         # and instead infer it from the fragments
 
-        self._collect_singleton_masses()
+        self._collect_singleton_masses()  # TODO use mass_explanation.explain_mass inside
         self._collect_diffs(Side.START)
         self._collect_diffs(Side.END)
-        self._collect_diff_explanations()
+        self._collect_diff_explanations()  # TODO use mass_explanation.explain_mass inside
 
         # TODO:
         # also consider that the observations are not complete and that we probably don't see all the letters as diffs or singletons.
         # Hence, maybe do the following: solve first with the reduced alphabet, and if the optimization does not yield a sufficiently
         # good result, then try again with an extended alphabet.
-        masses = self._reduce_alphabet()
+        masses = (
+            self._reduce_alphabet()
+        )  # TODO use mass_explanation.explain_mass inside
 
         skeleton_seq, start_min_fragment_ends, start_max_fragment_ends = (
             self._predict_skeleton(Side.START)
@@ -80,7 +82,9 @@ class Predictor:
             .to_list()
         )
         n_fragments = len(fragment_masses)
-        nucleosides = masses.get_column("nucleoside").to_list()
+        nucleosides = masses.get_column(
+            "nucleoside"
+        ).to_list()  # TODO: Handle the case of multiple nucleosides with the same mass when using "aggregate" grouping in the masses table
         nucleoside_masses = dict(masses.iter_rows())
 
         if not start_fragments:
