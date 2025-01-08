@@ -29,7 +29,9 @@ class Predictor:
     def __init__(
         self, fragments: pl.DataFrame, seq_len: int, solver: str, threads: int
     ):
-        self.fragments = fragments.sort("observed_mass")
+        self.fragments = fragments.with_row_index(name="orig_index").sort(
+            "observed_mass"
+        )
         self.seq_len = seq_len
         self.solver = solver
         self.threads = threads
@@ -254,6 +256,13 @@ class Predictor:
                 for j in range(n_fragments)
             ]
         )
+        fragment_predictions = pl.concat(
+            [fragment_predictions, self.fragments.select(pl.col("orig_index"))],
+            how="horizontal",
+        )
+
+        # reorder fragment predictions so that they match the original order again
+        fragment_predictions = fragment_predictions.sort("orig_index")
 
         return Prediction(
             sequence=seq,
