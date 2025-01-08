@@ -12,6 +12,7 @@ _TESTCASES = importlib.resources.files("tests") / "testcases"
 
 MATCHING_THRESHOLD = 10  # Import this from masses.py later!
 
+
 @pytest.mark.parametrize("testcase", _TESTCASES.iterdir())
 def test_testcase(testcase):
     base_path = _TESTCASES / testcase
