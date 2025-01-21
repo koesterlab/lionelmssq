@@ -15,4 +15,5 @@ def is_similar(mass_a, mass_b):
     """Return whether two masses are similar enough to be considered the same nucleoside."""
     # TODO choose threshold correctly
     # TODO: This is obviously problematic since, C and U differ by only 1 unit. Modified bases further complicate this situation.
-    return abs(mass_a - mass_b) < 2.0
+    #return abs(mass_a - mass_b) < 2.0
+    return abs(mass_a - mass_b) < 0.5

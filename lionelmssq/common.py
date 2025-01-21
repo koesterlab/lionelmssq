@@ -3,7 +3,7 @@ import re
 from typing import Any, Set
 
 
-_NUCLEOSIDE_RE = re.compile(r"\d*[ACGU]")
+_NUCLEOSIDE_RE = re.compile(r"\d*[ACGUT]")
 
 
 def parse_nucleosides(sequence: str):
