@@ -1,0 +1,4 @@
+true_sequence: UUUUUGGUUAGCCUGAGUAG
+predicted_sequence: ['U', 'U', 'U', 'U', 'U', 'U', 'U', 'U', 'G', 'A', 'G', 'A', 'G', 'G', 'G', 'G', 'G', 'U', 'A', 'G']
+predicted_sequence_new: ['U', 'U', 'U', 'U', 'G', 'U', 'U', 'C', 'A', 'U', 'U', 'G', 'U', 'A', 'A', 'A', 'G', 'U', 'A', 'G']
+new_new: ['U', 'U', 'U', 'U', 'C', 'U', 'A', 'G', 'A', 'C', 'C', 'G', 'G', 'G', 'G', 'G', 'G', 'U', 'A', 'G']
