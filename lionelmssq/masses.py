@@ -38,6 +38,7 @@ TOLERANCE = 1e-5  # For perfect matching, the TOLERANCE should be the precision 
 #MATCHING_THRESHOLD = 5
 MATCHING_THRESHOLD = 10  # This dictates a matching threshold such that we consider -MATCHING_THRESHOLD < (sum(masses) - target_mass) < MATCHING_THRESHOLD to be matched!
 # If TOLERANCE < num_of_decimals in reported masses, then MATCHING_THRESHOLD should at least be greater or equal than the number of nucleotides expected for a target mass!
+#TODO: Make this a relative error thing! e.g. (sum(masses) - target_mass) / target_mass < MATCHING_THRESHOLD
 
 EXPLANATION_MASSES = UNIQUE_MASSES.with_columns(
     (pl.col("monoisotopic_mass") / TOLERANCE)
