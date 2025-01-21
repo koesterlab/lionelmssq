@@ -12,7 +12,8 @@ _TESTCASES = importlib.resources.files("tests") / "testcases"
 
 MATCHING_THRESHOLD = 10  # Import this from masses.py later!
 
-@pytest.mark.parametrize("testcase", [tc for tc in _TESTCASES.iterdir() if tc.name == "test_01"])
+
+@pytest.mark.parametrize("testcase", _TESTCASES.iterdir())
 def test_testcase(testcase):
     base_path = _TESTCASES / testcase
     with open(base_path / "meta.yaml", "r") as f:
@@ -48,3 +49,6 @@ def test_testcase(testcase):
     # Assert if all the sequence fragments match the predicted fragments in mass at least!
     for i in range(len(fragment_masses)):
         assert abs(fragment_masses[i] - prediction_masses[i]) <= MATCHING_THRESHOLD
+
+    # assert all([abs(fragment_masses[i] - prediction_masses[i]) <= MATCHING_THRESHOLD for i in range(len(fragment_masses))])  #Use is close function here!
+    # Check all together!

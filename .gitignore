@@ -7,3 +7,4 @@ lionelmssq/playground.ipynb
 tests/self_test.py
 *gurobi.log
 *.code-workspace
+tests/self_test*
