@@ -65,6 +65,7 @@ def plot_prediction_with_truth(
         )
     ).resolve_scale(x="shared")
 
+
 def plot_prediction(
     prediction: Prediction,
     true_sequence: List[str],
@@ -93,14 +94,14 @@ def plot_prediction(
         pl.lit("predicted").alias("type"),
     ).with_row_index()
 
-    #experiment = experiment.select(
+    # experiment = experiment.select(
     #    pl.col("left") - 0.5,
     #    pl.col("right") - 1 + 0.5,
     #    pl.col("true_mass").map_elements(lambda mass: f"{mass:.2f}").alias("mass_info"),
     #    pl.lit("truth").alias("type"),
-    #).with_row_index()
+    # ).with_row_index()
 
-    #data = pl.concat([fragment_predictions, experiment])
+    # data = pl.concat([fragment_predictions, experiment])
     data = fragment_predictions
 
     base = alt.Chart(data)

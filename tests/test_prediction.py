@@ -12,7 +12,10 @@ _TESTCASES = importlib.resources.files("tests") / "testcases"
 
 MATCHING_THRESHOLD = 10  # Import this from masses.py later!
 
-@pytest.mark.parametrize("testcase", [tc for tc in _TESTCASES.iterdir() if tc.name == "test_01"])
+
+@pytest.mark.parametrize(
+    "testcase", [tc for tc in _TESTCASES.iterdir() if tc.name == "test_01"]
+)
 def test_testcase(testcase):
     base_path = _TESTCASES / testcase
     with open(base_path / "meta.yaml", "r") as f:
@@ -40,8 +43,6 @@ def test_testcase(testcase):
     plot_prediction_with_truth(prediction, true_seq, fragments).save(
         base_path / "plot.html"
     )
-
-    print(prediction.sequence, true_seq)
 
     assert prediction.sequence == true_seq
 

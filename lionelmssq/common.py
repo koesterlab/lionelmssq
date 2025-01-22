@@ -3,7 +3,7 @@ import re
 from typing import Any, Set
 
 
-#_NUCLEOSIDE_RE = re.compile(r"\d*[ACGUT]")
+# _NUCLEOSIDE_RE = re.compile(r"\d*[ACGUT]")
 _NUCLEOSIDE_RE = re.compile(r"\d*[ACGU]")
 
 

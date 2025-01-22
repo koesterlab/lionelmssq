@@ -273,7 +273,9 @@ class Predictor:
         masses = self.fragments.filter(pl.col(f"is_{side}")).get_column("observed_mass")
         self.mass_diffs[side] = [masses[0]] + (masses[1:] - masses[:-1]).to_list()
 
-    def _collect_singleton_masses(self) -> None: #TODO: Use mass_explanation.explain_mass inside
+    def _collect_singleton_masses(
+        self,
+    ) -> None:  # TODO: Use mass_explanation.explain_mass inside
         masses = self.fragments.filter(
             ~(pl.col("is_start") | pl.col("is_end"))
         ).get_column("observed_mass")
@@ -286,7 +288,7 @@ class Predictor:
             set(self.mass_diffs[Side.START])
             | set(self.mass_diffs[Side.END])
             | self.singleton_masses
-        ) #IMP: This negelects internal fragments!
+        )  # IMP: This negelects internal fragments!
         self.explanations = {
             diff: [
                 Explanation(item["nucleoside"])
@@ -294,7 +296,7 @@ class Predictor:
                 if is_similar(diff, item["monoisotopic_mass"])
             ]
             for diff in diffs
-        } #CHECK: Why is only one nucleside considered here for the difference? REPLACE with the DP!
+        }  # CHECK: Why is only one nucleside considered here for the difference? REPLACE with the DP!
         # TODO it can happen that both two and one nucleoside are good explanations of a diff
         # this is currently ignored, also three nucleosides are not considered
         # one should rather infer the min and max number of possible nucleosides that test all explanations in between
@@ -322,7 +324,7 @@ class Predictor:
             set(self.mass_diffs[Side.START])
             | set(self.mass_diffs[Side.END])
             | self.singleton_masses
-        ) #IMP: This negelects internal fragments!
+        )  # IMP: This negelects internal fragments!
         self.explanations = {
             diff: [
                 Explanation(item["nucleoside"])
@@ -330,7 +332,7 @@ class Predictor:
                 if is_similar(diff, item["monoisotopic_mass"])
             ]
             for diff in diffs
-        } #CHECK: Why is only one nucleside considered here for the difference? REPLACE with the DP!
+        }  # CHECK: Why is only one nucleside considered here for the difference? REPLACE with the DP!
         # TODO it can happen that both two and one nucleoside are good explanations of a diff
         # this is currently ignored, also three nucleosides are not considered
         # one should rather infer the min and max number of possible nucleosides that test all explanations in between
