@@ -27,10 +27,6 @@ def determine_terminal_fragments(
     # label_mass_3T = 455.14912 #3' label  #y-fragments
     # label_mass_5T = 635.15565 #5' label #c-fragments
 
-    # regex for separating given sequence into nucleosides
-    # nucleoside_re5T = re.compile(r"\d*[5T]")
-    # nucleoside_re3T = re.compile(r"\d*[3T]")
-
     tags = ["3Tag", "5Tag"]
     tag_masses = [
         round(label_mass_3T, ROUND_DECIMAL),
@@ -55,27 +51,35 @@ def determine_terminal_fragments(
     for mass in neutral_masses:
         explained_mass = explain_mass(mass, explanation_masses)
 
+        # Remove explainations which have more than one tag of each kind in them! 
+        # This greatly increases the reliability of tag determination!
+        explained_mass.explanations = {
+                explanation
+                for explanation in explained_mass.explanations
+                if explanation.count("3Tag") <= 1 and explanation.count("5Tag") <= 1
+        }
+
         if explained_mass.explanations != set():
+            
+            #print(mass,explained_mass.explanations)
+
             temp_list = []
             for element in explained_mass.explanations:
                 temp_list.extend(element)
-            # temp_list = "".join(temp_list)
 
-            # Do not consider the mass if it is purely only explained by the tags!
+            # Do not consider the mass if it is purely only explained by the tags! 
+            # This is slightly redundant with earlier pruning based count of tags, but ensures that we are not trying to fit fragments with only tags!
             if set(temp_list) == {"3Tag"} or set(temp_list) == {"5Tag"}:
+                skip_mass.append(True)
+            elif set(temp_list) == {"3Tag", "5Tag"}:
                 skip_mass.append(True)
             else:
                 skip_mass.append(False)
 
-            # TODO: Only output if a sequence is tagged IF all possible DP solutions of the sequence have the tag in there!
-            # Can also restrict this by doing this above a threshold value!
-
-            # if '5T' in nucleoside_re5T.findall(temp_list):
             if "5Tag" in temp_list:
                 nucleotide_only_masses.append(mass - label_mass_5T)
                 is_start.append(True)
                 is_end.append(False)
-            # elif '3T' in nucleoside_re3T.findall(temp_list):
             elif "3Tag" in temp_list:
                 nucleotide_only_masses.append(mass - label_mass_3T)
                 is_end.append(True)
@@ -90,7 +94,8 @@ def determine_terminal_fragments(
             is_start.append(False)
             is_end.append(False)
 
-    # TODO: Determine the fragments with both of the tags intact and output is_start = True and is_end = True!
+    # TODO: Determine the fragments with both of the tags intact and output is_start = True and is_end = True! That will be the full sequence!
+    # We haven't thrown away the case where the two different types of tags can be present!
 
     fragment_masses = (
         fragment_masses.with_columns(
@@ -98,9 +103,9 @@ def determine_terminal_fragments(
         )
         .hstack(pl.DataFrame({"is_start": is_start, "is_end": is_end}))
         .filter(~pl.Series(skip_mass))
-        .filter(
-            pl.col("neutral_mass") > 305.04129
-        )  # TODO: Replace this by min of nucleotides or nucleotides with tags etc.
+        #.filter(
+        #    pl.col("neutral_mass") > 305.04129
+        #)
         .sort(pl.col("observed_mass"))
         .filter(pl.col("intensity") > intensity_cutoff)
     )

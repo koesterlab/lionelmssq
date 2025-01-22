@@ -14,9 +14,10 @@ _TESTCASES = importlib.resources.files("tests") / "testcases"
 #MATCHING_THRESHOLD = 10  # Import this from masses.py later!
 
 
-@pytest.mark.parametrize(
-    "testcase", [tc for tc in _TESTCASES.iterdir() if tc.name == "test_02"]
-)
+#@pytest.mark.parametrize(
+#    "testcase", [tc for tc in _TESTCASES.iterdir() if tc.name == "test_02"]
+#)
+
 def test_testcase(testcase):
     base_path = _TESTCASES / testcase
     with open(base_path / "meta.yaml", "r") as f:
@@ -27,8 +28,8 @@ def test_testcase(testcase):
     label_mass_5T = meta["label_mass_5T"]
 
     fragments = determine_terminal_fragments(
-        base_path / "fragments_20ppm.tsv",
-        output_file_path=base_path / "fragments_20ppm_terminal_marked.tsv",
+        base_path / "fragments.tsv",
+        output_file_path=base_path / "fragments_terminal_marked.tsv",
         label_mass_3T=label_mass_3T,
         label_mass_5T=label_mass_5T,
         intensity_cutoff=1.2e4,
@@ -58,3 +59,6 @@ def test_testcase(testcase):
 
     # assert all([abs(fragment_masses[i] - prediction_masses[i]) <= MATCHING_THRESHOLD for i in range(len(fragment_masses))])  #Use is close function here!
     # Check all together!
+
+
+test_testcase("test_02")

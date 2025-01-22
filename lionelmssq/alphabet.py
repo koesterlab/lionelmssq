@@ -1,7 +1,7 @@
 from lionelmssq.masses import UNIQUE_MASSES
 import polars as pl
 
-DIFF_VALUE = 2.0
+DIFF_VALUE = 0.1
 
 # TODO: the -2.0 should be informed by the variance in the measurements
 _MIN_PLAUSIBLE_NUCLEOSIDE_DIFF = (

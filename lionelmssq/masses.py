@@ -4,9 +4,9 @@ import polars as pl
 _COLS = ["nucleoside", "monoisotopic_mass"]
 
 MASSES = pl.read_csv(
-    (importlib.resources.files(__package__) / "assets" / "masses.tsv"),
+    #(importlib.resources.files(__package__) / "assets" / "masses.tsv"),
     # (importlib.resources.files(__package__) / "assets" / "masses4.tsv"),
-    #(importlib.resources.files(__package__) / "assets" / "masses_nucleotides_4.tsv"),  # IMP: Remember to change the file!!!!
+    (importlib.resources.files(__package__) / "assets" / "masses_nucleotides_4.tsv"),  # IMP: Remember to change the file!!!!
     separator="\t",
 )
 # Note: "masses.tsv" has multiples nucleosides with the same mass!
@@ -16,7 +16,6 @@ assert MASSES.columns == _COLS
 # Uncomment if we only want to consider the natural (unmodified) nucleosides i.e. [A,G,U,C]!
 # MASSES = MASSES.filter(pl.col("nucleoside").is_in(["A", "G", "U", "C"]))
 
-# ROUND_DECIMAL = 2
 ROUND_DECIMAL = 5  # The precision (after decimal points) to which to consider the nucleoside masses.
 # In the nucleoside table, it can happen that the same masses may be reported with different precision values. So UNIQUE MASSES after rounding may not be unique without doing the above step!
 
@@ -31,13 +30,12 @@ UNIQUE_MASSES = (
 
 # For mass explaination for ladder building, to convert the masses to an integer value for the DP algorithm!
 
-# TOLERANCE = 1e-2
 TOLERANCE = 1e-5  # For perfect matching, the TOLERANCE should be the precision (digits after decimal) to which the masses of nucleosides and sequences are reported, i.e. 1e-(ROUND_DECIMAL)
 
 # MATCHING_THRESHOLD = 5
-#MATCHING_THRESHOLD = 10  # This dictates a matching threshold such that we consider -MATCHING_THRESHOLD < (sum(masses) - target_mass) < MATCHING_THRESHOLD to be matched!
+#MATCHING_THRESHOLD = 10  
+# This dictates a matching threshold such that we consider -MATCHING_THRESHOLD < (sum(masses) - target_mass) < MATCHING_THRESHOLD to be matched!
 # If TOLERANCE < num_of_decimals in reported masses, then MATCHING_THRESHOLD should at least be greater or equal than the number of nucleotides expected for a target mass!
-# TODO: Make this a relative error thing! e.g. (sum(masses) - target_mass) / target_mass < MATCHING_THRESHOLD
 MATCHING_THRESHOLD = 20e-6 #For relative threshold!
 
 EXPLANATION_MASSES = UNIQUE_MASSES.with_columns(
