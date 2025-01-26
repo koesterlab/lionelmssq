@@ -4,9 +4,7 @@ import polars as pl
 _COLS = ["nucleoside", "monoisotopic_mass"]
 
 MASSES = pl.read_csv(
-    #(importlib.resources.files(__package__) / "assets" / "masses.tsv"),
-    # (importlib.resources.files(__package__) / "assets" / "masses4.tsv"),
-    (importlib.resources.files(__package__) / "assets" / "masses_nucleotides_4.tsv"),  # IMP: Remember to change the file!!!!
+    (importlib.resources.files(__package__) / "assets" / "masses.tsv"),
     separator="\t",
 )
 # Note: "masses.tsv" has multiples nucleosides with the same mass!
@@ -33,10 +31,10 @@ UNIQUE_MASSES = (
 TOLERANCE = 1e-5  # For perfect matching, the TOLERANCE should be the precision (digits after decimal) to which the masses of nucleosides and sequences are reported, i.e. 1e-(ROUND_DECIMAL)
 
 # MATCHING_THRESHOLD = 5
-#MATCHING_THRESHOLD = 10  
+# MATCHING_THRESHOLD = 10
 # This dictates a matching threshold such that we consider -MATCHING_THRESHOLD < (sum(masses) - target_mass) < MATCHING_THRESHOLD to be matched!
 # If TOLERANCE < num_of_decimals in reported masses, then MATCHING_THRESHOLD should at least be greater or equal than the number of nucleotides expected for a target mass!
-MATCHING_THRESHOLD = 20e-6 #For relative threshold!
+MATCHING_THRESHOLD = 20e-6  # For relative threshold!
 
 EXPLANATION_MASSES = UNIQUE_MASSES.with_columns(
     (pl.col("monoisotopic_mass") / TOLERANCE)

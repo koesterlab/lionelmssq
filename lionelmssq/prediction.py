@@ -27,7 +27,12 @@ class Prediction:
 
 class Predictor:
     def __init__(
-        self, fragments: pl.DataFrame, seq_len: int, solver: str, threads: int
+        self,
+        fragments: pl.DataFrame,
+        seq_len: int,
+        solver: str,
+        threads: int,
+        unique_masses: pl.DataFrame = UNIQUE_MASSES,
     ):
         self.fragments = fragments.with_row_index(name="orig_index").sort(
             "observed_mass"
@@ -38,6 +43,7 @@ class Predictor:
         self.diff_explanations = None
         self.mass_diffs = dict()
         self.singleton_masses = None
+        self.unique_masses = unique_masses
 
     def predict(self) -> Prediction:
         # TODO: get rid of the requirement to pass the length of the sequence
@@ -292,11 +298,12 @@ class Predictor:
         self.explanations = {
             diff: [
                 Explanation(item["nucleoside"])
-                for item in UNIQUE_MASSES.iter_rows(named=True)
+                for item in self.unique_masses.iter_rows(named=True)
                 if is_similar(diff, item["monoisotopic_mass"])
             ]
             for diff in diffs
-        }  # CHECK: Why is only one nucleside considered here for the difference? REPLACE with the DP!
+        }
+        # CHECK: Why is only one nucleside considered here for the difference? REPLACE with the DP!
         # TODO it can happen that both two and one nucleoside are good explanations of a diff
         # this is currently ignored, also three nucleosides are not considered
         # one should rather infer the min and max number of possible nucleosides that test all explanations in between
@@ -306,7 +313,7 @@ class Predictor:
                 diff: [
                     Explanation(item_a["nucleoside"], item_b["nucleoside"])
                     for item_a, item_b in combinations(
-                        UNIQUE_MASSES.iter_rows(named=True), 2
+                        self.unique_masses.iter_rows(named=True), 2
                     )
                     # TODO: for two fragments, shouldn't is_similar be double as tolerant
                     # regarding the error rate?
@@ -328,7 +335,7 @@ class Predictor:
         self.explanations = {
             diff: [
                 Explanation(item["nucleoside"])
-                for item in UNIQUE_MASSES.iter_rows(named=True)
+                for item in self.unique_masses.iter_rows(named=True)
                 if is_similar(diff, item["monoisotopic_mass"])
             ]
             for diff in diffs
@@ -342,7 +349,7 @@ class Predictor:
                 diff: [
                     Explanation(item_a["nucleoside"], item_b["nucleoside"])
                     for item_a, item_b in combinations(
-                        UNIQUE_MASSES.iter_rows(named=True), 2
+                        self.unique_masses.iter_rows(named=True), 2
                     )
                     # TODO: for two fragments, shouldn't is_similar be double as tolerant
                     # regarding the error rate?
@@ -362,7 +369,9 @@ class Predictor:
             for expl in expls
             for nuc in expl
         }
-        reduced = UNIQUE_MASSES.filter(pl.col("nucleoside").is_in(observed_nucleosides))
+        reduced = self.unique_masses.filter(
+            pl.col("nucleoside").is_in(observed_nucleosides)
+        )
 
         return reduced
 

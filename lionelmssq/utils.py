@@ -22,11 +22,6 @@ def determine_terminal_fragments(
         fragment_masses.select(pl.col(mass_column_name)).to_series().to_list()
     )
 
-    # Inferred from Shanice's RNA file!
-    # DNA
-    # label_mass_3T = 455.14912 #3' label  #y-fragments
-    # label_mass_5T = 635.15565 #5' label #c-fragments
-
     tags = ["3Tag", "5Tag"]
     tag_masses = [
         round(label_mass_3T, ROUND_DECIMAL),
@@ -51,23 +46,22 @@ def determine_terminal_fragments(
     for mass in neutral_masses:
         explained_mass = explain_mass(mass, explanation_masses)
 
-        # Remove explainations which have more than one tag of each kind in them! 
+        # Remove explainations which have more than one tag of each kind in them!
         # This greatly increases the reliability of tag determination!
         explained_mass.explanations = {
-                explanation
-                for explanation in explained_mass.explanations
-                if explanation.count("3Tag") <= 1 and explanation.count("5Tag") <= 1
+            explanation
+            for explanation in explained_mass.explanations
+            if explanation.count("3Tag") <= 1 and explanation.count("5Tag") <= 1
         }
 
         if explained_mass.explanations != set():
-            
-            #print(mass,explained_mass.explanations)
+            print(mass, explained_mass.explanations)
 
             temp_list = []
             for element in explained_mass.explanations:
                 temp_list.extend(element)
 
-            # Do not consider the mass if it is purely only explained by the tags! 
+            # Do not consider the mass if it is purely only explained by the tags!
             # This is slightly redundant with earlier pruning based count of tags, but ensures that we are not trying to fit fragments with only tags!
             if set(temp_list) == {"3Tag"} or set(temp_list) == {"5Tag"}:
                 skip_mass.append(True)
@@ -103,14 +97,15 @@ def determine_terminal_fragments(
         )
         .hstack(pl.DataFrame({"is_start": is_start, "is_end": is_end}))
         .filter(~pl.Series(skip_mass))
-        #.filter(
+        # .filter(
         #    pl.col("neutral_mass") > 305.04129
-        #)
+        # )
         .sort(pl.col("observed_mass"))
         .filter(pl.col("intensity") > intensity_cutoff)
+        .filter(
+            pl.col("neutral_mass") < 6000
+        )  # TODO: Replace this by an estimate of the max mass of the sequence!
     )
-    # .filter(pl.col("neutral_mass") < 5500 ) #TODO: Replace this by an estimate of the max mass of the sequence!
-
     if output_file_path is not None:
         fragment_masses.write_csv(output_file_path, separator="\t")
 

@@ -43,9 +43,9 @@ def explain_mass(
             return memo[(remaining, start)]
 
         # Base case: if abs(target) is less than MATCHING_THRESHOLD, return a list with one empty combination
-        #if abs(remaining) < MATCHING_THRESHOLD:
-        #Base case: if the relative error between the target and our estimate is less than the MATCHING_THRESHOLD, return a list with one empty combination
-        if abs(remaining/target) < MATCHING_THRESHOLD:
+        # if abs(remaining) < MATCHING_THRESHOLD:
+        # Base case: if the relative error between the target and our estimate is less than the MATCHING_THRESHOLD, return a list with one empty combination
+        if abs(remaining / target) < MATCHING_THRESHOLD:
             return [[]]
 
         # Base case: if target is zero, return a list with one empty combination

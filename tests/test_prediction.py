@@ -10,11 +10,11 @@ import yaml
 
 _TESTCASES = importlib.resources.files("tests") / "testcases"
 
-MATCHING_THRESHOLD = 10  # Import this from masses.py later!
+from lionelmssq.masses import MATCHING_THRESHOLD
 
 
 @pytest.mark.parametrize(
-    "testcase", [tc for tc in _TESTCASES.iterdir() if tc.name == "test_01"]
+    "testcase", [tc for tc in _TESTCASES.iterdir() if tc.name in ["test_01", "test_02"]]
 )
 def test_testcase(testcase):
     base_path = _TESTCASES / testcase
@@ -24,8 +24,10 @@ def test_testcase(testcase):
     true_seq = parse_nucleosides(meta["true_sequence"])
 
     fragments = pl.read_csv(base_path / "fragments.tsv", separator="\t").with_columns(
-        (pl.col("left") == 0).alias("is_start"),
-        ((pl.col("right")) == len(true_seq)).alias("is_end"),
+        # (pl.col("left") == 0).alias("is_start"),
+        # ((pl.col("right")) == len(true_seq)).alias("is_end"),
+        (pl.col("observed_mass_without_backbone").alias("observed_mass")),
+        (pl.col("true_nucleoside_mass").alias("true_mass")),
     )
     with pl.Config(tbl_rows=30):
         print(fragments)
@@ -40,6 +42,9 @@ def test_testcase(testcase):
         prediction.fragments.select(pl.col("observed_mass"))
     ).to_list()
 
+    print("Predicted sequence = ", prediction.sequence)
+    print("True sequence = ", true_seq)
+
     plot_prediction_with_truth(prediction, true_seq, fragments).save(
         base_path / "plot.html"
     )
@@ -48,4 +53,4 @@ def test_testcase(testcase):
 
     # Assert if all the sequence fragments match the predicted fragments in mass at least!
     for i in range(len(fragment_masses)):
-        assert abs(fragment_masses[i] - prediction_masses[i]) <= MATCHING_THRESHOLD
+        assert abs(prediction_masses[i] / fragment_masses[i] - 1) <= MATCHING_THRESHOLD
