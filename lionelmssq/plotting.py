@@ -34,7 +34,7 @@ def plot_prediction_with_truth(
 
     simulation = simulation.select(
         pl.col("left") - 0.5,
-        pl.col("right") - 1 + 0.5,
+        pl.col("right") + 0.5,
         pl.col("true_mass").map_elements(lambda mass: f"{mass:.2f}").alias("mass_info"),
         pl.lit("truth").alias("type"),
     ).with_row_index()
@@ -94,14 +94,6 @@ def plot_prediction(
         pl.lit("predicted").alias("type"),
     ).with_row_index()
 
-    # experiment = experiment.select(
-    #    pl.col("left") - 0.5,
-    #    pl.col("right") - 1 + 0.5,
-    #    pl.col("true_mass").map_elements(lambda mass: f"{mass:.2f}").alias("mass_info"),
-    #    pl.lit("truth").alias("type"),
-    # ).with_row_index()
-
-    # data = pl.concat([fragment_predictions, experiment])
     data = fragment_predictions
 
     base = alt.Chart(data)

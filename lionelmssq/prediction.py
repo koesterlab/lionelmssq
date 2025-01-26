@@ -111,7 +111,7 @@ class Predictor:
             ]
             for i in range(self.seq_len)
         ]
-        # y: binary variables indicating base at position i
+        # y: binary variables indicating base b at position i
         y = [
             {
                 b: LpVariable(f"y_{i},{b}", lowBound=0, upBound=1, cat=LpInteger)
@@ -200,6 +200,7 @@ class Predictor:
                 x[i][j].setInitialValue(0)
                 x[i][j].fixValue()
 
+        # if False:
         # ensure that inner fragments are neither aligned at the beginning nor the end of the sequence
         for j in set(range(n_fragments)) - set(start_fragments) - set(end_fragments):
             x[0][j].setInitialValue(0)
