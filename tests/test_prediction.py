@@ -8,9 +8,9 @@ from lionelmssq.plotting import plot_prediction_with_truth
 import polars as pl
 import yaml
 
-_TESTCASES = importlib.resources.files("tests") / "testcases"
-
 from lionelmssq.masses import MATCHING_THRESHOLD
+
+_TESTCASES = importlib.resources.files("tests") / "testcases"
 
 
 @pytest.mark.parametrize(

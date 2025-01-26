@@ -1,6 +1,5 @@
 from lionelmssq.mass_explanation import explain_mass
 import polars as pl
-import re
 
 from lionelmssq.masses import EXPLANATION_MASSES
 from lionelmssq.masses import TOLERANCE
