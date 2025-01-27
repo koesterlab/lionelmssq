@@ -23,6 +23,8 @@ def test_testcase(testcase):
 
     true_seq = parse_nucleosides(meta["true_sequence"])
 
+    print(true_seq)
+
     fragments = pl.read_csv(base_path / "fragments.tsv", separator="\t").with_columns(
         # (pl.col("left") == 0).alias("is_start"),
         # ((pl.col("right")) == len(true_seq)).alias("is_end"),

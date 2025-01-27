@@ -248,8 +248,18 @@ class Predictor:
                     return b
             return None
 
+        def get_base_fragmentwise(i, j):
+            for b in nucleosides:
+                if z[i][j][b].value() == 1:
+                    return b
+            return None
+
         # interpret solution
         seq = [get_base(i) for i in range(self.seq_len)]
+        fragment_seq = [
+            [get_base_fragmentwise(i, j) for i in range(self.seq_len)]
+            for j in range(n_fragments)
+        ]
         fragment_predictions = pl.from_dicts(
             [
                 {
@@ -257,6 +267,7 @@ class Predictor:
                     # right bound shall be exclusive, hence add 1
                     "right": max(i for i in range(self.seq_len) if x[i][j].value() == 1)
                     + 1,
+                    "predicted_fragment_seq": fragment_seq[j],
                     "observed_mass": fragment_masses[j],
                     "predicted_mass_diff": predicted_mass_diff[j].value(),
                 }
