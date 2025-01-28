@@ -24,7 +24,6 @@ def plot_prediction(
         return pl.Series([f"{row[0]:.2f} ({row[1]:.2f})" for row in zip(*cols)])
 
     def reject_none(str_list):
-        # return ''.join([nuc for nuc in str_list if nuc is not None])
         return [nuc for nuc in str_list if nuc is not None]
 
     def create_range(left, right):

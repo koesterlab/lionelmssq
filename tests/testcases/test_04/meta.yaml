@@ -1,4 +1,0 @@
-true_sequence: UUUUUGGUCAGCCUGAGUAG
-label_mass_3T: 375.18279 #3' label  #y-fragments  
-label_mass_5T: 537.11889 #5' label #c-fragments
-identity: 2023-05-25_SJH_20merRNASidney_ms2_02.tsv #Which deisotoped file the fragments came from
