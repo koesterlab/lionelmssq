@@ -45,7 +45,6 @@ def determine_terminal_fragments(
 
     for mass in neutral_masses:
         explained_mass = explain_mass(mass, explanation_masses)
-        mass_explanations.append(str(explained_mass.explanations))
 
         # Remove explainations which have more than one tag of each kind in them!
         # This greatly increases the reliability of tag determination!
@@ -54,6 +53,8 @@ def determine_terminal_fragments(
             for explanation in explained_mass.explanations
             if explanation.count("3Tag") <= 1 and explanation.count("5Tag") <= 1
         }
+
+        mass_explanations.append(str(explained_mass.explanations))
 
         if explained_mass.explanations != set():
             # print(mass, explained_mass.explanations)
