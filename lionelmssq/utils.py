@@ -41,9 +41,11 @@ def determine_terminal_fragments(
     is_end = []
     skip_mass = []
     nucleotide_only_masses = []
+    mass_explanations = []
 
     for mass in neutral_masses:
         explained_mass = explain_mass(mass, explanation_masses)
+        mass_explanations.append(str(explained_mass.explanations))
 
         # Remove explainations which have more than one tag of each kind in them!
         # This greatly increases the reliability of tag determination!
@@ -54,7 +56,7 @@ def determine_terminal_fragments(
         }
 
         if explained_mass.explanations != set():
-            print(mass, explained_mass.explanations)
+            # print(mass, explained_mass.explanations)
 
             temp_list = []
             for element in explained_mass.explanations:
@@ -95,6 +97,7 @@ def determine_terminal_fragments(
             pl.Series(nucleotide_only_masses).alias(output_mass_column_name)
         )
         .hstack(pl.DataFrame({"is_start": is_start, "is_end": is_end}))
+        .with_columns(pl.Series(mass_explanations).alias("mass_explanations"))
         .filter(~pl.Series(skip_mass))
         # .filter(
         #    pl.col("neutral_mass") > 305.04129
@@ -105,6 +108,7 @@ def determine_terminal_fragments(
             pl.col("neutral_mass") < 6000
         )  # TODO: Replace this by an estimate of the max mass of the sequence!
     )
+
     if output_file_path is not None:
         fragment_masses.write_csv(output_file_path, separator="\t")
 

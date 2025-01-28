@@ -4,7 +4,7 @@ import os
 import pytest
 from lionelmssq.prediction import Predictor
 from lionelmssq.common import parse_nucleosides
-from lionelmssq.plotting import plot_prediction_with_truth
+from lionelmssq.plotting import plot_prediction
 import polars as pl
 import yaml
 
@@ -47,7 +47,7 @@ def test_testcase(testcase):
     print("Predicted sequence = ", prediction.sequence)
     print("True sequence = ", true_seq)
 
-    plot_prediction_with_truth(prediction, true_seq, fragments).save(
+    plot_prediction(prediction, true_seq, fragments).save(
         base_path / "plot.html"
     )
 

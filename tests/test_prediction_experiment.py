@@ -52,7 +52,7 @@ def test_testcase(testcase):
         label_mass_5T=label_mass_5T,
         explanation_masses=explanation_masses,
         # intensity_cutoff=1.2e4,
-        intensity_cutoff=1e5,
+        intensity_cutoff=5e5,
     )
     with pl.Config(tbl_rows=30):
         print(fragments)
@@ -72,10 +72,10 @@ def test_testcase(testcase):
         prediction.fragments.select(pl.col("observed_mass"))
     ).to_list()
 
-    plot_prediction(prediction, true_seq, fragments).save(base_path / "plot.html")
-
     print("Predicted sequence = ", prediction.sequence)
     print("True sequence = ", true_seq)
+
+    plot_prediction(prediction, true_seq).save(base_path / "plot.html")
 
     assert prediction.sequence == true_seq
 
