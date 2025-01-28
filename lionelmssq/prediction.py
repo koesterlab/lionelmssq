@@ -5,6 +5,7 @@ from typing import List, Optional, Self, Set, Tuple
 from pulp import LpProblem, LpMinimize, LpInteger, LpContinuous, LpVariable, lpSum
 from lionelmssq.alphabet import MAX_PLAUSILE_NUCLEOSIDE_DIFF, is_similar
 from lionelmssq.common import Side, get_singleton_set_item
+from lionelmssq.mass_explanation import explain_mass
 from lionelmssq.masses import UNIQUE_MASSES
 import polars as pl
 from loguru import logger
@@ -62,6 +63,19 @@ class Predictor:
         masses = (
             self._reduce_alphabet()
         )  # TODO use mass_explanation.explain_mass inside
+
+        candidate_start_fragments = (
+            self.fragments.with_row_index()
+            .filter(pl.col("is_start"))
+            .get_column("index")
+            .to_list()
+        )
+        candidate_end_fragments = (
+            self.fragments.with_row_index()
+            .filter(pl.col("is_end"))
+            .get_column("index")
+            .to_list()
+        )
 
         skeleton_seq, start_fragments = (
             self._predict_skeleton(Side.START)
@@ -167,23 +181,25 @@ class Predictor:
 
         # ensure that start fragments are aligned at the beginning of the sequence
         for fragment in start_fragments:
+            j = candidate_start_fragments[fragment.index]
             # min_end is exclusive
             for i in range(fragment.min_end):
-                x[i][fragment.index].setInitialValue(1)
-                x[i][fragment.index].fixValue()
+                x[i][j].setInitialValue(1)
+                x[i][j].fixValue()
             for i in range(fragment.max_end, self.seq_len):
-                x[i][fragment.index].setInitialValue(0)
-                x[i][fragment.index].fixValue()
+                x[i][j].setInitialValue(0)
+                x[i][j].fixValue()
 
         # ensure that end fragments are aligned at the end of the sequence
         for fragment in end_fragments:
+            j = candidate_end_fragments[fragment.index]
             # min_end is exclusive
             for i in range(fragment.min_end + 1, 0):
-                x[i][fragment.index].setInitialValue(1)
-                x[i][fragment.index].fixValue()
+                x[i][j].setInitialValue(1)
+                x[i][j].fixValue()
             for i in range(-self.seq_len, fragment.max_end + 1):
-                x[i][fragment.index].setInitialValue(0)
-                x[i][fragment.index].fixValue()
+                x[i][j].setInitialValue(0)
+                x[i][j].fixValue()
 
         # Fragments that aren't either start or end are either inner or uncertain.
         # Hence, we don't further constrain their positioning and length and let the
@@ -340,7 +356,10 @@ class Predictor:
             assert pos
 
             is_valid = True
-            explanations = self.explanations[diff]
+            # TODO use explain_mass here. Currently this does not work
+            # with carry_over_mass != 0 because we precompute all explanations.
+            # Once we use the DP here it should work fine.
+            explanations = self.explanations.get(diff, [])
             # METHOD: if there is only one single nucleoside explanation, we can
             # directly assign the nucleoside if there are tuples, we have to assign a
             # possibility to the current and next position
@@ -401,7 +420,6 @@ class Predictor:
                         p + factor * expl_len
                         for expl_len in alphabet_per_expl_len
                     )
-                pos = next_pos
                 if max_fragment_end is None:
                     max_fragment_end = min_fragment_end
                 if min_fragment_end is None:
@@ -411,14 +429,13 @@ class Predictor:
                     # TODO can we stop ealy in building the ladder?
                     is_valid = False
             elif diff <= MAX_PLAUSILE_NUCLEOSIDE_DIFF: # TODO proper tolerance setting needed!
-                if not pos:
-                    breakpoint()
                 if side == Side.START:
                     min_fragment_end = min(pos)
                     max_fragment_end = max(pos)
                 else:
                     min_fragment_end = max(pos)
                     max_fragment_end = min(pos)
+                next_pos = pos
             else:
                 is_valid = False
 
@@ -428,6 +445,7 @@ class Predictor:
                     min_end=min_fragment_end,
                     max_end=max_fragment_end,
                 ))
+                pos = next_pos
             else:
                 logger.warning(
                     f"Skipping {side} fragment {i} because no explanations are found "
