@@ -49,9 +49,9 @@ def plot_prediction(
     if simulation is not None:
         simulation = simulation.select(
             pl.col("left") - 0.5,
-            pl.col("right") + 0.5,
+            pl.col("right") - 0.5,
             pl.struct(["left", "right"])
-            .map_elements(lambda x: create_range(x["left"], x["right"] + 1))
+            .map_elements(lambda x: create_range(x["left"], x["right"]))
             .alias("range"),
             pl.col("true_mass")
             .map_elements(lambda mass: f"{mass:.2f}")
