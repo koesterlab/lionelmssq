@@ -37,6 +37,7 @@ def test_testcase(testcase):
     prediction = Predictor(
         fragments, len(true_seq), os.environ.get("SOLVER", "cbc"), threads=16
     ).predict()
+    breakpoint()
 
     prediction_masses = pl.Series(
         prediction.fragments.select(pl.col("observed_mass"))

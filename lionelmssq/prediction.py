@@ -11,6 +11,13 @@ from loguru import logger
 
 
 @dataclass
+class TerminalFragment:
+    index: int
+    min_end: int
+    max_end: int
+
+
+@dataclass
 class Prediction:
     sequence: List[str]
     fragments: pl.DataFrame
@@ -56,10 +63,10 @@ class Predictor:
             self._reduce_alphabet()
         )  # TODO use mass_explanation.explain_mass inside
 
-        skeleton_seq, start_min_fragment_ends, start_max_fragment_ends = (
+        skeleton_seq, start_fragments = (
             self._predict_skeleton(Side.START)
         )
-        _, end_min_fragment_ends, end_max_fragment_ends = self._predict_skeleton(
+        _, end_fragments = self._predict_skeleton(
             Side.END, skeleton_seq=skeleton_seq
         )
 
@@ -69,18 +76,6 @@ class Predictor:
         # b = 1,...,k: (modified) bases
 
         fragment_masses = self.fragments.get_column("observed_mass").to_list()
-        start_fragments = (
-            self.fragments.with_row_index()
-            .filter(pl.col("is_start"))
-            .get_column("index")
-            .to_list()
-        )
-        end_fragments = (
-            self.fragments.with_row_index()
-            .filter(pl.col("is_end"))
-            .get_column("index")
-            .to_list()
-        )
         n_fragments = len(fragment_masses)
         nucleosides = masses.get_column(
             "nucleoside"
@@ -171,35 +166,30 @@ class Predictor:
                     )
 
         # ensure that start fragments are aligned at the beginning of the sequence
-        for j, min_end, max_end in zip(
-            start_fragments, start_min_fragment_ends, start_max_fragment_ends
-        ):
+        for fragment in start_fragments:
+            breakpoint()
             # min_end is exclusive
-            for i in range(min_end):
+            for i in range(fragment.min_end):
                 x[i][j].setInitialValue(1)
                 x[i][j].fixValue()
-            for i in range(max_end, self.seq_len):
+            for i in range(fragment.max_end, self.seq_len):
                 x[i][j].setInitialValue(0)
                 x[i][j].fixValue()
 
         # ensure that end fragments are aligned at the end of the sequence
-        for j, min_end, max_end in zip(
-            end_fragments, end_min_fragment_ends, end_max_fragment_ends
-        ):
+        for fragment in end_fragments:
+            breakpoint()
             # min_end is exclusive
-            for i in range(min_end + 1, 0):
+            for i in range(fragment.min_end + 1, 0):
                 x[i][j].setInitialValue(1)
                 x[i][j].fixValue()
-            for i in range(-self.seq_len, max_end + 1):
+            for i in range(-self.seq_len, fragment.max_end + 1):
                 x[i][j].setInitialValue(0)
                 x[i][j].fixValue()
 
-        # ensure that inner fragments are neither aligned at the beginning nor the end of the sequence
-        for j in set(range(n_fragments)) - set(start_fragments) - set(end_fragments):
-            x[0][j].setInitialValue(0)
-            x[0][j].fixValue()
-            x[-1][j].setInitialValue(0)
-            x[-1][j].fixValue()
+        # Fragments that aren't either start or end are either inner or uncertain.
+        # Hence, we don't further constrain their positioning and length and let the
+        # LP decide.
 
         # constrain weight_diff_abs to be the absolute value of weight_diff
         for j in range(n_fragments):
@@ -330,7 +320,7 @@ class Predictor:
 
     def _predict_skeleton(
         self, side: Side, skeleton_seq: Optional[List[Set[str]]] = None
-    ) -> Tuple[List[Set[str]], List[int], List[int]]:
+    ) -> Tuple[List[Set[str]], List[TerminalFragment]]:
         if skeleton_seq is None:
             skeleton_seq = [set() for _ in range(self.seq_len)]
 
@@ -339,14 +329,19 @@ class Predictor:
         def get_possible_nucleosides(pos: int, i: int) -> Set[str]:
             return skeleton_seq[pos + factor * i]
         
-        def is_valid_pos(pos: int) -> bool:
+        def is_valid_pos(pos: int, ext: int) -> bool:
+            pos = pos + factor * ext
             return 0 <= pos < self.seq_len if side == Side.START else -self.seq_len <= pos < 0
 
         pos = {0} if side == Side.START else {-1}
+        carry_over_mass = 0
 
-        min_fragment_ends = []
-        max_fragment_ends = []
-        for diff in self.mass_diffs[side]:
+        valid_terminal_fragments = []
+        for fragment_index, diff in enumerate(self.mass_diffs[side]):
+            diff += carry_over_mass
+            assert pos
+
+            is_valid = True
             explanations = self.explanations[diff]
             # METHOD: if there is only one single nucleoside explanation, we can
             # directly assign the nucleoside if there are tuples, we have to assign a
@@ -356,21 +351,37 @@ class Predictor:
             # whether the previous explanations had different lengths.
             if explanations:
                 next_pos = set()
-                if side == Side.START:
-                    min_fragment_end = min(pos) + min(len(expl) for expl in explanations)
-                    max_fragment_end = max(pos) + max(len(expl) for expl in explanations)
+                if side is Side.START:
+                    min_p = min(pos)
+                    max_p = max(pos)
                 else:
-                    min_fragment_end = max(pos) - min(len(expl) for expl in explanations)
-                    max_fragment_end = min(pos) - max(len(expl) for expl in explanations)
+                    min_p = max(pos)
+                    max_p = min(pos)
+                min_fragment_end = None
+                max_fragment_end = None
+                
                 for p in pos:
                     p_specific_explanations = [
-                        expl for expl in explanations if is_valid_pos(p + factor * len(expl))
+                        expl for expl in explanations if is_valid_pos(p, len(expl))
                     ]
 
                     alphabet_per_expl_len = {
                         expl_len: set(chain(*expls))
                         for expl_len, expls in groupby(p_specific_explanations, len)
                     }
+
+                    if p_specific_explanations:
+                        if side is Side.START:
+                            breakpoint()
+                            if p == min_p:
+                                min_fragment_end = min_p + min(expl_len for expl_len in alphabet_per_expl_len)
+                            elif p == max_p:
+                                max_fragment_end = max_p + max(expl_len for expl_len in alphabet_per_expl_len)
+                        else:
+                            if p == min_p:
+                                min_fragment_end = min_p - min(expl_len for expl_len in alphabet_per_expl_len)
+                            elif p == max_p:
+                                max_fragment_end = max_p - max(expl_len for expl_len in alphabet_per_expl_len)
 
                     # constrain already existing sets in the range of the expl
                     # by the nucs that are given in the explanations
@@ -383,7 +394,7 @@ class Predictor:
                                 # the sharpened ones ones below
                                 possible_nucleosides.clear()
 
-                    for expl in explanations:
+                    for expl in p_specific_explanations:
                         for perm in permutations(expl):
                             for i, nuc in enumerate(perm):
                                 get_possible_nucleosides(p, i).add(nuc)
@@ -393,17 +404,40 @@ class Predictor:
                         p + factor * expl_len
                         for expl_len in alphabet_per_expl_len
                     )
-            else:
+                pos = next_pos
+                if max_fragment_end is None:
+                    max_fragment_end = min_fragment_end
+                if min_fragment_end is None:
+                    min_fragment_end = max_fragment_end
+                if min_fragment_end is None:
+                    # still None => both are None
+                    # TODO can we stop ealy in building the ladder?
+                    is_valid = False
+            elif diff <= MAX_PLAUSILE_NUCLEOSIDE_DIFF: # TODO proper tolerance setting needed!
+                if not pos:
+                    breakpoint()
                 if side == Side.START:
                     min_fragment_end = min(pos)
                     max_fragment_end = max(pos)
                 else:
                     min_fragment_end = max(pos)
                     max_fragment_end = min(pos)
-            min_fragment_ends.append(min_fragment_end)
-            max_fragment_ends.append(max_fragment_end)
-        breakpoint()
-        return skeleton_seq, min_fragment_ends, max_fragment_ends
+            else:
+                is_valid = False
+
+            if is_valid:
+                valid_terminal_fragments.append(TerminalFragment(
+                    index=fragment_index,
+                    min_end=min_fragment_end,
+                    max_end=max_fragment_end,
+                ))
+            else:
+                logger.warning(
+                    f"Skipping {side} fragment {i} because no explanations are found "
+                    "for the mass difference."
+                )
+                carry_over_mass += diff
+        return skeleton_seq, valid_terminal_fragments
 
 
 class Explanation:
