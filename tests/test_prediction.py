@@ -29,7 +29,6 @@ def test_testcase(testcase):
 
     # If the left and right columns exist, means that the input file is from a simulation with the sequence of each fragment known!
     if "left" in input_file.columns or "right" in input_file.columns:
-        
         simulation = True
 
         fragments = pl.read_csv(
@@ -45,7 +44,7 @@ def test_testcase(testcase):
 
     else:
         simulation = False
-        
+
         label_mass_3T = meta["label_mass_3T"]
         label_mass_5T = meta["label_mass_5T"]
 
