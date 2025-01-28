@@ -23,12 +23,10 @@ def test_testcase(testcase):
 
     true_seq = parse_nucleosides(meta["true_sequence"])
 
-    fragments = pl.read_csv(base_path / "fragments.tsv", separator="\t")
-    if not ("is_start" in fragments.columns and "is_end" in fragments.columns):
-        fragments = fragments.with_columns(
-            (pl.col("left") == 0).alias("is_start"),
-            ((pl.col("right")) == len(true_seq)).alias("is_end"),
-        )
+    fragments = pl.read_csv(base_path / "fragments.tsv", separator="\t").with_columns(
+        (pl.col("left") == 0).alias("is_start"),
+        ((pl.col("right")) == len(true_seq)).alias("is_end"),
+    )
     with pl.Config(tbl_rows=30):
         print(fragments)
 
