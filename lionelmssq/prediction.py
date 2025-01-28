@@ -338,6 +338,9 @@ class Predictor:
 
         def get_possible_nucleosides(pos: int, i: int) -> Set[str]:
             return skeleton_seq[pos + factor * i]
+        
+        def is_valid_pos(pos: int) -> bool:
+            return 0 <= pos < self.seq_len if side == Side.START else -self.seq_len <= pos < 0
 
         pos = {0} if side == Side.START else {-1}
 
@@ -352,20 +355,25 @@ class Predictor:
             # Further, we consider multiple possible start positions, depending on
             # whether the previous explanations had different lengths.
             if explanations:
-                alphabet_per_expl_len = {
-                    expl_len: set(chain(*expls))
-                    for expl_len, expls in groupby(explanations, len)
-                }
+                next_pos = set()
                 if side == Side.START:
-                    min_fragment_end = min(pos) + min(alphabet_per_expl_len)
-                    max_fragment_end = max(pos) + max(alphabet_per_expl_len)
+                    min_fragment_end = min(pos) + min(len(expl) for expl in explanations)
+                    max_fragment_end = max(pos) + max(len(expl) for expl in explanations)
                 else:
-                    min_fragment_end = max(pos) - min(alphabet_per_expl_len)
-                    max_fragment_end = min(pos) - max(alphabet_per_expl_len)
-
-                # constrain already existing sets in the range of the expl
-                # by the nucs that are given in the explanations
+                    min_fragment_end = max(pos) - min(len(expl) for expl in explanations)
+                    max_fragment_end = min(pos) - max(len(expl) for expl in explanations)
                 for p in pos:
+                    p_specific_explanations = [
+                        expl for expl in explanations if is_valid_pos(p + factor * len(expl))
+                    ]
+
+                    alphabet_per_expl_len = {
+                        expl_len: set(chain(*expls))
+                        for expl_len, expls in groupby(p_specific_explanations, len)
+                    }
+
+                    # constrain already existing sets in the range of the expl
+                    # by the nucs that are given in the explanations
                     for expl_len, alphabet in alphabet_per_expl_len.items():
                         for i in range(expl_len):
                             possible_nucleosides = get_possible_nucleosides(p, i)
@@ -375,18 +383,16 @@ class Predictor:
                                 # the sharpened ones ones below
                                 possible_nucleosides.clear()
 
-                for expl in explanations:
-                    for p in pos:
+                    for expl in explanations:
                         for perm in permutations(expl):
                             for i, nuc in enumerate(perm):
                                 get_possible_nucleosides(p, i).add(nuc)
 
-                # add possible follow up positions
-                pos = {
-                    p + factor * expl_len
-                    for p in pos
-                    for expl_len in alphabet_per_expl_len
-                }
+                    # add possible follow up positions
+                    next_pos.update(
+                        p + factor * expl_len
+                        for expl_len in alphabet_per_expl_len
+                    )
             else:
                 if side == Side.START:
                     min_fragment_end = min(pos)
@@ -396,6 +402,7 @@ class Predictor:
                     max_fragment_end = min(pos)
             min_fragment_ends.append(min_fragment_end)
             max_fragment_ends.append(max_fragment_end)
+        breakpoint()
         return skeleton_seq, min_fragment_ends, max_fragment_ends
 
 
