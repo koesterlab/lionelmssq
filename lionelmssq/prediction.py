@@ -167,25 +167,23 @@ class Predictor:
 
         # ensure that start fragments are aligned at the beginning of the sequence
         for fragment in start_fragments:
-            breakpoint()
             # min_end is exclusive
             for i in range(fragment.min_end):
-                x[i][j].setInitialValue(1)
-                x[i][j].fixValue()
+                x[i][fragment.index].setInitialValue(1)
+                x[i][fragment.index].fixValue()
             for i in range(fragment.max_end, self.seq_len):
-                x[i][j].setInitialValue(0)
-                x[i][j].fixValue()
+                x[i][fragment.index].setInitialValue(0)
+                x[i][fragment.index].fixValue()
 
         # ensure that end fragments are aligned at the end of the sequence
         for fragment in end_fragments:
-            breakpoint()
             # min_end is exclusive
             for i in range(fragment.min_end + 1, 0):
-                x[i][j].setInitialValue(1)
-                x[i][j].fixValue()
+                x[i][fragment.index].setInitialValue(1)
+                x[i][fragment.index].fixValue()
             for i in range(-self.seq_len, fragment.max_end + 1):
-                x[i][j].setInitialValue(0)
-                x[i][j].fixValue()
+                x[i][fragment.index].setInitialValue(0)
+                x[i][fragment.index].fixValue()
 
         # Fragments that aren't either start or end are either inner or uncertain.
         # Hence, we don't further constrain their positioning and length and let the
@@ -372,7 +370,6 @@ class Predictor:
 
                     if p_specific_explanations:
                         if side is Side.START:
-                            breakpoint()
                             if p == min_p:
                                 min_fragment_end = min_p + min(expl_len for expl_len in alphabet_per_expl_len)
                             elif p == max_p:
