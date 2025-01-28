@@ -4,6 +4,7 @@ from lionelmssq.common import parse_nucleosides
 import polars as pl
 import altair as alt
 
+
 def plot_prediction(
     prediction: Prediction,
     true_sequence: List[str],
@@ -46,24 +47,24 @@ def plot_prediction(
     ).with_row_index()
 
     if simulation is not None:
-
         simulation = simulation.select(
             pl.col("left") - 0.5,
             pl.col("right") + 0.5,
             pl.struct(["left", "right"])
             .map_elements(lambda x: create_range(x["left"], x["right"] + 1))
             .alias("range"),
-            pl.col("true_mass").map_elements(lambda mass: f"{mass:.2f}").alias("mass_info"),
+            pl.col("true_mass")
+            .map_elements(lambda mass: f"{mass:.2f}")
+            .alias("mass_info"),
             # pl.col("sequence").alias("fragment_seq"),
             pl.col("sequence").map_elements(parse_nucleosides).alias("fragment_seq"),
             pl.lit("truth").alias("type"),
         ).with_row_index()
 
         data = pl.concat([fragment_predictions, simulation])
-    
+
     else:
         data = fragment_predictions
-
 
     data_seq = data.explode(["fragment_seq", "range"])
 
@@ -74,7 +75,7 @@ def plot_prediction(
             .encode(
                 alt.X("left").axis(labels=False, ticks=False),
                 alt.X2("right"),
-                alt.Y("type")#.title("fragment"),
+                alt.Y("type"),  # .title("fragment"),
             )
         )
         p2 = (
@@ -116,17 +117,16 @@ def plot_prediction(
     layered_plots = alt.vconcat(
         *[
             facet_plots(
-                data.filter(pl.col("index") == i), data_seq.filter(pl.col("index") == i), i
+                data.filter(pl.col("index") == i),
+                data_seq.filter(pl.col("index") == i),
+                i,
             )
             for i in range(max(data["index"]) + 1)
         ],
-        p_final_seq,  title=alt.TitleParams(
-            text="fragments",
-            anchor="middle",
-            orient="left",
-            angle=-90,
-            align="center"
-        )
+        p_final_seq,
+        title=alt.TitleParams(
+            text="fragments", anchor="middle", orient="left", angle=-90, align="center"
+        ),
     ).resolve_scale(x="shared")
 
     return layered_plots

@@ -47,9 +47,7 @@ def test_testcase(testcase):
     print("Predicted sequence = ", prediction.sequence)
     print("True sequence = ", true_seq)
 
-    plot_prediction(prediction, true_seq, fragments).save(
-        base_path / "plot.html"
-    )
+    plot_prediction(prediction, true_seq, fragments).save(base_path / "plot.html")
 
     assert prediction.sequence == true_seq
 
