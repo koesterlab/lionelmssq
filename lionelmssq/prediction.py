@@ -5,7 +5,6 @@ from typing import List, Optional, Self, Set, Tuple
 from pulp import LpProblem, LpMinimize, LpInteger, LpContinuous, LpVariable, lpSum
 from lionelmssq.alphabet import MAX_PLAUSILE_NUCLEOSIDE_DIFF, is_similar
 from lionelmssq.common import Side, get_singleton_set_item
-from lionelmssq.mass_explanation import explain_mass
 from lionelmssq.masses import UNIQUE_MASSES
 import polars as pl
 from loguru import logger
@@ -77,12 +76,8 @@ class Predictor:
             .to_list()
         )
 
-        skeleton_seq, start_fragments = (
-            self._predict_skeleton(Side.START)
-        )
-        _, end_fragments = self._predict_skeleton(
-            Side.END, skeleton_seq=skeleton_seq
-        )
+        skeleton_seq, start_fragments = self._predict_skeleton(Side.START)
+        _, end_fragments = self._predict_skeleton(Side.END, skeleton_seq=skeleton_seq)
 
         prob = LpProblem("RNA sequencing", LpMinimize)
         # i = 1,...,n: positions in the sequence
@@ -342,10 +337,14 @@ class Predictor:
 
         def get_possible_nucleosides(pos: int, i: int) -> Set[str]:
             return skeleton_seq[pos + factor * i]
-        
+
         def is_valid_pos(pos: int, ext: int) -> bool:
             pos = pos + factor * ext
-            return 0 <= pos < self.seq_len if side == Side.START else -self.seq_len <= pos < 0
+            return (
+                0 <= pos < self.seq_len
+                if side == Side.START
+                else -self.seq_len <= pos < 0
+            )
 
         pos = {0} if side == Side.START else {-1}
         carry_over_mass = 0
@@ -376,7 +375,7 @@ class Predictor:
                     max_p = min(pos)
                 min_fragment_end = None
                 max_fragment_end = None
-                
+
                 for p in pos:
                     p_specific_explanations = [
                         expl for expl in explanations if is_valid_pos(p, len(expl))
@@ -390,14 +389,22 @@ class Predictor:
                     if p_specific_explanations:
                         if side is Side.START:
                             if p == min_p:
-                                min_fragment_end = min_p + min(expl_len for expl_len in alphabet_per_expl_len)
+                                min_fragment_end = min_p + min(
+                                    expl_len for expl_len in alphabet_per_expl_len
+                                )
                             elif p == max_p:
-                                max_fragment_end = max_p + max(expl_len for expl_len in alphabet_per_expl_len)
+                                max_fragment_end = max_p + max(
+                                    expl_len for expl_len in alphabet_per_expl_len
+                                )
                         else:
                             if p == min_p:
-                                min_fragment_end = min_p - min(expl_len for expl_len in alphabet_per_expl_len)
+                                min_fragment_end = min_p - min(
+                                    expl_len for expl_len in alphabet_per_expl_len
+                                )
                             elif p == max_p:
-                                max_fragment_end = max_p - max(expl_len for expl_len in alphabet_per_expl_len)
+                                max_fragment_end = max_p - max(
+                                    expl_len for expl_len in alphabet_per_expl_len
+                                )
 
                     # constrain already existing sets in the range of the expl
                     # by the nucs that are given in the explanations
@@ -417,8 +424,7 @@ class Predictor:
 
                     # add possible follow up positions
                     next_pos.update(
-                        p + factor * expl_len
-                        for expl_len in alphabet_per_expl_len
+                        p + factor * expl_len for expl_len in alphabet_per_expl_len
                     )
                 if max_fragment_end is None:
                     max_fragment_end = min_fragment_end
@@ -428,7 +434,9 @@ class Predictor:
                     # still None => both are None
                     # TODO can we stop ealy in building the ladder?
                     is_valid = False
-            elif diff <= MAX_PLAUSILE_NUCLEOSIDE_DIFF: # TODO proper tolerance setting needed!
+            elif (
+                diff <= MAX_PLAUSILE_NUCLEOSIDE_DIFF
+            ):  # TODO proper tolerance setting needed!
                 if side == Side.START:
                     min_fragment_end = min(pos)
                     max_fragment_end = max(pos)
@@ -440,11 +448,13 @@ class Predictor:
                 is_valid = False
 
             if is_valid:
-                valid_terminal_fragments.append(TerminalFragment(
-                    index=fragment_index,
-                    min_end=min_fragment_end,
-                    max_end=max_fragment_end,
-                ))
+                valid_terminal_fragments.append(
+                    TerminalFragment(
+                        index=fragment_index,
+                        min_end=min_fragment_end,
+                        max_end=max_fragment_end,
+                    )
+                )
                 pos = next_pos
             else:
                 logger.warning(
