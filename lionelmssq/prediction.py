@@ -448,8 +448,8 @@ class Predictor:
                 pos = next_pos
             else:
                 logger.warning(
-                    f"Skipping {side} fragment {i} because no explanations are found "
-                    "for the mass difference."
+                    f"Skipping {side} fragment {fragment_index} because no "
+                    "explanations are found for the mass difference."
                 )
                 carry_over_mass += diff
         return skeleton_seq, valid_terminal_fragments
