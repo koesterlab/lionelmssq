@@ -1,0 +1,116 @@
+from lionelmssq.mass_explanation import explain_mass
+import polars as pl
+
+from lionelmssq.masses import EXPLANATION_MASSES
+from lionelmssq.masses import TOLERANCE
+from lionelmssq.masses import ROUND_DECIMAL
+
+
+def determine_terminal_fragments(
+    fragment_masses_filepath,
+    output_file_path=None,
+    label_mass_3T=0.0,
+    label_mass_5T=0.0,
+    explanation_masses=EXPLANATION_MASSES,
+    mass_column_name="neutral_mass",
+    output_mass_column_name="observed_mass",
+    intensity_cutoff=0.5e6,
+):
+    fragment_masses = pl.read_csv(fragment_masses_filepath, separator="\t")
+    neutral_masses = (
+        fragment_masses.select(pl.col(mass_column_name)).to_series().to_list()
+    )
+
+    tags = ["3Tag", "5Tag"]
+    tag_masses = [
+        round(label_mass_3T, ROUND_DECIMAL),
+        round(label_mass_5T, ROUND_DECIMAL),
+    ]
+    nucleoside_df = pl.DataFrame({"nucleoside": tags, "monoisotopic_mass": tag_masses})
+
+    nucleoside_df = nucleoside_df.with_columns(
+        (pl.col("monoisotopic_mass") / TOLERANCE)
+        .round(0)
+        .cast(pl.Int64)
+        .alias("tolerated_integer_masses")
+    )
+
+    explanation_masses = explanation_masses.vstack(nucleoside_df)
+
+    is_start = []
+    is_end = []
+    skip_mass = []
+    nucleotide_only_masses = []
+    mass_explanations = []
+
+    for mass in neutral_masses:
+        explained_mass = explain_mass(mass, explanation_masses)
+
+        # Remove explainations which have more than one tag of each kind in them!
+        # This greatly increases the reliability of tag determination!
+        explained_mass.explanations = {
+            explanation
+            for explanation in explained_mass.explanations
+            if explanation.count("3Tag") <= 1 and explanation.count("5Tag") <= 1
+        }
+
+        mass_explanations.append(str(explained_mass.explanations))
+
+        if explained_mass.explanations != set():
+            # print(mass, explained_mass.explanations)
+
+            temp_list = []
+            for element in explained_mass.explanations:
+                temp_list.extend(element)
+
+            # Do not consider the mass if it is purely only explained by the tags!
+            # This is slightly redundant with earlier pruning based count of tags, but ensures that we are not trying to fit fragments with only tags!
+            if set(temp_list) == {"3Tag"} or set(temp_list) == {"5Tag"}:
+                skip_mass.append(True)
+            elif set(temp_list) == {"3Tag", "5Tag"}:
+                skip_mass.append(True)
+            else:
+                skip_mass.append(False)
+
+            if "5Tag" in temp_list:
+                nucleotide_only_masses.append(mass - label_mass_5T)
+                is_start.append(True)
+                is_end.append(False)
+            elif "3Tag" in temp_list:
+                nucleotide_only_masses.append(mass - label_mass_3T)
+                is_end.append(True)
+                is_start.append(False)
+            else:
+                nucleotide_only_masses.append(mass)
+                is_start.append(False)
+                is_end.append(False)
+        else:
+            nucleotide_only_masses.append(mass)
+            skip_mass.append(True)
+            is_start.append(False)
+            is_end.append(False)
+
+    # TODO: Determine the fragments with both of the tags intact and output is_start = True and is_end = True! That will be the full sequence!
+    # We haven't thrown away the case where the two different types of tags can be present!
+
+    fragment_masses = (
+        fragment_masses.with_columns(
+            pl.Series(nucleotide_only_masses).alias(output_mass_column_name)
+        )
+        .hstack(pl.DataFrame({"is_start": is_start, "is_end": is_end}))
+        .with_columns(pl.Series(mass_explanations).alias("mass_explanations"))
+        .filter(~pl.Series(skip_mass))
+        # .filter(
+        #    pl.col("neutral_mass") > 305.04129
+        # )
+        .sort(pl.col("observed_mass"))
+        .filter(pl.col("intensity") > intensity_cutoff)
+        .filter(
+            pl.col("neutral_mass") < 6000
+        )  # TODO: Replace this by an estimate of the max mass of the sequence!
+    )
+
+    if output_file_path is not None:
+        fragment_masses.write_csv(output_file_path, separator="\t")
+
+    return fragment_masses

@@ -34,7 +34,12 @@ class Prediction:
 
 class Predictor:
     def __init__(
-        self, fragments: pl.DataFrame, seq_len: int, solver: str, threads: int
+        self,
+        fragments: pl.DataFrame,
+        seq_len: int,
+        solver: str,
+        threads: int,
+        unique_masses: pl.DataFrame = UNIQUE_MASSES,
     ):
         self.fragments = fragments.with_row_index(name="orig_index").sort(
             "observed_mass"
@@ -45,6 +50,7 @@ class Predictor:
         self.diff_explanations = None
         self.mass_diffs = dict()
         self.singleton_masses = None
+        self.unique_masses = unique_masses
 
     def predict(self) -> Prediction:
         # TODO: get rid of the requirement to pass the length of the sequence
@@ -109,7 +115,7 @@ class Predictor:
             ]
             for i in range(self.seq_len)
         ]
-        # y: binary variables indicating base at position i
+        # y: binary variables indicating base b at position i
         y = [
             {
                 b: LpVariable(f"y_{i},{b}", lowBound=0, upBound=1, cat=LpInteger)
@@ -240,8 +246,18 @@ class Predictor:
                     return b
             return None
 
+        def get_base_fragmentwise(i, j):
+            for b in nucleosides:
+                if z[i][j][b].value() == 1:
+                    return b
+            return None
+
         # interpret solution
         seq = [get_base(i) for i in range(self.seq_len)]
+        fragment_seq = [
+            [get_base_fragmentwise(i, j) for i in range(self.seq_len)]
+            for j in range(n_fragments)
+        ]
         fragment_predictions = pl.from_dicts(
             [
                 {
@@ -249,6 +265,7 @@ class Predictor:
                     # right bound shall be exclusive, hence add 1
                     "right": max(i for i in range(self.seq_len) if x[i][j].value() == 1)
                     + 1,
+                    "predicted_fragment_seq": fragment_seq[j],
                     "observed_mass": fragment_masses[j],
                     "predicted_mass_diff": predicted_mass_diff[j].value(),
                 }
@@ -272,7 +289,9 @@ class Predictor:
         masses = self.fragments.filter(pl.col(f"is_{side}")).get_column("observed_mass")
         self.mass_diffs[side] = [masses[0]] + (masses[1:] - masses[:-1]).to_list()
 
-    def _collect_singleton_masses(self) -> None:
+    def _collect_singleton_masses(
+        self,
+    ) -> None:  # TODO: Use mass_explanation.explain_mass inside
         masses = self.fragments.filter(
             ~(pl.col("is_start") | pl.col("is_end"))
         ).get_column("observed_mass")
@@ -285,15 +304,16 @@ class Predictor:
             set(self.mass_diffs[Side.START])
             | set(self.mass_diffs[Side.END])
             | self.singleton_masses
-        )
+        )  # IMP: This negelects internal fragments!
         self.explanations = {
             diff: [
                 Explanation(item["nucleoside"])
-                for item in UNIQUE_MASSES.iter_rows(named=True)
+                for item in self.unique_masses.iter_rows(named=True)
                 if is_similar(diff, item["monoisotopic_mass"])
             ]
             for diff in diffs
         }
+        # CHECK: Why is only one nucleside considered here for the difference? REPLACE with the DP!
         # TODO it can happen that both two and one nucleoside are good explanations of a diff
         # this is currently ignored, also three nucleosides are not considered
         # one should rather infer the min and max number of possible nucleosides that test all explanations in between
@@ -303,7 +323,7 @@ class Predictor:
                 diff: [
                     Explanation(item_a["nucleoside"], item_b["nucleoside"])
                     for item_a, item_b in combinations(
-                        UNIQUE_MASSES.iter_rows(named=True), 2
+                        self.unique_masses.iter_rows(named=True), 2
                     )
                     # TODO: for two fragments, shouldn't is_similar be double as tolerant
                     # regarding the error rate?
@@ -323,7 +343,9 @@ class Predictor:
             for expl in expls
             for nuc in expl
         }
-        reduced = UNIQUE_MASSES.filter(pl.col("nucleoside").is_in(observed_nucleosides))
+        reduced = self.unique_masses.filter(
+            pl.col("nucleoside").is_in(observed_nucleosides)
+        )
 
         return reduced
 
