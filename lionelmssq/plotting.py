@@ -28,6 +28,7 @@ def plot_prediction(
 
     def create_range(left, right):
         return list(range(left, right))
+    
 
     fragment_predictions = prediction.fragments.select(
         pl.col("left") - 0.5,
@@ -64,6 +65,13 @@ def plot_prediction(
 
     else:
         data = fragment_predictions
+
+    print(data)
+
+    for j,i in enumerate(data.iter_rows(named=True)):
+        if len(i["range"]) != len(i["fragment_seq"]):
+            print(i)
+            print(prediction.fragments[j, "predicted_fragment_seq"])
 
     data_seq = data.explode(["fragment_seq", "range"])
 

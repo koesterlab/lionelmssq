@@ -15,6 +15,7 @@ def determine_terminal_fragments(
     mass_column_name="neutral_mass",
     output_mass_column_name="observed_mass",
     intensity_cutoff=0.5e6,
+    mass_cutoff=100000
 ):
     fragment_masses = pl.read_csv(fragment_masses_filepath, separator="\t")
     neutral_masses = (
@@ -73,10 +74,12 @@ def determine_terminal_fragments(
                 skip_mass.append(False)
 
             if "5Tag" in temp_list:
+            #if "5Tag" in temp_list and len(explained_mass.explanations) == 1:
                 nucleotide_only_masses.append(mass - label_mass_5T)
                 is_start.append(True)
                 is_end.append(False)
             elif "3Tag" in temp_list:
+            #elif "3Tag" in temp_list and len(explained_mass.explanations) == 1:
                 nucleotide_only_masses.append(mass - label_mass_3T)
                 is_end.append(True)
                 is_start.append(False)
@@ -106,7 +109,7 @@ def determine_terminal_fragments(
         .sort(pl.col("observed_mass"))
         .filter(pl.col("intensity") > intensity_cutoff)
         .filter(
-            pl.col("neutral_mass") < 6000
+            pl.col("neutral_mass") < mass_cutoff
         )  # TODO: Replace this by an estimate of the max mass of the sequence!
     )
 

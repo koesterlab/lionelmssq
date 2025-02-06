@@ -42,7 +42,11 @@ def test_testcase(testcase):
         with pl.Config(tbl_rows=30):
             print(fragments)
 
-        unique_masses = UNIQUE_MASSES
+       # unique_masses = UNIQUE_MASSES
+        unique_masses = UNIQUE_MASSES.filter(
+            pl.col("nucleoside").is_in(["A", "U", "G", "C"])
+        )
+
 
     else:
         simulation = False
@@ -66,13 +70,13 @@ def test_testcase(testcase):
         )
 
         fragments = determine_terminal_fragments(
-            base_path / "fragments.tsv",
+            base_path / "fragments.csv",
             output_file_path=base_path / "fragments_terminal_marked.tsv",
             label_mass_3T=label_mass_3T,
             label_mass_5T=label_mass_5T,
             explanation_masses=explanation_masses,
             # intensity_cutoff=1.2e4,
-            intensity_cutoff=5e5,
+            intensity_cutoff=5e4,
         )
         with pl.Config(tbl_rows=30):
             print(fragments)
@@ -83,6 +87,7 @@ def test_testcase(testcase):
         fragments,
         len(true_seq),
         os.environ.get("SOLVER", "cbc"),
+        #os.environ.get("SOLVER", "gurobi"),
         threads=16,
         unique_masses=unique_masses,
         # "solver": "gurobi" or "cbc"
@@ -111,4 +116,4 @@ def test_testcase(testcase):
     for i in range(len(fragment_masses)):
         assert abs(prediction_masses[i] / fragment_masses[i] - 1) <= MATCHING_THRESHOLD
 
-test_testcase("test_03")
+test_testcase("test_06")
