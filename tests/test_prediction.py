@@ -105,12 +105,12 @@ def test_testcase(testcase):
     else:
         plot_prediction(prediction, true_seq).save(base_path / "plot.html")
 
-    # Asser if the sequences match!
-    assert prediction.sequence == true_seq
-
     meta["predicted_sequence"] = "".join(prediction.sequence)
     with open(base_path / "meta.yaml", "w") as f:
         yaml.safe_dump(meta, f)
+
+    # Asser if the sequences match!
+    assert prediction.sequence == true_seq
 
     # Assert if all the sequence fragments match the predicted fragments in mass at least!
     for i in range(len(fragment_masses)):

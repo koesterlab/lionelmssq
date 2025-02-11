@@ -66,14 +66,16 @@ def plot_prediction(
     else:
         data = fragment_predictions
 
-    print(data)
+    # for j,i in enumerate(data.iter_rows(named=True)):
+    #     #if len(i["range"]) != len(i["fragment_seq"]):
+    #     if 29 in i["range"]:
+    #         print(i)
+    #         print(prediction.fragments[j]["predicted_fragment_seq"].to_list())
 
-    for j,i in enumerate(data.iter_rows(named=True)):
-        if len(i["range"]) != len(i["fragment_seq"]):
-            print(i)
-            print(prediction.fragments[j, "predicted_fragment_seq"])
-
-    data_seq = data.explode(["fragment_seq", "range"])
+    data_seq = data.filter(pl.col("fragment_seq").list.len() > 0).explode(["fragment_seq", "range"]) 
+    #data_seq = data.explode(["fragment_seq", "range"]) 
+    #IMP #TODO: I added an additional criterion to remove the rows with empty sets for fragment_seq!
+    # Investigate further!
 
     def facet_plots(df_mass, df_seq, index):
         p1 = (
