@@ -37,6 +37,7 @@ class Predictor:
         self.fragments = fragments.with_row_index(name="orig_index").sort(
             "observed_mass"
         )
+        self.fragments.write_csv("fragments_sorted_temp.tsv", separator="\t")
         self.seq_len = seq_len
         self.solver = solver
         self.threads = threads

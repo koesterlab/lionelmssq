@@ -108,3 +108,5 @@ def test_testcase(testcase):
     # Assert if all the sequence fragments match the predicted fragments in mass at least!
     for i in range(len(fragment_masses)):
         assert abs(prediction_masses[i] / fragment_masses[i] - 1) <= MATCHING_THRESHOLD
+
+test_testcase("test_06")
