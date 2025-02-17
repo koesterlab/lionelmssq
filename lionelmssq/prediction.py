@@ -9,6 +9,8 @@ from lionelmssq.masses import UNIQUE_MASSES
 import polars as pl
 from loguru import logger
 
+LP_relaxation_threshold = 0.9
+
 
 @dataclass
 class TerminalFragment:
@@ -248,7 +250,7 @@ class Predictor:
 
         def get_base_fragmentwise(i, j):
             for b in nucleosides:
-                if z[i][j][b].value() == 1:
+                if z[i][j][b].value() > LP_relaxation_threshold:
                     return b
             return None
 
@@ -261,10 +263,11 @@ class Predictor:
         fragment_predictions = pl.from_dicts(
             [
                 {
-                    "left": min(i for i in range(self.seq_len) if x[i][j].value() == 1),
-                    # right bound shall be exclusive, hence add 1
-                    "right": max(i for i in range(self.seq_len) if x[i][j].value() == 1)
-                    + 1,
+                    #Because of the relaxation of the LP, sometimes the value is not exactly 1
+                    #TODO: Later, put a condition to check where these criterion is not met and exclude those fragments!
+                    "left": min(i for i in range(self.seq_len) if x[i][j].value() > LP_relaxation_threshold),
+                    "right": max(i for i in range(self.seq_len) if x[i][j].value() > LP_relaxation_threshold)
+                    + 1, # right bound shall be exclusive, hence add 1
                     "predicted_fragment_seq": fragment_seq[j],
                     "observed_mass": fragment_masses[j],
                     "predicted_mass_diff": predicted_mass_diff[j].value(),
