@@ -270,7 +270,10 @@ class Predictor:
 
     def _collect_diffs(self, side: Side) -> None:
         masses = self.fragments.filter(pl.col(f"is_{side}")).get_column("observed_mass")
-        self.mass_diffs[side] = [masses[0]] + (masses[1:] - masses[:-1]).to_list()
+        if masses.is_empty():
+            self.mass_diffs[side] = []
+        else:
+            self.mass_diffs[side] = [masses[0]] + (masses[1:] - masses[:-1]).to_list()
 
     def _collect_singleton_masses(self) -> None:
         masses = self.fragments.filter(
