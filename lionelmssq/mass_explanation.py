@@ -16,7 +16,7 @@ class MassExplanations:
 
 
 def explain_mass(
-    mass: float, explanation_masses=EXPLANATION_MASSES
+    mass: float, explanation_masses=EXPLANATION_MASSES, matching_threshold=MATCHING_THRESHOLD
 ) -> MassExplanations:
     """
     Returns all the possible combinations of nucleosides that could sum up to the given mass.
@@ -38,6 +38,9 @@ def explain_mass(
     def dp(remaining, start):
         # TODO: Can check if there are any possible ways to achieve remaining using tolerated_integer_masses[start:], if NOT, don't execute the dict check, nor store the values (empty list) in the dictionary!
 
+        if target == 0:
+            return [[]]
+
         # If the result for this state is already computed, return it
         if (remaining, start) in memo:
             return memo[(remaining, start)]
@@ -45,7 +48,7 @@ def explain_mass(
         # Base case: if abs(target) is less than MATCHING_THRESHOLD, return a list with one empty combination
         # if abs(remaining) < MATCHING_THRESHOLD:
         # Base case: if the relative error between the target and our estimate is less than the MATCHING_THRESHOLD, return a list with one empty combination
-        if abs(remaining / target) < MATCHING_THRESHOLD:
+        if abs(remaining / target) < matching_threshold:
             return [[]]
 
         # Base case: if target is zero, return a list with one empty combination
@@ -100,7 +103,8 @@ def explain_mass(
 
         elif isinstance(
             explanation_masses.select(pl.col("nucleoside")).dtypes[0], pl.String
-        ):
+        ):  
+            #print(combo_df)
             # When using the "first" function in the group_by (masses.py), we can only get the first nucleoside with the given mass, then the following needs to be used:
             solution_names.add(
                 tuple(

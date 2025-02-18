@@ -48,6 +48,12 @@ def test_testcase(testcase):
             pl.col("nucleoside").is_in(["A", "U", "G", "C"])
         )
 
+        explanation_masses = unique_masses.with_columns(
+            (pl.col("monoisotopic_mass") / TOLERANCE)
+            .round(0)
+            .cast(pl.Int64)
+            .alias("tolerated_integer_masses")
+        )
 
     else:
         simulation = False
@@ -91,6 +97,7 @@ def test_testcase(testcase):
         os.environ.get("SOLVER", "gurobi"),
         threads=16,
         unique_masses=unique_masses,
+        explanation_masses=explanation_masses,
         # "solver": "gurobi" or "cbc"
     ).predict()
 

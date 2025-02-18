@@ -4,7 +4,7 @@ import polars as pl
 DIFF_VALUE = 0.2
 
 # TODO: the -2.0 should be informed by the variance in the measurements
-_MIN_PLAUSIBLE_NUCLEOSIDE_DIFF = (
+MIN_PLAUSIBLE_NUCLEOSIDE_DIFF = (
     UNIQUE_MASSES.select(pl.col("monoisotopic_mass").min()).item() - DIFF_VALUE
 )
 MAX_PLAUSILE_NUCLEOSIDE_DIFF = (

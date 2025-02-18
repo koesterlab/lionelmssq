@@ -3,9 +3,10 @@ from itertools import chain, combinations, groupby, permutations
 from pathlib import Path
 from typing import List, Optional, Self, Set, Tuple
 from pulp import LpProblem, LpMinimize, LpInteger, LpContinuous, LpVariable, lpSum
-from lionelmssq.alphabet import MAX_PLAUSILE_NUCLEOSIDE_DIFF, is_similar
+from lionelmssq.alphabet import MAX_PLAUSILE_NUCLEOSIDE_DIFF, is_similar, MIN_PLAUSIBLE_NUCLEOSIDE_DIFF
 from lionelmssq.common import Side, get_singleton_set_item
-from lionelmssq.masses import UNIQUE_MASSES
+from lionelmssq.masses import UNIQUE_MASSES, EXPLANATION_MASSES, MATCHING_THRESHOLD
+from lionelmssq.mass_explanation import explain_mass
 import polars as pl
 from loguru import logger
 
@@ -42,6 +43,7 @@ class Predictor:
         solver: str,
         threads: int,
         unique_masses: pl.DataFrame = UNIQUE_MASSES,
+        explanation_masses: pl.DataFrame = EXPLANATION_MASSES,
     ):
         self.fragments = fragments.with_row_index(name="orig_index").sort(
             "observed_mass"
@@ -51,8 +53,10 @@ class Predictor:
         self.threads = threads
         self.diff_explanations = None
         self.mass_diffs = dict()
+        self.mass_diffs_errors = dict()
         self.singleton_masses = None
         self.unique_masses = unique_masses
+        self.explanation_masses = explanation_masses
 
     def predict(self) -> Prediction:
         # TODO: get rid of the requirement to pass the length of the sequence
@@ -291,53 +295,81 @@ class Predictor:
     def _collect_diffs(self, side: Side) -> None:
         masses = self.fragments.filter(pl.col(f"is_{side}")).get_column("observed_mass")
         self.mass_diffs[side] = [masses[0]] + (masses[1:] - masses[:-1]).to_list()
+        self.mass_diffs_errors[side] = [MATCHING_THRESHOLD] + (MATCHING_THRESHOLD*((masses[1:]**2 + masses[:-1]**2)**0.5)/(masses[1:] - masses[:-1])).to_list()
 
     def _collect_singleton_masses(
         self,
-    ) -> None:  # TODO: Use mass_explanation.explain_mass inside
+    ) -> None:  # TODO use mass_explanation.explain_mass inside
         masses = self.fragments.filter(
             ~(pl.col("is_start") | pl.col("is_end"))
         ).get_column("observed_mass")
         self.singleton_masses = set(
             mass for mass in masses if mass <= MAX_PLAUSILE_NUCLEOSIDE_DIFF
+            #mass for mass in masses if len(explain_mass(mass)) == 1
         )
 
     def _collect_diff_explanations(self) -> None:
         diffs = (
             set(self.mass_diffs[Side.START])
             | set(self.mass_diffs[Side.END])
-            | self.singleton_masses
+            #| self.singleton_masses
         )  # IMP: This negelects internal fragments!
-        self.explanations = {
-            diff: [
-                Explanation(item["nucleoside"])
-                for item in self.unique_masses.iter_rows(named=True)
-                if is_similar(diff, item["monoisotopic_mass"])
-            ]
-            for diff in diffs
+
+        diffs_errors = (
+            set(self.mass_diffs_errors[Side.START])
+            | set(self.mass_diffs_errors[Side.END])
+            #| set([MATCHING_THRESHOLD]) * len(self.singleton_masses)
+        )
+
+        print(len(diffs))
+        print(len(diffs_erros))
+
+        self.explanations = { 
+            diff: list(explain_mass(diff, explanation_masses=self.explanation_masses,matching_threshold=diff_error).explanations)
+            for diff,diff_erro in diffs,diffs_errors if diff >= MIN_PLAUSIBLE_NUCLEOSIDE_DIFF
         }
-        # CHECK: Why is only one nucleside considered here for the difference? REPLACE with the DP!
-        # TODO it can happen that both two and one nucleoside are good explanations of a diff
-        # this is currently ignored, also three nucleosides are not considered
-        # one should rather infer the min and max number of possible nucleosides that test all explanations in between
-        # explain with two nucleosides
+        #Choose the first element of the list of explanations for now! This needs to be properly handled later! TODO:
+
         self.explanations.update(
             {
-                diff: [
-                    Explanation(item_a["nucleoside"], item_b["nucleoside"])
-                    for item_a, item_b in combinations(
-                        self.unique_masses.iter_rows(named=True), 2
-                    )
-                    # TODO: for two fragments, shouldn't is_similar be double as tolerant
-                    # regarding the error rate?
-                    if is_similar(
-                        diff, item_a["monoisotopic_mass"] + item_b["monoisotopic_mass"]
-                    )
-                ]
-                for diff in diffs
-                if not self.explanations[diff]
+                diff: list(explain_mass(diff, explanation_masses=self.explanation_masses,matching_threshold=MATCHING_THRESHOLD).explanations)
+                for diff in self.singleton_masses if diff < MIN_PLAUSIBLE_NUCLEOSIDE_DIFF
             }
         )
+
+        print(self.explanations)
+
+        if False:
+            self.explanations ={
+                diff: [
+                    Explanation(item["nucleoside"])
+                    for item in self.unique_masses.iter_rows(named=True)
+                    if is_similar(diff, item["monoisotopic_mass"])
+                ]
+                for diff in diffs
+            }
+            # CHECK: Why is only one nucleside considered here for the difference? REPLACE with the DP!
+            # TODO it can happen that both two and one nucleoside are good explanations of a diff
+            # this is currently ignored, also three nucleosides are not considered
+            # one should rather infer the min and max number of possible nucleosides that test all explanations in between
+            # explain with two nucleosides
+            self.explanations.update(
+                {
+                    diff: [
+                        Explanation(item_a["nucleoside"], item_b["nucleoside"])
+                        for item_a, item_b in combinations(
+                            self.unique_masses.iter_rows(named=True), 2
+                        )
+                        # TODO: for two fragments, shouldn't is_similar be double as tolerant
+                        # regarding the error rate?
+                        if is_similar(
+                            diff, item_a["monoisotopic_mass"] + item_b["monoisotopic_mass"]
+                        )
+                    ]
+                    for diff in diffs
+                    if not self.explanations[diff]
+                }
+            )
 
     def _reduce_alphabet(self) -> pl.DataFrame:
         observed_nucleosides = {
