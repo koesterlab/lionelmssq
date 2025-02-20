@@ -29,6 +29,10 @@ def explain_mass(
     # Convert the targets and tolerated_integer_masses to integers for easy opearations
     target = int(round(mass / TOLERANCE, 0))
 
+    if target == 0:
+        return MassExplanations(explanations=set())
+
+
     # Sort the tolerated_integer_masses, makes life easier
     tolerated_integer_masses.sort()
 
@@ -38,9 +42,6 @@ def explain_mass(
     def dp(remaining, start):
         # TODO: Can check if there are any possible ways to achieve remaining using tolerated_integer_masses[start:], if NOT, don't execute the dict check, nor store the values (empty list) in the dictionary!
 
-        if target == 0:
-            return [[]]
-
         # If the result for this state is already computed, return it
         if (remaining, start) in memo:
             return memo[(remaining, start)]
@@ -48,7 +49,7 @@ def explain_mass(
         # Base case: if abs(target) is less than MATCHING_THRESHOLD, return a list with one empty combination
         # if abs(remaining) < MATCHING_THRESHOLD:
         # Base case: if the relative error between the target and our estimate is less than the MATCHING_THRESHOLD, return a list with one empty combination
-        if abs(remaining / target) < matching_threshold:
+        if abs(remaining / target) < matching_threshold: #TODO: Replace this by proper error function based comparison!
             return [[]]
 
         # Base case: if target is zero, return a list with one empty combination

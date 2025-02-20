@@ -3,7 +3,8 @@ from itertools import chain, combinations, groupby, permutations
 from pathlib import Path
 from typing import List, Optional, Self, Set, Tuple
 from pulp import LpProblem, LpMinimize, LpInteger, LpContinuous, LpVariable, lpSum
-from lionelmssq.alphabet import MAX_PLAUSILE_NUCLEOSIDE_DIFF, is_similar, MIN_PLAUSIBLE_NUCLEOSIDE_DIFF
+# from lionelmssq.alphabet import MAX_PLAUSILE_NUCLEOSIDE_DIFF, is_similar, MIN_PLAUSIBLE_NUCLEOSIDE_DIFF, DIFF_VALUE
+from lionelmssq.alphabet import is_similar, DIFF_VALUE
 from lionelmssq.common import Side, get_singleton_set_item
 from lionelmssq.masses import UNIQUE_MASSES, EXPLANATION_MASSES, MATCHING_THRESHOLD
 from lionelmssq.mass_explanation import explain_mass
@@ -52,28 +53,38 @@ class Predictor:
         self.solver = solver
         self.threads = threads
         self.diff_explanations = None
+        self.explanations = {}
         self.mass_diffs = dict()
         self.mass_diffs_errors = dict()
         self.singleton_masses = None
         self.unique_masses = unique_masses
         self.explanation_masses = explanation_masses
 
+        #TODO: This is temporary!
+        # self.MIN_PLAUSIBLE_NUCLEOSIDE_DIFF = (
+        # unique_masses.select(pl.col("monoisotopic_mass").min()).item() - DIFF_VALUE
+        #     )
+        self.MAX_PLAUSILE_NUCLEOSIDE_DIFF = (
+        unique_masses.select(pl.col("monoisotopic_mass").max()).item() + DIFF_VALUE
+            )
+
     def predict(self) -> Prediction:
         # TODO: get rid of the requirement to pass the length of the sequence
         # and instead infer it from the fragments
 
-        self._collect_singleton_masses()  # TODO use mass_explanation.explain_mass inside
+        self._collect_singleton_masses()
         self._collect_diffs(Side.START)
         self._collect_diffs(Side.END)
-        self._collect_diff_explanations()  # TODO use mass_explanation.explain_mass inside
+        self._collect_diff_explanations()
 
         # TODO:
         # also consider that the observations are not complete and that we probably don't see all the letters as diffs or singletons.
         # Hence, maybe do the following: solve first with the reduced alphabet, and if the optimization does not yield a sufficiently
         # good result, then try again with an extended alphabet.
-        masses = (
-            self._reduce_alphabet()
+        masses = ( self.unique_masses
+            #self._reduce_alphabet()
         )  # TODO use mass_explanation.explain_mass inside
+        #TODO: We do not currently have any C here!
 
         candidate_start_fragments = (
             self.fragments.with_row_index()
@@ -297,50 +308,60 @@ class Predictor:
         self.mass_diffs[side] = [masses[0]] + (masses[1:] - masses[:-1]).to_list()
         self.mass_diffs_errors[side] = [MATCHING_THRESHOLD] + (MATCHING_THRESHOLD*((masses[1:]**2 + masses[:-1]**2)**0.5)/(masses[1:] - masses[:-1])).to_list()
 
+        #Constrain the maximum relative error to 1! #For mass difference very close to zero, the relative error can be very high!
+        for i in range(len(self.mass_diffs_errors[side])):
+            if self.mass_diffs_errors[side][i] > 1:
+                self.mass_diffs_errors[side][i] = 1.
+
     def _collect_singleton_masses(
         self,
-    ) -> None:  # TODO use mass_explanation.explain_mass inside
-        masses = self.fragments.filter(
-            ~(pl.col("is_start") | pl.col("is_end"))
-        ).get_column("observed_mass")
-        self.singleton_masses = set(
-            mass for mass in masses if mass <= MAX_PLAUSILE_NUCLEOSIDE_DIFF
-            #mass for mass in masses if len(explain_mass(mass)) == 1
-        )
+    ) -> None:
+        masses = self.fragments.filter(pl.col("singleton_mass")).get_column("observed_mass")
+        self.singleton_masses = set(masses)
 
     def _collect_diff_explanations(self) -> None:
         diffs = (
-            set(self.mass_diffs[Side.START])
-            | set(self.mass_diffs[Side.END])
-            #| self.singleton_masses
-        )  # IMP: This negelects internal fragments!
+            (self.mass_diffs[Side.START])
+            + (self.mass_diffs[Side.END])
+            )
 
         diffs_errors = (
-            set(self.mass_diffs_errors[Side.START])
-            | set(self.mass_diffs_errors[Side.END])
-            #| set([MATCHING_THRESHOLD]) * len(self.singleton_masses)
+            (self.mass_diffs_errors[Side.START])
+            + (self.mass_diffs_errors[Side.END])
         )
 
-        print(len(diffs))
-        print(len(diffs_erros))
+        for diff, diff_error in zip(diffs, diffs_errors):
+            temp = list(explain_mass(diff, explanation_masses=self.explanation_masses, matching_threshold=diff_error).explanations)
+            if len(temp) > 0:
+                self.explanations[diff] = [Explanation(*temp[i]) for i in range(len(temp))]
+            else:
+                self.explanations[diff] = []
 
-        self.explanations = { 
-            diff: list(explain_mass(diff, explanation_masses=self.explanation_masses,matching_threshold=diff_error).explanations)
-            for diff,diff_erro in diffs,diffs_errors if diff >= MIN_PLAUSIBLE_NUCLEOSIDE_DIFF
-        }
-        #Choose the first element of the list of explanations for now! This needs to be properly handled later! TODO:
+        
+        for diff in self.singleton_masses:
+            temp = list(explain_mass(diff, explanation_masses=self.explanation_masses, matching_threshold=MATCHING_THRESHOLD).explanations)
+            if len(temp) > 0:
+                self.explanations[diff] = [Explanation(*temp[i]) for i in range(len(temp))]
+            else:
+                self.explanations[diff] = []
 
-        self.explanations.update(
-            {
-                diff: list(explain_mass(diff, explanation_masses=self.explanation_masses,matching_threshold=MATCHING_THRESHOLD).explanations)
-                for diff in self.singleton_masses if diff < MIN_PLAUSIBLE_NUCLEOSIDE_DIFF
-            }
-        )
+        print(diffs)
+        #print(self.explanations)
+        # print(len([v for v in self.explanations.values() if v]) if self.explanations else "No explanations found!")
 
-        print(self.explanations)
+        if True:
+            
+            diffs=set()
 
-        if False:
-            self.explanations ={
+            diffs = (
+            set(self.mass_diffs[Side.START])
+            | set(self.mass_diffs[Side.END])
+            | self.singleton_masses
+        )  # IMP: This negelects internal fragments!
+
+            self.explanations2 = {}
+
+            self.explanations2 ={
                 diff: [
                     Explanation(item["nucleoside"])
                     for item in self.unique_masses.iter_rows(named=True)
@@ -353,7 +374,7 @@ class Predictor:
             # this is currently ignored, also three nucleosides are not considered
             # one should rather infer the min and max number of possible nucleosides that test all explanations in between
             # explain with two nucleosides
-            self.explanations.update(
+            self.explanations2.update(
                 {
                     diff: [
                         Explanation(item_a["nucleoside"], item_b["nucleoside"])
@@ -367,9 +388,19 @@ class Predictor:
                         )
                     ]
                     for diff in diffs
-                    if not self.explanations[diff]
+                    if not self.explanations2[diff]
                 }
             )
+
+            #print(self.explanations)
+            print(len([v for v in self.explanations2.values() if v]) if self.explanations2 else "No explanations found!")
+
+            for v1,v2 in zip(self.explanations,self.explanations2):
+                if self.explanations2[v2]:
+                    print(v2, self.explanations[v2],self.explanations2[v2])
+                if self.explanations[v1]:
+                    print(v1, self.explanations[v1],self.explanations2[v1])
+
 
     def _reduce_alphabet(self) -> pl.DataFrame:
         observed_nucleosides = {
@@ -492,7 +523,7 @@ class Predictor:
                     # TODO can we stop ealy in building the ladder?
                     is_valid = False
             elif (
-                diff <= MAX_PLAUSILE_NUCLEOSIDE_DIFF
+                diff <= self.MAX_PLAUSILE_NUCLEOSIDE_DIFF
             ):  # TODO proper tolerance setting needed!
                 if side == Side.START:
                     min_fragment_end = min(pos)

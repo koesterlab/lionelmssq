@@ -9,7 +9,7 @@ from lionelmssq.utils import determine_terminal_fragments
 import polars as pl
 import yaml
 
-from lionelmssq.masses import UNIQUE_MASSES, TOLERANCE, MATCHING_THRESHOLD
+from lionelmssq.masses import UNIQUE_MASSES, TOLERANCE, MATCHING_THRESHOLD, ROUND_DECIMAL
 
 _TESTCASES = importlib.resources.files("tests") / "testcases"
 
@@ -38,7 +38,7 @@ def test_testcase(testcase):
         ).with_columns(
             (pl.col("observed_mass_without_backbone").alias("observed_mass")),
             (pl.col("true_nucleoside_mass").alias("true_mass")),
-        ).filter(~(pl.col("is_start") & pl.col("is_end")))  #TODO: Exclude the cases when both is_start and is_end are True!
+        ).filter(~(pl.col("is_start") & pl.col("is_end")))  #TODO: INCLUDE the cases when both is_start and is_end are True!
         #The above is temporary, until the preeiction for the entire intact sequence is fixed!
         with pl.Config(tbl_rows=30):
             print(fragments)
@@ -77,13 +77,13 @@ def test_testcase(testcase):
         )
 
         fragments = determine_terminal_fragments(
-            base_path / "fragments.csv",
+            base_path / "fragments.tsv",
             output_file_path=base_path / "fragments_terminal_marked.tsv",
             label_mass_3T=label_mass_3T,
             label_mass_5T=label_mass_5T,
             explanation_masses=explanation_masses,
-            # intensity_cutoff=1.2e4,
-            intensity_cutoff=5e4,
+            intensity_cutoff=1.2e4,
+            #intensity_cutoff=5e4,
         )
         with pl.Config(tbl_rows=30):
             print(fragments)
@@ -126,4 +126,4 @@ def test_testcase(testcase):
     for i in range(len(fragment_masses)):
         assert abs(prediction_masses[i] / fragment_masses[i] - 1) <= MATCHING_THRESHOLD
 
-test_testcase("test_07")
+#test_testcase("test_03")

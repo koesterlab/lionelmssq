@@ -43,6 +43,7 @@ def determine_terminal_fragments(
     skip_mass = []
     nucleotide_only_masses = []
     mass_explanations = []
+    singleton_mass = []
 
     for mass in neutral_masses:
         explained_mass = explain_mass(mass, explanation_masses)
@@ -63,6 +64,27 @@ def determine_terminal_fragments(
             temp_list = []
             for element in explained_mass.explanations:
                 temp_list.extend(element)
+
+            # #Determine if its only a single nucleotide mass!
+            if any(len(element) == 1 for element in explained_mass.explanations): #Only the case without tags is considered. Note: Check if to use all or any here!
+                singleton_mass.append(True)
+            else:
+                singleton_mass.append(False)
+
+            # #Determine if its only a single nucleotide mass! Also considers Tags with a single nucleotide as singleton!
+            # singleton_bool = False
+            # for element in explained_mass.explanations:
+            #     if len(element) == 1:
+            #         singleton_mass.append(True)
+            #         singleton_bool = True
+            #         break
+            #     elif len(element) == 2:
+            #         if "3Tag" in element or "5Tag" in element:
+            #             singleton_mass.append(True)
+            #             singleton_bool = True
+            #             break
+            # if not singleton_bool:
+            #     singleton_mass.append(False)
 
             # Do not consider the mass if it is purely only explained by the tags!
             # This is slightly redundant with earlier pruning based count of tags, but ensures that we are not trying to fit fragments with only tags!
@@ -92,6 +114,7 @@ def determine_terminal_fragments(
             skip_mass.append(True)
             is_start.append(False)
             is_end.append(False)
+            singleton_mass.append(False)
 
     # TODO: Determine the fragments with both of the tags intact and output is_start = True and is_end = True! That will be the full sequence!
     # We haven't thrown away the case where the two different types of tags can be present!
@@ -100,7 +123,7 @@ def determine_terminal_fragments(
         fragment_masses.with_columns(
             pl.Series(nucleotide_only_masses).alias(output_mass_column_name)
         )
-        .hstack(pl.DataFrame({"is_start": is_start, "is_end": is_end}))
+        .hstack(pl.DataFrame({"is_start": is_start, "is_end": is_end, "singleton_mass": singleton_mass}))
         .with_columns(pl.Series(mass_explanations).alias("mass_explanations"))
         .filter(~pl.Series(skip_mass))
         # .filter(
