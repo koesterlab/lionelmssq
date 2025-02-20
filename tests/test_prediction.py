@@ -18,6 +18,8 @@ def test_testcase(testcase):
     base_path = _TESTCASES / testcase
     with open(base_path / "meta.yaml", "r") as f:
         meta = yaml.safe_load(f)
+    if meta.get("skip"):
+        pytest.skip("Testcase is marked as skipped in meta.yaml")
 
     true_seq = parse_nucleosides(meta["true_sequence"])
 
