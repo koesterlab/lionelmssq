@@ -81,10 +81,9 @@ class Predictor:
         # also consider that the observations are not complete and that we probably don't see all the letters as diffs or singletons.
         # Hence, maybe do the following: solve first with the reduced alphabet, and if the optimization does not yield a sufficiently
         # good result, then try again with an extended alphabet.
-        masses = ( self.unique_masses
-            #self._reduce_alphabet()
-        )  # TODO use mass_explanation.explain_mass inside
-        #TODO: We do not currently have any C here!
+        masses = ( #self.unique_masses
+            self._reduce_alphabet()
+        )
 
         candidate_start_fragments = (
             self.fragments.with_row_index()
@@ -316,7 +315,7 @@ class Predictor:
     def _collect_singleton_masses(
         self,
     ) -> None:
-        masses = self.fragments.filter(pl.col("singleton_mass")).get_column("observed_mass")
+        masses = self.fragments.filter(pl.col("single_nucleoside")).get_column("observed_mass")
         self.singleton_masses = set(masses)
 
     def _collect_diff_explanations(self) -> None:
@@ -345,11 +344,11 @@ class Predictor:
             else:
                 self.explanations[diff] = []
 
-        print(diffs)
+        #print(diffs)
         #print(self.explanations)
         # print(len([v for v in self.explanations.values() if v]) if self.explanations else "No explanations found!")
 
-        if True:
+        if False:
             
             diffs=set()
 
@@ -412,6 +411,7 @@ class Predictor:
         reduced = self.unique_masses.filter(
             pl.col("nucleoside").is_in(observed_nucleosides)
         )
+        print("Nucleosides considered for fitting after alphabet reduction:", reduced)
 
         return reduced
 

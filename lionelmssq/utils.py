@@ -123,7 +123,7 @@ def determine_terminal_fragments(
         fragment_masses.with_columns(
             pl.Series(nucleotide_only_masses).alias(output_mass_column_name)
         )
-        .hstack(pl.DataFrame({"is_start": is_start, "is_end": is_end, "singleton_mass": singleton_mass}))
+        .hstack(pl.DataFrame({"is_start": is_start, "is_end": is_end, "single_nucleoside": singleton_mass}))
         .with_columns(pl.Series(mass_explanations).alias("mass_explanations"))
         .filter(~pl.Series(skip_mass))
         # .filter(

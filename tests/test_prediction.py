@@ -82,8 +82,8 @@ def test_testcase(testcase):
             label_mass_3T=label_mass_3T,
             label_mass_5T=label_mass_5T,
             explanation_masses=explanation_masses,
-            intensity_cutoff=1.2e4,
-            #intensity_cutoff=5e4,
+            #intensity_cutoff=1.2e4,
+            intensity_cutoff=5e5, #for test_03
         )
         with pl.Config(tbl_rows=30):
             print(fragments)
@@ -126,4 +126,4 @@ def test_testcase(testcase):
     for i in range(len(fragment_masses)):
         assert abs(prediction_masses[i] / fragment_masses[i] - 1) <= MATCHING_THRESHOLD
 
-#test_testcase("test_03")
+test_testcase("test_03")
