@@ -126,4 +126,4 @@ def test_testcase(testcase):
     for i in range(len(fragment_masses)):
         assert abs(prediction_masses[i] / fragment_masses[i] - 1) <= MATCHING_THRESHOLD
 
-test_testcase("test_03")
+test_testcase("test_06")
