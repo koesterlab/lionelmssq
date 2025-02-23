@@ -8,7 +8,6 @@ from lionelmssq.masses import ROUND_DECIMAL
 
 def determine_terminal_fragments(
     fragment_masses,
-    # fragment_masses_filepath,
     output_file_path=None,
     label_mass_3T=0.0,
     label_mass_5T=0.0,
@@ -19,7 +18,6 @@ def determine_terminal_fragments(
     mass_cutoff=100000,
     matching_threshold=MATCHING_THRESHOLD
 ):
-    # fragment_masses = pl.read_csv(fragment_masses_filepath, separator="\t")
     neutral_masses = (
         fragment_masses.select(pl.col(mass_column_name)).to_series().to_list()
     )
