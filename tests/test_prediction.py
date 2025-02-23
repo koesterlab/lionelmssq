@@ -5,15 +5,13 @@ import pytest
 from lionelmssq.prediction import Predictor
 from lionelmssq.common import parse_nucleosides
 from lionelmssq.plotting import plot_prediction
-from lionelmssq.utils import determine_terminal_fragments
+from lionelmssq.utils import determine_terminal_fragments, estimate_MS_error_MATCHING_THRESHOLD
 import polars as pl
 import yaml
 
 from lionelmssq.masses import UNIQUE_MASSES, TOLERANCE, MATCHING_THRESHOLD, ROUND_DECIMAL
 
 _TESTCASES = importlib.resources.files("tests") / "testcases"
-
-
 # @pytest.mark.parametrize(
 #     "testcase", [tc for tc in _TESTCASES.iterdir() if tc.name in ["test_01", "test_02"]]
 # )
@@ -55,6 +53,11 @@ def test_testcase(testcase):
             .alias("tolerated_integer_masses")
         )
 
+        #TODO: Discuss why it doesn't work with the estimated error!
+        matching_threshold = MATCHING_THRESHOLD
+        #matching_threshold,_,_ = estimate_MS_error_MATCHING_THRESHOLD(fragments,unique_masses=unique_masses,simulation=simulation)
+        print("Matching threshold (rel errror) estimated from singleton masses = ", matching_threshold)
+
     else:
         simulation = False
 
@@ -76,14 +79,22 @@ def test_testcase(testcase):
             .alias("tolerated_integer_masses")
         )
 
+        fragment_masses_read = pl.read_csv( base_path / "fragments.tsv", separator="\t")
+
+        matching_threshold = MATCHING_THRESHOLD
+        #TODO: Discuss why it doesn't work with the estimated error!
+        #matching_threshold,_,_ = estimate_MS_error_MATCHING_THRESHOLD(fragment_masses_read,unique_masses=unique_masses,simulation=simulation)
+        print("Matching threshold (rel errror) estimated from singleton masses = ", matching_threshold)
+
         fragments = determine_terminal_fragments(
-            base_path / "fragments.tsv",
+            fragment_masses_read,
             output_file_path=base_path / "fragments_terminal_marked.tsv",
             label_mass_3T=label_mass_3T,
             label_mass_5T=label_mass_5T,
             explanation_masses=explanation_masses,
-            intensity_cutoff=1.2e4, #for test_05
-            #intensity_cutoff=5e5, #for test_03
+            #intensity_cutoff=1.2e4, #for test_05
+            intensity_cutoff=5e5, #for test_03
+            matching_threshold=matching_threshold,
         )
         with pl.Config(tbl_rows=30):
             print(fragments)
@@ -94,11 +105,11 @@ def test_testcase(testcase):
         fragments,
         len(true_seq),
         #os.environ.get("SOLVER", "cbc"),
-        os.environ.get("SOLVER", "gurobi"),
+        os.environ.get("SOLVER", "gurobi"), # "solver": "gurobi" or "cbc"
         threads=16,
         unique_masses=unique_masses,
         explanation_masses=explanation_masses,
-        # "solver": "gurobi" or "cbc"
+        matching_threshold=matching_threshold,
     ).predict()
 
     prediction_masses = pl.Series(
@@ -107,10 +118,6 @@ def test_testcase(testcase):
 
     print("Predicted sequence = ", prediction.sequence)
     print("True sequence = ", true_seq)
-
-    for index,j in enumerate(prediction.fragments.select(pl.col("predicted_fragment_seq")).iter_rows()):
-        if all(nuc is None for nuc in j):
-            print(index,j,"All None")
 
     if simulation:
         plot_prediction(prediction, true_seq, fragments.filter(~(pl.col("is_start") & pl.col("is_end")))).save(base_path / "plot.html")
@@ -129,6 +136,6 @@ def test_testcase(testcase):
     # Assert if all the sequence fragments match the predicted fragments in mass at least!
     for i in range(len(fragment_masses)):
         print(f"Fragment {i}: {fragment_masses[i]} vs {prediction_masses[i]}")
-        #assert abs(prediction_masses[i] / fragment_masses[i] - 1) <= MATCHING_THRESHOLD
+        #assert abs(prediction_masses[i] / fragment_masses[i] - 1) <= matching_threshold
 
-test_testcase("test_06")
+test_testcase("test_05")

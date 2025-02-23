@@ -1,13 +1,14 @@
 from lionelmssq.mass_explanation import explain_mass
 import polars as pl
 
-from lionelmssq.masses import EXPLANATION_MASSES
+from lionelmssq.masses import EXPLANATION_MASSES, UNIQUE_MASSES, MATCHING_THRESHOLD
 from lionelmssq.masses import TOLERANCE
 from lionelmssq.masses import ROUND_DECIMAL
 
 
 def determine_terminal_fragments(
-    fragment_masses_filepath,
+    fragment_masses,
+    # fragment_masses_filepath,
     output_file_path=None,
     label_mass_3T=0.0,
     label_mass_5T=0.0,
@@ -15,9 +16,10 @@ def determine_terminal_fragments(
     mass_column_name="neutral_mass",
     output_mass_column_name="observed_mass",
     intensity_cutoff=0.5e6,
-    mass_cutoff=100000
+    mass_cutoff=100000,
+    matching_threshold=MATCHING_THRESHOLD
 ):
-    fragment_masses = pl.read_csv(fragment_masses_filepath, separator="\t")
+    # fragment_masses = pl.read_csv(fragment_masses_filepath, separator="\t")
     neutral_masses = (
         fragment_masses.select(pl.col(mass_column_name)).to_series().to_list()
     )
@@ -46,7 +48,7 @@ def determine_terminal_fragments(
     singleton_mass = []
 
     for mass in neutral_masses:
-        explained_mass = explain_mass(mass, explanation_masses)
+        explained_mass = explain_mass(mass, explanation_masses, matching_threshold=matching_threshold)
 
         # Remove explainations which have more than one tag of each kind in them!
         # This greatly increases the reliability of tag determination!
@@ -140,3 +142,33 @@ def determine_terminal_fragments(
         fragment_masses.write_csv(output_file_path, separator="\t")
 
     return fragment_masses
+
+def estimate_MS_error_MATCHING_THRESHOLD(fragments,unique_masses=UNIQUE_MASSES,rejection_threshold=0.5,simulation=False):
+    """
+    Using the mass of the single nucleosides, A, U, G, C, estimate the relatve error that the MS makes, this is used to determine the MATCHING_THRESHOLD for the DP algorithm!
+
+    """
+
+    unique_natural_masses = unique_masses.filter(
+            pl.col("nucleoside").is_in(["A", "U", "G", "C"])
+        ).select(pl.col("monoisotopic_mass")).to_series().to_list()
+    
+
+    if simulation:
+        singleton_masses = fragments.filter(pl.col("single_nucleoside")).select(pl.col("observed_mass")).to_series().to_list()
+    else:
+        singleton_masses = fragments.filter(pl.col("neutral_mass").is_between(min(unique_natural_masses)-rejection_threshold,max(unique_natural_masses)+rejection_threshold)).select(pl.col("neutral_mass")).to_series().to_list()
+
+    relative_errors = []
+    for mass in singleton_masses:
+        differences = [abs(unique_mass - mass) for unique_mass in unique_natural_masses]
+        closest_mass = min(differences) if min(differences) < rejection_threshold else None
+        if closest_mass:
+            relative_errors.append(abs(closest_mass/mass))
+
+    if relative_errors:
+        average_error = sum(relative_errors) / len(relative_errors)
+        std_deviation = (sum((x - average_error) ** 2 for x in relative_errors) / len(relative_errors)) ** 0.5
+        return max(relative_errors),average_error, std_deviation
+    else:
+        return None, None, None

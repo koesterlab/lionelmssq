@@ -45,6 +45,7 @@ class Predictor:
         threads: int,
         unique_masses: pl.DataFrame = UNIQUE_MASSES,
         explanation_masses: pl.DataFrame = EXPLANATION_MASSES,
+        matching_threshold: float = MATCHING_THRESHOLD,
     ):
         self.fragments = fragments.with_row_index(name="orig_index").sort(
             "observed_mass"
@@ -59,6 +60,7 @@ class Predictor:
         self.singleton_masses = None
         self.unique_masses = unique_masses
         self.explanation_masses = explanation_masses
+        self.matching_threshold = matching_threshold
 
         #TODO: This is temporary!
         # self.MIN_PLAUSIBLE_NUCLEOSIDE_DIFF = (
@@ -309,7 +311,7 @@ class Predictor:
     def _collect_diffs(self, side: Side) -> None:
         masses = self.fragments.filter(pl.col(f"is_{side}")).get_column("observed_mass")
         self.mass_diffs[side] = [masses[0]] + (masses[1:] - masses[:-1]).to_list()
-        self.mass_diffs_errors[side] = [MATCHING_THRESHOLD] + (MATCHING_THRESHOLD*((masses[1:]**2 + masses[:-1]**2)**0.5)/(masses[1:] - masses[:-1])).to_list()
+        self.mass_diffs_errors[side] = [self.matching_threshold] + (self.matching_threshold*((masses[1:]**2 + masses[:-1]**2)**0.5)/(masses[1:] - masses[:-1])).to_list()
 
         #Constrain the maximum relative error to 1! #For mass difference very close to zero, the relative error can be very high!
         for i in range(len(self.mass_diffs_errors[side])):
@@ -342,7 +344,7 @@ class Predictor:
 
         
         for diff in self.singleton_masses:
-            temp = list(explain_mass(diff, explanation_masses=self.explanation_masses, matching_threshold=MATCHING_THRESHOLD).explanations)
+            temp = list(explain_mass(diff, explanation_masses=self.explanation_masses, matching_threshold=self.matching_threshold).explanations)
             if len(temp) > 0:
                 self.explanations[diff] = [Explanation(*temp[i]) for i in range(len(temp))]
             else:
