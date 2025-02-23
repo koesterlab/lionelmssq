@@ -23,25 +23,21 @@ def plot_prediction(
     def fmt_mass(cols):
         return pl.Series([f"{row[0]:.2f} ({row[1]:.2f})" for row in zip(*cols)])
 
-    def reject_none(str_list):
-        return [nuc for nuc in str_list if nuc is not None]
-
     def create_range(left, right):
         return list(range(left, right))
-    
 
     fragment_predictions = prediction.fragments.select(
         pl.col("left") - 0.5,
         pl.col("right") - 1 + 0.5,
         pl.struct(["left", "right"])
-        .map_elements(lambda x: create_range(x["left"], x["right"]))
+        .map_elements(lambda x: create_range(x["left"], x["right"]),return_dtype=pl.List(pl.Int64))
         .alias("range"),
         pl.map_batches(
             ["observed_mass", "predicted_mass_diff"],
             fmt_mass,
         ).alias("mass_info"),
         pl.col("predicted_fragment_seq")
-        .map_elements(reject_none)
+        #.map_elements(reject_none, return_dtype=pl.List(pl.Utf8))
         .alias("fragment_seq"),
         pl.lit("predicted").alias("type"),
     ).with_row_index()
@@ -51,13 +47,13 @@ def plot_prediction(
             pl.col("left") - 0.5,
             pl.col("right") - 0.5,
             pl.struct(["left", "right"])
-            .map_elements(lambda x: create_range(x["left"], x["right"]))
+            .map_elements(lambda x: create_range(x["left"], x["right"]),return_dtype=pl.List(pl.Int64))
             .alias("range"),
             pl.col("true_mass")
-            .map_elements(lambda mass: f"{mass:.2f}")
+            .map_elements(lambda mass: f"{mass:.2f}",return_dtype=pl.Utf8)
             .alias("mass_info"),
             # pl.col("sequence").alias("fragment_seq"),
-            pl.col("sequence").map_elements(parse_nucleosides).alias("fragment_seq"),
+            pl.col("sequence").map_elements(parse_nucleosides,return_dtype=pl.List(pl.Utf8)).alias("fragment_seq"),
             pl.lit("truth").alias("type"),
         ).with_row_index()
 

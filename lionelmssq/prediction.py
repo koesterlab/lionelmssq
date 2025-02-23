@@ -271,9 +271,12 @@ class Predictor:
         # interpret solution
         seq = [get_base(i) for i in range(self.seq_len)]
         fragment_seq = [
-            [get_base_fragmentwise(i, j) for i in range(self.seq_len)]
+            [get_base_fragmentwise(i, j) for i in range(self.seq_len) if get_base_fragmentwise(i, j) is not None]
             for j in range(n_fragments)
         ]
+        predicted_fragment_mass = [ sum([nucleoside_masses[get_base_fragmentwise(i, j)] for i in range(self.seq_len) if get_base_fragmentwise(i, j) is not None])
+            for j in range(n_fragments)]
+
         fragment_predictions = pl.from_dicts(
             [
                 {
@@ -283,6 +286,7 @@ class Predictor:
                     "right": max(i for i in range(self.seq_len) if x[i][j].value() > LP_relaxation_threshold)
                     + 1, # right bound shall be exclusive, hence add 1
                     "predicted_fragment_seq": fragment_seq[j],
+                    "predicted_fragment_mass": predicted_fragment_mass[j],
                     "observed_mass": fragment_masses[j],
                     "predicted_mass_diff": predicted_mass_diff[j].value(),
                 }
