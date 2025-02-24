@@ -63,12 +63,12 @@ def determine_terminal_fragments(
         ms1_explained_mass = explain_mass(
             ms1_mass, explanation_masses, matching_threshold=matching_threshold
         )
-        ms1_explained_mass = {
+        ms1_explained_mass.explanations = {
             element
             for element in ms1_explained_mass.explanations
             if element.count("3Tag") == 1 and element.count("5Tag") == 1
         }
-        print(ms1_explained_mass)
+        # print(ms1_explained_mass.explanations)
         if not ms1_mass:
             print("MS1 mass is not explained by the nucleosides!")
             ms1_mass = None
@@ -85,6 +85,7 @@ def determine_terminal_fragments(
                 if counts_subset(explanation, ms1_explained_mass.explanations)
                 # if the counts of the different nucleosides are less than or equal to the respective counts in the MS1 mass explanation
             }
+            # print(explained_mass.explanations)
         else:
             # Remove explainations which have more than one tag of each kind in them!
             # This greatly increases the reliability of tag determination!
@@ -219,9 +220,7 @@ def determine_terminal_fragments(
         # )
         .sort(pl.col("observed_mass"))
         .filter(pl.col("intensity") > intensity_cutoff)
-        .filter(
-            pl.col("neutral_mass") < mass_cutoff
-        )
+        .filter(pl.col("neutral_mass") < mass_cutoff)
     )
 
     if output_file_path is not None:

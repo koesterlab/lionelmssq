@@ -273,6 +273,7 @@ class Predictor:
 
         # interpret solution
         seq = [get_base(i) for i in range(self.seq_len)]
+        print("Predicted sequence = ", "".join(seq))
         fragment_seq = [
             [
                 get_base_fragmentwise(i, j)
@@ -281,6 +282,7 @@ class Predictor:
             ]
             for j in range(n_fragments)
         ]
+        print("Predicted fragment sequence = ", fragment_seq)
         predicted_fragment_mass = [
             sum(
                 [
@@ -296,16 +298,21 @@ class Predictor:
             [
                 {
                     # Because of the relaxation of the LP, sometimes the value is not exactly 1
-                    # TODO: Later, put a condition to check where these criterion is not met and exclude those fragments!
                     "left": min(
-                        i
-                        for i in range(self.seq_len)
-                        if x[i][j].value() > LP_relaxation_threshold
+                        (
+                            i
+                            for i in range(self.seq_len)
+                            if x[i][j].value() > LP_relaxation_threshold
+                        ),
+                        default=0,
                     ),
                     "right": max(
-                        i
-                        for i in range(self.seq_len)
-                        if x[i][j].value() > LP_relaxation_threshold
+                        (
+                            i
+                            for i in range(self.seq_len)
+                            if x[i][j].value() > LP_relaxation_threshold
+                        ),
+                        default=-1,
                     )
                     + 1,  # right bound shall be exclusive, hence add 1
                     "predicted_fragment_seq": fragment_seq[j],
