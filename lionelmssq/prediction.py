@@ -3,6 +3,7 @@ from itertools import chain, combinations, groupby, permutations
 from pathlib import Path
 from typing import List, Optional, Self, Set, Tuple
 from pulp import LpProblem, LpMinimize, LpInteger, LpContinuous, LpVariable, lpSum
+
 # from lionelmssq.alphabet import MAX_PLAUSILE_NUCLEOSIDE_DIFF, is_similar, MIN_PLAUSIBLE_NUCLEOSIDE_DIFF, DIFF_VALUE
 from lionelmssq.alphabet import is_similar, DIFF_VALUE
 from lionelmssq.common import Side, get_singleton_set_item
@@ -62,13 +63,13 @@ class Predictor:
         self.explanation_masses = explanation_masses
         self.matching_threshold = matching_threshold
 
-        #TODO: This is temporary!
+        # TODO: This is temporary!
         # self.MIN_PLAUSIBLE_NUCLEOSIDE_DIFF = (
         # unique_masses.select(pl.col("monoisotopic_mass").min()).item() - DIFF_VALUE
         #     )
         self.MAX_PLAUSILE_NUCLEOSIDE_DIFF = (
-        unique_masses.select(pl.col("monoisotopic_mass").max()).item() + DIFF_VALUE
-            )
+            unique_masses.select(pl.col("monoisotopic_mass").max()).item() + DIFF_VALUE
+        )
 
     def predict(self) -> Prediction:
         # TODO: get rid of the requirement to pass the length of the sequence
@@ -83,7 +84,7 @@ class Predictor:
         # also consider that the observations are not complete and that we probably don't see all the letters as diffs or singletons.
         # Hence, maybe do the following: solve first with the reduced alphabet, and if the optimization does not yield a sufficiently
         # good result, then try again with an extended alphabet.
-        masses = ( #self.unique_masses
+        masses = (  # self.unique_masses
             self._reduce_alphabet()
         )
 
@@ -273,20 +274,40 @@ class Predictor:
         # interpret solution
         seq = [get_base(i) for i in range(self.seq_len)]
         fragment_seq = [
-            [get_base_fragmentwise(i, j) for i in range(self.seq_len) if get_base_fragmentwise(i, j) is not None]
+            [
+                get_base_fragmentwise(i, j)
+                for i in range(self.seq_len)
+                if get_base_fragmentwise(i, j) is not None
+            ]
             for j in range(n_fragments)
         ]
-        predicted_fragment_mass = [ sum([nucleoside_masses[get_base_fragmentwise(i, j)] for i in range(self.seq_len) if get_base_fragmentwise(i, j) is not None])
-            for j in range(n_fragments)]
+        predicted_fragment_mass = [
+            sum(
+                [
+                    nucleoside_masses[get_base_fragmentwise(i, j)]
+                    for i in range(self.seq_len)
+                    if get_base_fragmentwise(i, j) is not None
+                ]
+            )
+            for j in range(n_fragments)
+        ]
 
         fragment_predictions = pl.from_dicts(
             [
                 {
-                    #Because of the relaxation of the LP, sometimes the value is not exactly 1
-                    #TODO: Later, put a condition to check where these criterion is not met and exclude those fragments!
-                    "left": min(i for i in range(self.seq_len) if x[i][j].value() > LP_relaxation_threshold),
-                    "right": max(i for i in range(self.seq_len) if x[i][j].value() > LP_relaxation_threshold)
-                    + 1, # right bound shall be exclusive, hence add 1
+                    # Because of the relaxation of the LP, sometimes the value is not exactly 1
+                    # TODO: Later, put a condition to check where these criterion is not met and exclude those fragments!
+                    "left": min(
+                        i
+                        for i in range(self.seq_len)
+                        if x[i][j].value() > LP_relaxation_threshold
+                    ),
+                    "right": max(
+                        i
+                        for i in range(self.seq_len)
+                        if x[i][j].value() > LP_relaxation_threshold
+                    )
+                    + 1,  # right bound shall be exclusive, hence add 1
                     "predicted_fragment_seq": fragment_seq[j],
                     "predicted_fragment_mass": predicted_fragment_mass[j],
                     "observed_mass": fragment_masses[j],
@@ -311,62 +332,78 @@ class Predictor:
     def _collect_diffs(self, side: Side) -> None:
         masses = self.fragments.filter(pl.col(f"is_{side}")).get_column("observed_mass")
         self.mass_diffs[side] = [masses[0]] + (masses[1:] - masses[:-1]).to_list()
-        self.mass_diffs_errors[side] = [self.matching_threshold] + (self.matching_threshold*((masses[1:]**2 + masses[:-1]**2)**0.5)/(masses[1:] - masses[:-1])).to_list()
+        self.mass_diffs_errors[side] = [self.matching_threshold] + (
+            self.matching_threshold
+            * ((masses[1:] ** 2 + masses[:-1] ** 2) ** 0.5)
+            / (masses[1:] - masses[:-1])
+        ).to_list()
 
-        #Constrain the maximum relative error to 1! #For mass difference very close to zero, the relative error can be very high!
+        # Constrain the maximum relative error to 1! #For mass difference very close to zero, the relative error can be very high!
         for i in range(len(self.mass_diffs_errors[side])):
             if self.mass_diffs_errors[side][i] > 1:
-                self.mass_diffs_errors[side][i] = 1.
+                self.mass_diffs_errors[side][i] = 1.0
 
     def _collect_singleton_masses(
         self,
     ) -> None:
-        masses = self.fragments.filter(pl.col("single_nucleoside")).get_column("observed_mass")
+        masses = self.fragments.filter(pl.col("single_nucleoside")).get_column(
+            "observed_mass"
+        )
         self.singleton_masses = set(masses)
 
     def _collect_diff_explanations(self) -> None:
-        diffs = (
-            (self.mass_diffs[Side.START])
-            + (self.mass_diffs[Side.END])
-            )
+        diffs = (self.mass_diffs[Side.START]) + (self.mass_diffs[Side.END])
 
         diffs_errors = (
-            (self.mass_diffs_errors[Side.START])
-            + (self.mass_diffs_errors[Side.END])
+            (self.mass_diffs_errors[Side.START]) + (self.mass_diffs_errors[Side.END])
         )
 
         for diff, diff_error in zip(diffs, diffs_errors):
-            temp = list(explain_mass(diff, explanation_masses=self.explanation_masses, matching_threshold=diff_error).explanations)
+            temp = list(
+                explain_mass(
+                    diff,
+                    explanation_masses=self.explanation_masses,
+                    matching_threshold=diff_error,
+                ).explanations
+            )
             if len(temp) > 0:
-                self.explanations[diff] = [Explanation(*temp[i]) for i in range(len(temp))]
+                self.explanations[diff] = [
+                    Explanation(*temp[i]) for i in range(len(temp))
+                ]
             else:
                 self.explanations[diff] = []
 
-        
         for diff in self.singleton_masses:
-            temp = list(explain_mass(diff, explanation_masses=self.explanation_masses, matching_threshold=self.matching_threshold).explanations)
+            temp = list(
+                explain_mass(
+                    diff,
+                    explanation_masses=self.explanation_masses,
+                    matching_threshold=self.matching_threshold,
+                ).explanations
+            )
             if len(temp) > 0:
-                self.explanations[diff] = [Explanation(*temp[i]) for i in range(len(temp))]
+                self.explanations[diff] = [
+                    Explanation(*temp[i]) for i in range(len(temp))
+                ]
             else:
                 self.explanations[diff] = []
 
-        #print(diffs)
-        #print(self.explanations)
+        # print(diffs)
+        # print(self.explanations)
         # print(len([v for v in self.explanations.values() if v]) if self.explanations else "No explanations found!")
 
         if False:
-            
-            diffs=set()
+            diffs = set()
 
             diffs = (
-            set(self.mass_diffs[Side.START])
-            | set(self.mass_diffs[Side.END])
-            | self.singleton_masses
-        )  # IMP: This negelects internal fragments!
+                set(self.mass_diffs[Side.START])
+                | set(self.mass_diffs[Side.END])
+                | self.singleton_masses
+            )  # IMP: This negelects internal fragments!
 
             self.explanations2 = {}
 
-            self.explanations2 ={
+            self.explanations2 = {
                 diff: [
                     Explanation(item["nucleoside"])
                     for item in self.unique_masses.iter_rows(named=True)
@@ -389,7 +426,8 @@ class Predictor:
                         # TODO: for two fragments, shouldn't is_similar be double as tolerant
                         # regarding the error rate?
                         if is_similar(
-                            diff, item_a["monoisotopic_mass"] + item_b["monoisotopic_mass"]
+                            diff,
+                            item_a["monoisotopic_mass"] + item_b["monoisotopic_mass"],
                         )
                     ]
                     for diff in diffs
@@ -397,15 +435,18 @@ class Predictor:
                 }
             )
 
-            #print(self.explanations)
-            print(len([v for v in self.explanations2.values() if v]) if self.explanations2 else "No explanations found!")
+            # print(self.explanations)
+            print(
+                len([v for v in self.explanations2.values() if v])
+                if self.explanations2
+                else "No explanations found!"
+            )
 
-            for v1,v2 in zip(self.explanations,self.explanations2):
+            for v1, v2 in zip(self.explanations, self.explanations2):
                 if self.explanations2[v2]:
-                    print(v2, self.explanations[v2],self.explanations2[v2])
+                    print(v2, self.explanations[v2], self.explanations2[v2])
                 if self.explanations[v1]:
-                    print(v1, self.explanations[v1],self.explanations2[v1])
-
+                    print(v1, self.explanations[v1], self.explanations2[v1])
 
     def _reduce_alphabet(self) -> pl.DataFrame:
         observed_nucleosides = {

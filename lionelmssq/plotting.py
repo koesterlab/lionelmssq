@@ -30,14 +30,17 @@ def plot_prediction(
         pl.col("left") - 0.5,
         pl.col("right") - 1 + 0.5,
         pl.struct(["left", "right"])
-        .map_elements(lambda x: create_range(x["left"], x["right"]),return_dtype=pl.List(pl.Int64))
+        .map_elements(
+            lambda x: create_range(x["left"], x["right"]),
+            return_dtype=pl.List(pl.Int64),
+        )
         .alias("range"),
         pl.map_batches(
             ["observed_mass", "predicted_mass_diff"],
             fmt_mass,
         ).alias("mass_info"),
         pl.col("predicted_fragment_seq")
-        #.map_elements(reject_none, return_dtype=pl.List(pl.Utf8))
+        # .map_elements(reject_none, return_dtype=pl.List(pl.Utf8))
         .alias("fragment_seq"),
         pl.lit("predicted").alias("type"),
     ).with_row_index()
@@ -47,13 +50,18 @@ def plot_prediction(
             pl.col("left") - 0.5,
             pl.col("right") - 0.5,
             pl.struct(["left", "right"])
-            .map_elements(lambda x: create_range(x["left"], x["right"]),return_dtype=pl.List(pl.Int64))
+            .map_elements(
+                lambda x: create_range(x["left"], x["right"]),
+                return_dtype=pl.List(pl.Int64),
+            )
             .alias("range"),
             pl.col("true_mass")
-            .map_elements(lambda mass: f"{mass:.2f}",return_dtype=pl.Utf8)
+            .map_elements(lambda mass: f"{mass:.2f}", return_dtype=pl.Utf8)
             .alias("mass_info"),
             # pl.col("sequence").alias("fragment_seq"),
-            pl.col("sequence").map_elements(parse_nucleosides,return_dtype=pl.List(pl.Utf8)).alias("fragment_seq"),
+            pl.col("sequence")
+            .map_elements(parse_nucleosides, return_dtype=pl.List(pl.Utf8))
+            .alias("fragment_seq"),
             pl.lit("truth").alias("type"),
         ).with_row_index()
 
@@ -62,12 +70,14 @@ def plot_prediction(
     else:
         data = fragment_predictions
 
-    #new = data.with_columns(pl.col("range").map_elements(lambda x: len(x)).alias("len_range")).with_columns(pl.col("fragment_seq").map_elements(lambda x: len(x)).alias("len_fragment_seq"))
-    #with pl.Config(tbl_rows=-1):
+    # new = data.with_columns(pl.col("range").map_elements(lambda x: len(x)).alias("len_range")).with_columns(pl.col("fragment_seq").map_elements(lambda x: len(x)).alias("len_fragment_seq"))
+    # with pl.Config(tbl_rows=-1):
     #    print(new)
 
-    data_seq = data.filter(pl.col("fragment_seq").list.len() > 0).explode(["fragment_seq", "range"]) 
-    #Remove the rows with empty sets for fragment_seq! This may happen when the LP_relaxation_threshold is too high and because of the LP relaxation, the pribability is low!
+    data_seq = data.filter(pl.col("fragment_seq").list.len() > 0).explode(
+        ["fragment_seq", "range"]
+    )
+    # Remove the rows with empty sets for fragment_seq! This may happen when the LP_relaxation_threshold is too high and because of the LP relaxation, the pribability is low!
 
     def facet_plots(df_mass, df_seq, index):
         p1 = (
