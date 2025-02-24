@@ -26,9 +26,11 @@ UNIQUE_MASSES = (
     .select(pl.col(_COLS))
 )
 
-# For mass explaination for ladder building, to convert the masses to an integer value for the DP algorithm!
+# For mass explanation for ladder building, to convert the masses to an integer value for the DP algorithm!
 
 TOLERANCE = 1e-5  # For perfect matching, the TOLERANCE should be the precision (digits after decimal) to which the masses of nucleosides and sequences are reported, i.e. 1e-(ROUND_DECIMAL)
+
+TABLE_PATH = f"dp_table_with_tolerance_{TOLERANCE}"
 
 MATCHING_THRESHOLD = 10  # This dictates a matching threshold such that we consider -MATCHING_THRESHOLD < (sum(masses) - target_mass) < MATCHING_THRESHOLD to be matched!
 # If TOLERANCE < num_of_decimals in reported masses, then MATCHING_THRESHOLD should at least be greater or equal than the number of nucleotides expected for a target mass!
