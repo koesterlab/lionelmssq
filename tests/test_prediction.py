@@ -41,6 +41,9 @@ def test_testcase(testcase):
     if "left" in input_file.columns or "right" in input_file.columns:
         simulation = True
 
+        label_mass_3T = meta["label_mass_3T"]
+        label_mass_5T = meta["label_mass_5T"]
+
         fragments = (
             pl.read_csv(base_path / "fragments.tsv", separator="\t")
             .with_columns(
@@ -112,10 +115,12 @@ def test_testcase(testcase):
             label_mass_3T=label_mass_3T,
             label_mass_5T=label_mass_5T,
             explanation_masses=explanation_masses,
-            intensity_cutoff=4e4,  # 1.2e4, #for test_05
-            # intensity_cutoff=5e5,  # for test_03
+            #intensity_cutoff=4e4,  # 1.2e4, #for test_05
+            intensity_cutoff=1e4,
+            #intensity_cutoff=5e5,  # for test_03
             matching_threshold=matching_threshold,
-            ms1_mass=7434.1794,
+            ms1_mass=7434.1794, # for test_05
+            # ms1_mass=None, 
         )
         with pl.Config(tbl_rows=30):
             print(fragments)
@@ -131,6 +136,8 @@ def test_testcase(testcase):
         unique_masses=unique_masses,
         explanation_masses=explanation_masses,
         matching_threshold=matching_threshold,
+        mass_tag_start=label_mass_5T,
+        mass_tag_end=label_mass_3T,
     ).predict()
 
     prediction_masses = pl.Series(

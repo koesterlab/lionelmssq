@@ -47,10 +47,22 @@ class Predictor:
         unique_masses: pl.DataFrame = UNIQUE_MASSES,
         explanation_masses: pl.DataFrame = EXPLANATION_MASSES,
         matching_threshold: float = MATCHING_THRESHOLD,
+        mass_tag_start: float = 0.0,
+        mass_tag_end: float = 0.0,
     ):
-        self.fragments = fragments.with_row_index(name="orig_index").sort(
-            "observed_mass"
-        )
+        self.fragments = fragments.with_row_index(name="orig_index").with_columns(
+            pl.when(pl.col("is_start") & pl.col("is_end")).then(True).otherwise(False).alias("is_start_and_end")
+            ).with_columns(
+                pl.when(pl.col("is_start_and_end")).then(False).otherwise(pl.col("is_start")).alias("is_start"),
+                pl.when(pl.col("is_start_and_end")).then(False).otherwise(pl.col("is_end")).alias("is_end")
+        ).sort(
+            by=["single_nucleoside", "is_start", "is_end", "is_start_and_end", "observed_mass"], descending=[True, True, True, True, False]
+        ).with_columns(
+                pl.when(pl.col("is_start_and_end")).then(True).otherwise(pl.col("is_start")).alias("is_start"),
+                pl.when(pl.col("is_start_and_end")).then(True).otherwise(pl.col("is_end")).alias("is_end")
+        ).drop("is_start_and_end")
+        #Sort the fragments in the order of single nucleosides, start fragments, end fragments, start fragments AND end fragments, internal fragments and then by mass for each category!
+
         self.seq_len = seq_len
         self.solver = solver
         self.threads = threads
@@ -62,14 +74,18 @@ class Predictor:
         self.unique_masses = unique_masses
         self.explanation_masses = explanation_masses
         self.matching_threshold = matching_threshold
+        self.mass_tags = {Side.START: mass_tag_start, Side.END: mass_tag_end}
 
-        # TODO: This is temporary!
+        with pl.Config() as cfg:
+            cfg.set_tbl_rows(-1)
+            print(self.fragments)
+
         # self.MIN_PLAUSIBLE_NUCLEOSIDE_DIFF = (
         # unique_masses.select(pl.col("monoisotopic_mass").min()).item() - DIFF_VALUE
         #     )
-        self.MAX_PLAUSILE_NUCLEOSIDE_DIFF = (
-            unique_masses.select(pl.col("monoisotopic_mass").max()).item() + DIFF_VALUE
-        )
+        # self.MAX_PLAUSILE_NUCLEOSIDE_DIFF = (
+        #     self.unique_masses.select(pl.col("monoisotopic_mass").max()).item() + DIFF_VALUE
+        # )
 
     def predict(self) -> Prediction:
         # TODO: get rid of the requirement to pass the length of the sequence
@@ -103,6 +119,8 @@ class Predictor:
 
         skeleton_seq, start_fragments = self._predict_skeleton(Side.START)
         _, end_fragments = self._predict_skeleton(Side.END, skeleton_seq=skeleton_seq)
+
+        print("Skeleton sequence = ", skeleton_seq)
 
         prob = LpProblem("RNA sequencing", LpMinimize)
         # i = 1,...,n: positions in the sequence
@@ -172,6 +190,7 @@ class Predictor:
             )
             for j in range(n_fragments)
         ]
+        # TODO: Why can't the abs sum be used directly in the optimization function? Why such a complication!
 
         # optimization function
         prob += lpSum([predicted_mass_diff_abs[j] for j in range(n_fragments)])
@@ -202,6 +221,7 @@ class Predictor:
         # ensure that start fragments are aligned at the beginning of the sequence
         for fragment in start_fragments:
             j = candidate_start_fragments[fragment.index]
+            # print("End fragment = ", fragment, "Index = ", j)
             # min_end is exclusive
             for i in range(fragment.min_end):
                 x[i][j].setInitialValue(1)
@@ -213,13 +233,15 @@ class Predictor:
         # ensure that end fragments are aligned at the end of the sequence
         for fragment in end_fragments:
             j = candidate_end_fragments[fragment.index]
-            # min_end is exclusive
-            for i in range(fragment.min_end + 1, 0):
-                x[i][j].setInitialValue(1)
-                x[i][j].fixValue()
-            for i in range(-self.seq_len, fragment.max_end + 1):
-                x[i][j].setInitialValue(0)
-                x[i][j].fixValue()
+            if j not in [candidate_start_fragments[f.index] for f in start_fragments]: #Exlude fragments that are both start and end fragments, they were already considered with start fragments!
+                # print("End fragment = ", fragment, "Index = ", j)
+                # min_end is exclusive
+                for i in range(fragment.min_end + 1, 0):
+                    x[i][j].setInitialValue(1)
+                    x[i][j].fixValue()
+                for i in range(-self.seq_len, fragment.max_end + 1):
+                    x[i][j].setInitialValue(0)
+                    x[i][j].fixValue()
 
         # Fragments that aren't either start or end are either inner or uncertain.
         # Hence, we don't further constrain their positioning and length and let the
@@ -227,6 +249,7 @@ class Predictor:
 
         # constrain weight_diff_abs to be the absolute value of weight_diff
         for j in range(n_fragments):
+            # prob += predicted_mass_diff_abs[j] >= abs(predicted_mass_diff[j])  #TODO: Changed if it can be done this easier this way!
             prob += predicted_mass_diff_abs[j] >= predicted_mass_diff[j]
             prob += predicted_mass_diff_abs[j] >= -predicted_mass_diff[j]
 
@@ -261,7 +284,8 @@ class Predictor:
 
         def get_base(i):
             for b in nucleosides:
-                if y[i][b].value() == 1:
+                # if y[i][b].value() == 1:
+                if y[i][b].value() > LP_relaxation_threshold:
                     return b
             return None
 
@@ -282,7 +306,7 @@ class Predictor:
             ]
             for j in range(n_fragments)
         ]
-        print("Predicted fragment sequence = ", fragment_seq)
+        # print("Predicted fragment sequence = ", fragment_seq)
         predicted_fragment_mass = [
             sum(
                 [
@@ -339,7 +363,14 @@ class Predictor:
     def _collect_diffs(self, side: Side) -> None:
         masses = self.fragments.filter(pl.col(f"is_{side}")).get_column("observed_mass")
         self.mass_diffs[side] = [masses[0]] + (masses[1:] - masses[:-1]).to_list()
-        self.mass_diffs_errors[side] = [self.matching_threshold] + (
+        self.mass_diffs_errors[side] = [
+            self.matching_threshold
+            * (
+                (self.mass_tags[side] ** 2 + (masses[0] + self.mass_tags[side]) ** 2)
+                ** 0.5
+            )
+            / masses[0]
+        ] + (
             self.matching_threshold
             * ((masses[1:] ** 2 + masses[:-1] ** 2) ** 0.5)
             / (masses[1:] - masses[:-1])
@@ -364,8 +395,8 @@ class Predictor:
         diffs_errors = (
             (self.mass_diffs_errors[Side.START]) + (self.mass_diffs_errors[Side.END])
         )
-
         for diff, diff_error in zip(diffs, diffs_errors):
+            # print(diff, diff_error)
             temp = list(
                 explain_mass(
                     diff,
@@ -399,62 +430,6 @@ class Predictor:
         # print(self.explanations)
         # print(len([v for v in self.explanations.values() if v]) if self.explanations else "No explanations found!")
 
-        if False:
-            diffs = set()
-
-            diffs = (
-                set(self.mass_diffs[Side.START])
-                | set(self.mass_diffs[Side.END])
-                | self.singleton_masses
-            )  # IMP: This negelects internal fragments!
-
-            self.explanations2 = {}
-
-            self.explanations2 = {
-                diff: [
-                    Explanation(item["nucleoside"])
-                    for item in self.unique_masses.iter_rows(named=True)
-                    if is_similar(diff, item["monoisotopic_mass"])
-                ]
-                for diff in diffs
-            }
-            # CHECK: Why is only one nucleside considered here for the difference? REPLACE with the DP!
-            # TODO it can happen that both two and one nucleoside are good explanations of a diff
-            # this is currently ignored, also three nucleosides are not considered
-            # one should rather infer the min and max number of possible nucleosides that test all explanations in between
-            # explain with two nucleosides
-            self.explanations2.update(
-                {
-                    diff: [
-                        Explanation(item_a["nucleoside"], item_b["nucleoside"])
-                        for item_a, item_b in combinations(
-                            self.unique_masses.iter_rows(named=True), 2
-                        )
-                        # TODO: for two fragments, shouldn't is_similar be double as tolerant
-                        # regarding the error rate?
-                        if is_similar(
-                            diff,
-                            item_a["monoisotopic_mass"] + item_b["monoisotopic_mass"],
-                        )
-                    ]
-                    for diff in diffs
-                    if not self.explanations2[diff]
-                }
-            )
-
-            # print(self.explanations)
-            print(
-                len([v for v in self.explanations2.values() if v])
-                if self.explanations2
-                else "No explanations found!"
-            )
-
-            for v1, v2 in zip(self.explanations, self.explanations2):
-                if self.explanations2[v2]:
-                    print(v2, self.explanations[v2], self.explanations2[v2])
-                if self.explanations[v1]:
-                    print(v1, self.explanations[v1], self.explanations2[v1])
-
     def _reduce_alphabet(self) -> pl.DataFrame:
         observed_nucleosides = {
             nuc
@@ -483,9 +458,10 @@ class Predictor:
         def is_valid_pos(pos: int, ext: int) -> bool:
             pos = pos + factor * ext
             return (
-                0 <= pos < self.seq_len
+                0 <= pos <= self.seq_len
                 if side == Side.START
-                else -self.seq_len <= pos < 0
+                else -(self.seq_len+1) <= pos < 0
+                #else -self.seq_len <= pos < 0
             )
 
         pos = {0} if side == Side.START else {-1}
@@ -493,14 +469,32 @@ class Predictor:
 
         valid_terminal_fragments = []
         for fragment_index, diff in enumerate(self.mass_diffs[side]):
+            # print("Diff = ", diff)
             diff += carry_over_mass
             assert pos
 
             is_valid = True
-            # TODO use explain_mass here. Currently this does not work
-            # with carry_over_mass != 0 because we precompute all explanations.
-            # Once we use the DP here it should work fine.
-            explanations = self.explanations.get(diff, [])
+            if diff in self.explanations:
+                explanations = self.explanations.get(diff, [])
+                # print("Explanations = ", explanations)
+            else:
+                # print("New diff = ", diff)
+                temp = list(
+                explain_mass(
+                    diff,
+                    explanation_masses=self.explanation_masses,
+                    matching_threshold=self.matching_threshold*10, #TODO: To calculate anew! Do this properly!
+                ).explanations
+                )
+                
+                if len(temp) > 0:
+                   explanations = [
+                        Explanation(*temp[i]) for i in range(len(temp))
+                    ]
+                   carry_over_mass = 0
+                else:
+                    explanations = []
+                # print("New Explanations = ", explanations)
             # METHOD: if there is only one single nucleoside explanation, we can
             # directly assign the nucleoside if there are tuples, we have to assign a
             # possibility to the current and next position
@@ -522,7 +516,6 @@ class Predictor:
                     p_specific_explanations = [
                         expl for expl in explanations if is_valid_pos(p, len(expl))
                     ]
-
                     alphabet_per_expl_len = {
                         expl_len: set(chain(*expls))
                         for expl_len, expls in groupby(p_specific_explanations, len)
@@ -577,8 +570,8 @@ class Predictor:
                     # TODO can we stop ealy in building the ladder?
                     is_valid = False
             elif (
-                diff <= self.MAX_PLAUSILE_NUCLEOSIDE_DIFF
-            ):  # TODO proper tolerance setting needed!
+                diff <= DIFF_VALUE #TODO: Replace this by an appropriate value which considers that there may be fragments with basically very very similar masses!
+            ):
                 if side == Side.START:
                     min_fragment_end = min(pos)
                     max_fragment_end = max(pos)
@@ -598,7 +591,7 @@ class Predictor:
                     )
                 )
                 pos = next_pos
-            else:
+            else: #TODO: Consider the skipped fragments as internal fragments! Need to add back the terminal mass to this fragments! This being done, but the terminal mass is not added back to these fragments!
                 logger.warning(
                     f"Skipping {side} fragment {fragment_index} because no "
                     "explanations are found for the mass difference."
@@ -606,6 +599,8 @@ class Predictor:
                 carry_over_mass += diff
         return skeleton_seq, valid_terminal_fragments
 
+    #TODO: While building the ladder it may happen that things are unambiguous from one side, but not from the other! 
+    # In that case, we should consider the unambiguous side as the correct one and the ambiguous side as the one to be fixed!
 
 class Explanation:
     def __init__(self, *nucleosides):
