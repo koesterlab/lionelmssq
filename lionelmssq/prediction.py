@@ -50,18 +50,47 @@ class Predictor:
         mass_tag_start: float = 0.0,
         mass_tag_end: float = 0.0,
     ):
-        self.fragments = fragments.with_row_index(name="orig_index").with_columns(
-            pl.when(pl.col("is_start") & pl.col("is_end")).then(True).otherwise(False).alias("is_start_and_end")
-            ).with_columns(
-                pl.when(pl.col("is_start_and_end")).then(False).otherwise(pl.col("is_start")).alias("is_start"),
-                pl.when(pl.col("is_start_and_end")).then(False).otherwise(pl.col("is_end")).alias("is_end")
-        ).sort(
-            by=["single_nucleoside", "is_start", "is_end", "is_start_and_end", "observed_mass"], descending=[True, True, True, True, False]
-        ).with_columns(
-                pl.when(pl.col("is_start_and_end")).then(True).otherwise(pl.col("is_start")).alias("is_start"),
-                pl.when(pl.col("is_start_and_end")).then(True).otherwise(pl.col("is_end")).alias("is_end")
-        ).drop("is_start_and_end")
-        #Sort the fragments in the order of single nucleosides, start fragments, end fragments, start fragments AND end fragments, internal fragments and then by mass for each category!
+        self.fragments = (
+            fragments.with_row_index(name="orig_index")
+            .with_columns(
+                pl.when(pl.col("is_start") & pl.col("is_end"))
+                .then(True)
+                .otherwise(False)
+                .alias("is_start_and_end")
+            )
+            .with_columns(
+                pl.when(pl.col("is_start_and_end"))
+                .then(False)
+                .otherwise(pl.col("is_start"))
+                .alias("is_start"),
+                pl.when(pl.col("is_start_and_end"))
+                .then(False)
+                .otherwise(pl.col("is_end"))
+                .alias("is_end"),
+            )
+            .sort(
+                by=[
+                    "single_nucleoside",
+                    "is_start",
+                    "is_end",
+                    "is_start_and_end",
+                    "observed_mass",
+                ],
+                descending=[True, True, True, True, False],
+            )
+            .with_columns(
+                pl.when(pl.col("is_start_and_end"))
+                .then(True)
+                .otherwise(pl.col("is_start"))
+                .alias("is_start"),
+                pl.when(pl.col("is_start_and_end"))
+                .then(True)
+                .otherwise(pl.col("is_end"))
+                .alias("is_end"),
+            )
+            .drop("is_start_and_end")
+        )
+        # Sort the fragments in the order of single nucleosides, start fragments, end fragments, start fragments AND end fragments, internal fragments and then by mass for each category!
 
         self.seq_len = seq_len
         self.solver = solver
@@ -233,7 +262,9 @@ class Predictor:
         # ensure that end fragments are aligned at the end of the sequence
         for fragment in end_fragments:
             j = candidate_end_fragments[fragment.index]
-            if j not in [candidate_start_fragments[f.index] for f in start_fragments]: #Exlude fragments that are both start and end fragments, they were already considered with start fragments!
+            if (
+                j not in [candidate_start_fragments[f.index] for f in start_fragments]
+            ):  # Exlude fragments that are both start and end fragments, they were already considered with start fragments!
                 # print("End fragment = ", fragment, "Index = ", j)
                 # min_end is exclusive
                 for i in range(fragment.min_end + 1, 0):
@@ -364,22 +395,27 @@ class Predictor:
         masses = self.fragments.filter(pl.col(f"is_{side}")).get_column("observed_mass")
         self.mass_diffs[side] = [masses[0]] + (masses[1:] - masses[:-1]).to_list()
         self.mass_diffs_errors[side] = [
-            self.matching_threshold
-            * (
-                (self.mass_tags[side] ** 2 + (masses[0] + self.mass_tags[side]) ** 2)
-                ** 0.5
+            self._calculate_diff_errors(
+                self.mass_tags[side],
+                masses[0] + self.mass_tags[side],
+                self.matching_threshold,
             )
-            / masses[0]
         ] + (
-            self.matching_threshold
-            * ((masses[1:] ** 2 + masses[:-1] ** 2) ** 0.5)
-            / (masses[1:] - masses[:-1])
-        ).to_list()
+            [
+                self._calculate_diff_errors(
+                    masses[i] + self.mass_tags[side], masses[i - 1] + self.mass_tags[side], self.matching_threshold
+                )
+                for i in range(1, len(masses))
+            ]
+        )
 
         # Constrain the maximum relative error to 1! #For mass difference very close to zero, the relative error can be very high!
         for i in range(len(self.mass_diffs_errors[side])):
             if self.mass_diffs_errors[side][i] > 1:
                 self.mass_diffs_errors[side][i] = 1.0
+
+    def _calculate_diff_errors(self, mass1, mass2, threshold) -> float:
+        return threshold * ((mass1**2 + mass2**2) ** 0.5) / abs(mass1 - mass2)
 
     def _collect_singleton_masses(
         self,
@@ -389,6 +425,20 @@ class Predictor:
         )
         self.singleton_masses = set(masses)
 
+    def _calculate_diff_dp(self, diff, threshold, explanation_masses):
+        temp = list(
+            explain_mass(
+                diff,
+                explanation_masses=explanation_masses,
+                matching_threshold=threshold,
+            ).explanations
+        )
+        if len(temp) > 0:
+            retval = [Explanation(*temp[i]) for i in range(len(temp))]
+        else:
+            retval = []
+        return retval
+
     def _collect_diff_explanations(self) -> None:
         diffs = (self.mass_diffs[Side.START]) + (self.mass_diffs[Side.END])
 
@@ -396,39 +446,12 @@ class Predictor:
             (self.mass_diffs_errors[Side.START]) + (self.mass_diffs_errors[Side.END])
         )
         for diff, diff_error in zip(diffs, diffs_errors):
-            # print(diff, diff_error)
-            temp = list(
-                explain_mass(
-                    diff,
-                    explanation_masses=self.explanation_masses,
-                    matching_threshold=diff_error,
-                ).explanations
-            )
-            if len(temp) > 0:
-                self.explanations[diff] = [
-                    Explanation(*temp[i]) for i in range(len(temp))
-                ]
-            else:
-                self.explanations[diff] = []
+            self.explanations[diff] = self._calculate_diff_dp(diff, diff_error, self.explanation_masses)
 
         for diff in self.singleton_masses:
-            temp = list(
-                explain_mass(
-                    diff,
-                    explanation_masses=self.explanation_masses,
-                    matching_threshold=self.matching_threshold,
-                ).explanations
+            self.explanations[diff] = self._calculate_diff_dp(
+                diff, self.matching_threshold, self.explanation_masses
             )
-            if len(temp) > 0:
-                self.explanations[diff] = [
-                    Explanation(*temp[i]) for i in range(len(temp))
-                ]
-            else:
-                self.explanations[diff] = []
-
-        # print(diffs)
-        # print(self.explanations)
-        # print(len([v for v in self.explanations.values() if v]) if self.explanations else "No explanations found!")
 
     def _reduce_alphabet(self) -> pl.DataFrame:
         observed_nucleosides = {
@@ -460,8 +483,8 @@ class Predictor:
             return (
                 0 <= pos <= self.seq_len
                 if side == Side.START
-                else -(self.seq_len+1) <= pos < 0
-                #else -self.seq_len <= pos < 0
+                else -(self.seq_len + 1) <= pos < 0
+                # else -self.seq_len <= pos < 0
             )
 
         pos = {0} if side == Side.START else {-1}
@@ -469,32 +492,20 @@ class Predictor:
 
         valid_terminal_fragments = []
         for fragment_index, diff in enumerate(self.mass_diffs[side]):
-            # print("Diff = ", diff)
             diff += carry_over_mass
             assert pos
 
             is_valid = True
             if diff in self.explanations:
                 explanations = self.explanations.get(diff, [])
-                # print("Explanations = ", explanations)
             else:
-                # print("New diff = ", diff)
-                temp = list(
-                explain_mass(
-                    diff,
-                    explanation_masses=self.explanation_masses,
-                    matching_threshold=self.matching_threshold*10, #TODO: To calculate anew! Do this properly!
-                ).explanations
+                # TODO: Calculate the error for the mass difference, i,e. the matching threshold! #TODO: Need to pass the masses to the function as well!
+                explanations = self._calculate_diff_dp(
+                diff, self.matching_threshold*10, self.explanation_masses
                 )
-                
-                if len(temp) > 0:
-                   explanations = [
-                        Explanation(*temp[i]) for i in range(len(temp))
-                    ]
-                   carry_over_mass = 0
-                else:
-                    explanations = []
-                # print("New Explanations = ", explanations)
+                if explanations:
+                    carry_over_mass = 0
+
             # METHOD: if there is only one single nucleoside explanation, we can
             # directly assign the nucleoside if there are tuples, we have to assign a
             # possibility to the current and next position
@@ -570,7 +581,8 @@ class Predictor:
                     # TODO can we stop ealy in building the ladder?
                     is_valid = False
             elif (
-                diff <= DIFF_VALUE #TODO: Replace this by an appropriate value which considers that there may be fragments with basically very very similar masses!
+                diff
+                <= DIFF_VALUE  # TODO: Replace this by an appropriate value which considers that there may be fragments with basically very very similar masses!
             ):
                 if side == Side.START:
                     min_fragment_end = min(pos)
@@ -591,7 +603,7 @@ class Predictor:
                     )
                 )
                 pos = next_pos
-            else: #TODO: Consider the skipped fragments as internal fragments! Need to add back the terminal mass to this fragments! This being done, but the terminal mass is not added back to these fragments!
+            else:  # TODO: Consider the skipped fragments as internal fragments! Need to add back the terminal mass to this fragments! This being done, but the terminal mass is not added back to these fragments!
                 logger.warning(
                     f"Skipping {side} fragment {fragment_index} because no "
                     "explanations are found for the mass difference."
@@ -599,8 +611,9 @@ class Predictor:
                 carry_over_mass += diff
         return skeleton_seq, valid_terminal_fragments
 
-    #TODO: While building the ladder it may happen that things are unambiguous from one side, but not from the other! 
+    # TODO: While building the ladder it may happen that things are unambiguous from one side, but not from the other!
     # In that case, we should consider the unambiguous side as the correct one and the ambiguous side as the one to be fixed!
+
 
 class Explanation:
     def __init__(self, *nucleosides):
