@@ -45,13 +45,12 @@ def test_testcase(testcase):
         label_mass_5T = meta["label_mass_5T"]
 
         fragments = (
-            pl.read_csv(base_path / "fragments.tsv", separator="\t")
-            .with_columns(
+            pl.read_csv(base_path / "fragments.tsv", separator="\t").with_columns(
                 (pl.col("observed_mass_without_backbone").alias("observed_mass")),
                 (pl.col("true_nucleoside_mass").alias("true_mass")),
             )
             .filter(~(pl.col("is_start") & pl.col("is_end")))
-        )  # TODO: INCLUDE the cases when both is_start and is_end are True!
+        )
         # The above is temporary, until the preeiction for the entire intact sequence is fixed!
         with pl.Config(tbl_rows=30):
             print(fragments)
@@ -68,7 +67,7 @@ def test_testcase(testcase):
             .alias("tolerated_integer_masses")
         )
 
-        # TODO: Discuss why it doesn't work with the estimated error!
+        #TODO: Discuss why it doesn't work with the estimated error!
         matching_threshold = MATCHING_THRESHOLD
         # matching_threshold,_,_ = estimate_MS_error_MATCHING_THRESHOLD(fragments,unique_masses=unique_masses,simulation=simulation)
         print(
@@ -151,9 +150,8 @@ def test_testcase(testcase):
         plot_prediction(
             prediction,
             true_seq,
-            fragments.filter(~(pl.col("is_start") & pl.col("is_end"))),
+            # fragments.filter(~(pl.col("is_start") & pl.col("is_end"))),
         ).save(base_path / "plot.html")
-        # TODO: Exclude the cases when both is_start and is_end are True!
         # The above is temporary, until the preeiction for the entire intact sequence is fixed!)
     else:
         plot_prediction(prediction, true_seq).save(base_path / "plot.html")
@@ -165,10 +163,9 @@ def test_testcase(testcase):
     # Assert if the sequences match!
     assert prediction.sequence == true_seq
 
-    # Assert if all the sequence fragments match the predicted fragments in mass at least!
+    ## Assert if all the sequence fragments match the predicted fragments in mass at least!
     # for i in range(len(fragment_masses)):
     #     print(f"Fragment {i}: {fragment_masses[i]} vs {prediction_masses[i]}")
     #     # assert abs(prediction_masses[i] / fragment_masses[i] - 1) <= matching_threshold
-
 
 test_testcase("test_05")

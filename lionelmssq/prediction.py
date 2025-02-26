@@ -115,6 +115,9 @@ class Predictor:
         self._collect_diffs(Side.END)
         self._collect_diff_explanations()
 
+        fragment_masses = self.fragments.get_column("observed_mass").to_list()
+        n_fragments = len(fragment_masses)
+
         # TODO:
         # also consider that the observations are not complete and that we probably don't see all the letters as diffs or singletons.
         # Hence, maybe do the following: solve first with the reduced alphabet, and if the optimization does not yield a sufficiently
@@ -122,6 +125,11 @@ class Predictor:
         masses = (  # self.unique_masses
             self._reduce_alphabet()
         )
+
+        nucleosides = masses.get_column(
+            "nucleoside"
+        ).to_list()  # TODO: Handle the case of multiple nucleosides with the same mass when using "aggregate" grouping in the masses table
+        nucleoside_masses = dict(masses.iter_rows())
 
         candidate_start_fragments = (
             self.fragments.with_row_index()
@@ -136,8 +144,8 @@ class Predictor:
             .to_list()
         )
 
-        skeleton_seq_start, start_fragments = self._predict_skeleton(Side.START)
-        skeleton_seq_end, end_fragments = self._predict_skeleton(Side.END)
+        skeleton_seq_start, start_fragments = self._predict_skeleton(Side.START,fragment_masses=fragment_masses,candidate_fragments=candidate_start_fragments)
+        skeleton_seq_end, end_fragments = self._predict_skeleton(Side.END,fragment_masses=fragment_masses,candidate_fragments=candidate_end_fragments)
 
         def align_skeletons(skeleton_seq_start, skeleton_seq_end):
             # Align the skeletons of the start and end fragments to get the final skeleton sequence!
@@ -163,13 +171,6 @@ class Predictor:
         # i = 1,...,n: positions in the sequence
         # j = 1,...,m: fragments
         # b = 1,...,k: (modified) bases
-
-        fragment_masses = self.fragments.get_column("observed_mass").to_list()
-        n_fragments = len(fragment_masses)
-        nucleosides = masses.get_column(
-            "nucleoside"
-        ).to_list()  # TODO: Handle the case of multiple nucleosides with the same mass when using "aggregate" grouping in the masses table
-        nucleoside_masses = dict(masses.iter_rows())
 
         if not start_fragments:
             logger.warning(
@@ -482,7 +483,7 @@ class Predictor:
         return reduced
 
     def _predict_skeleton(
-        self, side: Side, skeleton_seq: Optional[List[Set[str]]] = None
+        self, side: Side, skeleton_seq: Optional[List[Set[str]]] = None, fragment_masses = None, candidate_fragments = None
     ) -> Tuple[List[Set[str]], List[TerminalFragment]]:
         if skeleton_seq is None:
             skeleton_seq = [set() for _ in range(self.seq_len)]
@@ -630,12 +631,18 @@ class Predictor:
                 )
                 pos = next_pos
                 last_mass_valid = mass  # CHECK:Review this!
-            else:  # TODO: IMP: Consider the skipped fragments as internal fragments! Need to add back the terminal mass to this fragments! This being done, but the terminal mass is not added back to these fragments!
+            else:
                 logger.warning(
                     f"Skipping {side} fragment {fragment_index} with observed mass {mass} because no "
                     "explanations are found for the mass difference."
                 )
                 carry_over_mass = diff
+
+                #CHECK: Review. This does not seem particularly useful! With the tag mass added, there is no good explanation for this mass!
+                #Consider the skipped fragments as internal fragments! Add back the terminal mass to this fragments!
+                if fragment_masses and candidate_fragments:
+                    fragment_masses[candidate_fragments[fragment_index]] += self.mass_tags[side]
+
         return skeleton_seq, valid_terminal_fragments
 
 
