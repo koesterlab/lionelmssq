@@ -136,9 +136,25 @@ class Predictor:
             .to_list()
         )
 
-        skeleton_seq, start_fragments = self._predict_skeleton(Side.START)
-        _, end_fragments = self._predict_skeleton(Side.END, skeleton_seq=skeleton_seq)
+        skeleton_seq_start, start_fragments = self._predict_skeleton(Side.START)
+        skeleton_seq_end, end_fragments = self._predict_skeleton(Side.END)
 
+        def align_skeletons(skeleton_seq_start, skeleton_seq_end):
+            # Align the skeletons of the start and end fragments to get the final skeleton sequence!
+            # Wherever there is no ambiguity, that nucleotide is preferrentially considered!
+            skeleton_seq = [set() for _ in range(self.seq_len)]
+            for i in range(self.seq_len):
+                skeleton_seq[i] = skeleton_seq_start[i].intersection(skeleton_seq_end[i])
+                if not skeleton_seq[i]:
+                    skeleton_seq[i] = skeleton_seq_start[i].union(skeleton_seq_end[i])
+            return skeleton_seq
+
+        # While building the ladder it may happen that things are unambiguous from one side, but not from the other!
+        # In that case, we should consider the unambiguous side as the correct one! If the intersection is empty, then we can consider the union of the two!
+        skeleton_seq = align_skeletons(skeleton_seq_start, skeleton_seq_end)
+
+        print("Skeleton sequence start = ", skeleton_seq_start)
+        print("Skeleton sequence end = ", skeleton_seq_end)
         print("Skeleton sequence = ", skeleton_seq)
 
         prob = LpProblem("RNA sequencing", LpMinimize)
@@ -608,9 +624,6 @@ class Predictor:
                 )
                 carry_over_mass += diff
         return skeleton_seq, valid_terminal_fragments
-
-    # TODO: While building the ladder it may happen that things are unambiguous from one side, but not from the other!
-    # In that case, we should consider the unambiguous side as the correct one and the ambiguous side as the one to be fixed!
 
 
 class Explanation:
