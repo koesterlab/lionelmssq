@@ -3,9 +3,6 @@ from itertools import chain, combinations, groupby, permutations
 from pathlib import Path
 from typing import List, Optional, Self, Set, Tuple
 from pulp import LpProblem, LpMinimize, LpInteger, LpContinuous, LpVariable, lpSum
-
-# from lionelmssq.alphabet import MAX_PLAUSILE_NUCLEOSIDE_DIFF, is_similar, MIN_PLAUSIBLE_NUCLEOSIDE_DIFF, DIFF_VALUE
-from lionelmssq.alphabet import is_similar, DIFF_VALUE
 from lionelmssq.common import Side, get_singleton_set_item
 from lionelmssq.masses import UNIQUE_MASSES, EXPLANATION_MASSES, MATCHING_THRESHOLD
 from lionelmssq.mass_explanation import explain_mass
@@ -108,13 +105,6 @@ class Predictor:
         with pl.Config() as cfg:
             cfg.set_tbl_rows(-1)
             print(self.fragments)
-
-        # self.MIN_PLAUSIBLE_NUCLEOSIDE_DIFF = (
-        # unique_masses.select(pl.col("monoisotopic_mass").min()).item() - DIFF_VALUE
-        #     )
-        # self.MAX_PLAUSILE_NUCLEOSIDE_DIFF = (
-        #     self.unique_masses.select(pl.col("monoisotopic_mass").max()).item() + DIFF_VALUE
-        # )
 
     def predict(self) -> Prediction:
         # TODO: get rid of the requirement to pass the length of the sequence
@@ -280,7 +270,6 @@ class Predictor:
 
         # constrain weight_diff_abs to be the absolute value of weight_diff
         for j in range(n_fragments):
-            # prob += predicted_mass_diff_abs[j] >= abs(predicted_mass_diff[j])  #TODO: Changed if it can be done this easier this way!
             prob += predicted_mass_diff_abs[j] >= predicted_mass_diff[j]
             prob += predicted_mass_diff_abs[j] >= -predicted_mass_diff[j]
 
@@ -409,13 +398,14 @@ class Predictor:
             ]
         )
 
-        # Constrain the maximum relative error to 1! #For mass difference very close to zero, the relative error can be very high!
-        for i in range(len(self.mass_diffs_errors[side])):
-            if self.mass_diffs_errors[side][i] > 1:
-                self.mass_diffs_errors[side][i] = 1.0
-
     def _calculate_diff_errors(self, mass1, mass2, threshold) -> float:
-        return threshold * ((mass1**2 + mass2**2) ** 0.5) / abs(mass1 - mass2)
+
+        retval =  threshold * ((mass1**2 + mass2**2) ** 0.5) / abs(mass1 - mass2)
+        # Constrain the maximum relative error to 1! 
+        #For mass difference very close to zero, the relative error can be very high!
+        if retval > 1:
+            retval = 1.0
+        return retval
 
     def _collect_singleton_masses(
         self,
@@ -452,6 +442,7 @@ class Predictor:
             self.explanations[diff] = self._calculate_diff_dp(
                 diff, self.matching_threshold, self.explanation_masses
             )
+        #TODO: Can make it simpler here by rejecting diff which cannot be explained instead of doing it in the _predict_skeleton function!
 
     def _reduce_alphabet(self) -> pl.DataFrame:
         observed_nucleosides = {
@@ -475,6 +466,8 @@ class Predictor:
 
         factor = 1 if side == Side.START else -1
 
+        masses = self.fragments.filter(pl.col(f"is_{side}")).get_column("observed_mass")
+
         def get_possible_nucleosides(pos: int, i: int) -> Set[str]:
             return skeleton_seq[pos + factor * i]
 
@@ -491,17 +484,20 @@ class Predictor:
         carry_over_mass = 0
 
         valid_terminal_fragments = []
-        for fragment_index, diff in enumerate(self.mass_diffs[side]):
+        last_mass_valid = 0.
+        for fragment_index, (diff, mass) in enumerate(zip(self.mass_diffs[side], masses)):
             diff += carry_over_mass
             assert pos
 
             is_valid = True
             if diff in self.explanations:
                 explanations = self.explanations.get(diff, [])
+                # last_mass_valid = mass
             else:
-                # TODO: Calculate the error for the mass difference, i,e. the matching threshold! #TODO: Need to pass the masses to the function as well!
+                #TODO: Review if the correct values of the mass, i.e "last_mass_valid" are used here!
+                threshold = self._calculate_diff_errors(last_mass_valid+self.mass_tags[side],last_mass_valid+diff+self.mass_tags[side],self.matching_threshold)
                 explanations = self._calculate_diff_dp(
-                diff, self.matching_threshold*10, self.explanation_masses
+                diff, threshold, self.explanation_masses
                 )
                 if explanations:
                     carry_over_mass = 0
@@ -581,9 +577,10 @@ class Predictor:
                     # TODO can we stop ealy in building the ladder?
                     is_valid = False
             elif (
-                diff
-                <= DIFF_VALUE  # TODO: Replace this by an appropriate value which considers that there may be fragments with basically very very similar masses!
-            ):
+                abs(diff) <= self.matching_threshold*abs(mass+self.mass_tags[side]) 
+                #abs(diff/mass) <= self._calculate_diff_errors(mass+self.mass_tags[side],mass+diff+self.mass_tags[side],self.matching_threshold) 
+                #Problem! The above approach might blow up if the masses are very close, i.e. diff is very close to zero!
+                ):
                 if side == Side.START:
                     min_fragment_end = min(pos)
                     max_fragment_end = max(pos)
@@ -603,7 +600,8 @@ class Predictor:
                     )
                 )
                 pos = next_pos
-            else:  # TODO: Consider the skipped fragments as internal fragments! Need to add back the terminal mass to this fragments! This being done, but the terminal mass is not added back to these fragments!
+                last_mass_valid = mass #TODO:Review this!
+            else:  # TODO: IMP: Consider the skipped fragments as internal fragments! Need to add back the terminal mass to this fragments! This being done, but the terminal mass is not added back to these fragments!
                 logger.warning(
                     f"Skipping {side} fragment {fragment_index} because no "
                     "explanations are found for the mass difference."

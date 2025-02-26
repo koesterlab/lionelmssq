@@ -115,7 +115,7 @@ def test_testcase(testcase):
             label_mass_3T=label_mass_3T,
             label_mass_5T=label_mass_5T,
             explanation_masses=explanation_masses,
-            # intensity_cutoff=4e4,  # 1.2e4, #for test_05
+            #intensity_cutoff=4e4,  # 1.2e4, #for test_05
             intensity_cutoff=1e4,
             # intensity_cutoff=5e5,  # for test_03
             matching_threshold=matching_threshold,
