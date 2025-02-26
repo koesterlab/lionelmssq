@@ -115,8 +115,8 @@ def test_testcase(testcase):
             label_mass_3T=label_mass_3T,
             label_mass_5T=label_mass_5T,
             explanation_masses=explanation_masses,
-            intensity_cutoff=4e4,  # 1.2e4, #for test_05
-            # intensity_cutoff=1e4,
+            # intensity_cutoff=4e4,  # 1.2e4, #for test_05
+            intensity_cutoff=1e4,
             # intensity_cutoff=5e5,  # for test_03
             matching_threshold=matching_threshold,
             ms1_mass=7434.1794,  # for test_05
@@ -166,9 +166,9 @@ def test_testcase(testcase):
     assert prediction.sequence == true_seq
 
     # Assert if all the sequence fragments match the predicted fragments in mass at least!
-    for i in range(len(fragment_masses)):
-        print(f"Fragment {i}: {fragment_masses[i]} vs {prediction_masses[i]}")
-        # assert abs(prediction_masses[i] / fragment_masses[i] - 1) <= matching_threshold
+    # for i in range(len(fragment_masses)):
+    #     print(f"Fragment {i}: {fragment_masses[i]} vs {prediction_masses[i]}")
+    #     # assert abs(prediction_masses[i] / fragment_masses[i] - 1) <= matching_threshold
 
 
 test_testcase("test_05")

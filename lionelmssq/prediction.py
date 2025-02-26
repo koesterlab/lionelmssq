@@ -144,7 +144,9 @@ class Predictor:
             # Wherever there is no ambiguity, that nucleotide is preferrentially considered!
             skeleton_seq = [set() for _ in range(self.seq_len)]
             for i in range(self.seq_len):
-                skeleton_seq[i] = skeleton_seq_start[i].intersection(skeleton_seq_end[i])
+                skeleton_seq[i] = skeleton_seq_start[i].intersection(
+                    skeleton_seq_end[i]
+                )
                 if not skeleton_seq[i]:
                     skeleton_seq[i] = skeleton_seq_start[i].union(skeleton_seq_end[i])
             return skeleton_seq
@@ -178,6 +180,8 @@ class Predictor:
             logger.warning(
                 "No end fragments provided, this will likely lead to suboptimal results."
             )
+
+        # TODO: IMP: Initiate the variables with the nucleotides (but don't constrain them) that are already known from the dp!
 
         # x: binary variables indicating fragment j presence at position i
         x = [
@@ -408,17 +412,18 @@ class Predictor:
         ] + (
             [
                 self._calculate_diff_errors(
-                    masses[i] + self.mass_tags[side], masses[i - 1] + self.mass_tags[side], self.matching_threshold
+                    masses[i] + self.mass_tags[side],
+                    masses[i - 1] + self.mass_tags[side],
+                    self.matching_threshold,
                 )
                 for i in range(1, len(masses))
             ]
         )
 
     def _calculate_diff_errors(self, mass1, mass2, threshold) -> float:
-
-        retval =  threshold * ((mass1**2 + mass2**2) ** 0.5) / abs(mass1 - mass2)
-        # Constrain the maximum relative error to 1! 
-        #For mass difference very close to zero, the relative error can be very high!
+        retval = threshold * ((mass1**2 + mass2**2) ** 0.5) / abs(mass1 - mass2)
+        # Constrain the maximum relative error to 1!
+        # For mass difference very close to zero, the relative error can be very high!
         if retval > 1:
             retval = 1.0
         return retval
@@ -452,13 +457,15 @@ class Predictor:
             (self.mass_diffs_errors[Side.START]) + (self.mass_diffs_errors[Side.END])
         )
         for diff, diff_error in zip(diffs, diffs_errors):
-            self.explanations[diff] = self._calculate_diff_dp(diff, diff_error, self.explanation_masses)
+            self.explanations[diff] = self._calculate_diff_dp(
+                diff, diff_error, self.explanation_masses
+            )
 
         for diff in self.singleton_masses:
             self.explanations[diff] = self._calculate_diff_dp(
                 diff, self.matching_threshold, self.explanation_masses
             )
-        #TODO: Can make it simpler here by rejecting diff which cannot be explained instead of doing it in the _predict_skeleton function!
+        # TODO: Can make it simpler here by rejecting diff which cannot be explained instead of doing it in the _predict_skeleton function!
 
     def _reduce_alphabet(self) -> pl.DataFrame:
         observed_nucleosides = {
@@ -500,8 +507,10 @@ class Predictor:
         carry_over_mass = 0
 
         valid_terminal_fragments = []
-        last_mass_valid = 0.
-        for fragment_index, (diff, mass) in enumerate(zip(self.mass_diffs[side], masses)):
+        last_mass_valid = 0.0
+        for fragment_index, (diff, mass) in enumerate(
+            zip(self.mass_diffs[side], masses)
+        ):
             diff += carry_over_mass
             assert pos
 
@@ -510,13 +519,17 @@ class Predictor:
                 explanations = self.explanations.get(diff, [])
                 # last_mass_valid = mass
             else:
-                #TODO: Review if the correct values of the mass, i.e "last_mass_valid" are used here!
-                threshold = self._calculate_diff_errors(last_mass_valid+self.mass_tags[side],last_mass_valid+diff+self.mass_tags[side],self.matching_threshold)
-                explanations = self._calculate_diff_dp(
-                diff, threshold, self.explanation_masses
+                # CHECK: Review if the correct values of the mass, i.e "last_mass_valid" are used here!
+                threshold = self._calculate_diff_errors(
+                    last_mass_valid + self.mass_tags[side],
+                    last_mass_valid + diff + self.mass_tags[side],
+                    self.matching_threshold,
                 )
-                if explanations:
-                    carry_over_mass = 0
+                explanations = self._calculate_diff_dp(
+                    diff, threshold, self.explanation_masses
+                )
+            if explanations:
+                carry_over_mass = 0.0
 
             # METHOD: if there is only one single nucleoside explanation, we can
             # directly assign the nucleoside if there are tuples, we have to assign a
@@ -593,10 +606,10 @@ class Predictor:
                     # TODO can we stop ealy in building the ladder?
                     is_valid = False
             elif (
-                abs(diff) <= self.matching_threshold*abs(mass+self.mass_tags[side]) 
-                #abs(diff/mass) <= self._calculate_diff_errors(mass+self.mass_tags[side],mass+diff+self.mass_tags[side],self.matching_threshold) 
-                #Problem! The above approach might blow up if the masses are very close, i.e. diff is very close to zero!
-                ):
+                abs(diff) <= self.matching_threshold * abs(mass + self.mass_tags[side])
+                # abs(diff/mass) <= self._calculate_diff_errors(mass+self.mass_tags[side],mass+diff+self.mass_tags[side],self.matching_threshold)
+                # Problem! The above approach might blow up if the masses are very close, i.e. diff is very close to zero!
+            ):
                 if side == Side.START:
                     min_fragment_end = min(pos)
                     max_fragment_end = max(pos)
@@ -616,13 +629,13 @@ class Predictor:
                     )
                 )
                 pos = next_pos
-                last_mass_valid = mass #TODO:Review this!
+                last_mass_valid = mass  # CHECK:Review this!
             else:  # TODO: IMP: Consider the skipped fragments as internal fragments! Need to add back the terminal mass to this fragments! This being done, but the terminal mass is not added back to these fragments!
                 logger.warning(
-                    f"Skipping {side} fragment {fragment_index} because no "
+                    f"Skipping {side} fragment {fragment_index} with observed mass {mass} because no "
                     "explanations are found for the mass difference."
                 )
-                carry_over_mass += diff
+                carry_over_mass = diff
         return skeleton_seq, valid_terminal_fragments
 
 
