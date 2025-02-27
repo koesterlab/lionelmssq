@@ -114,11 +114,12 @@ def test_testcase(testcase):
             label_mass_3T=label_mass_3T,
             label_mass_5T=label_mass_5T,
             explanation_masses=explanation_masses,
-            # intensity_cutoff=4e4,  # 1.2e4, #for test_05
-            intensity_cutoff=1e4,
+            # intensity_cutoff=1e4, #for test_05
             # intensity_cutoff=5e5,  # for test_03
+            intensity_cutoff=5e4, #for test_04
             matching_threshold=matching_threshold,
-            ms1_mass=7434.1794,  # for test_05
+            # ms1_mass=7434.1794,  # for test_05
+            ms1_mass=7447.186265,  # for test_04
             # ms1_mass=None,
         )
         with pl.Config(tbl_rows=30):
@@ -168,4 +169,4 @@ def test_testcase(testcase):
     #     print(f"Fragment {i}: {fragment_masses[i]} vs {prediction_masses[i]}")
     #     # assert abs(prediction_masses[i] / fragment_masses[i] - 1) <= matching_threshold
 
-test_testcase("test_05")
+test_testcase("test_04")
