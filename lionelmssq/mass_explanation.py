@@ -12,10 +12,7 @@ from lionelmssq.masses import EXPLANATION_MASSES
 from lionelmssq.masses import TOLERANCE
 from lionelmssq.masses import TABLE_PATH
 from lionelmssq.masses import MATCHING_THRESHOLD
-
-
-MAX_MASS = EXPLANATION_MASSES.select(pl.col(
-    "tolerated_integer_masses")).max().item() * 35
+from lionelmssq.masses import MAX_MASS
 
 @dataclass
 class MassExplanations:
@@ -62,7 +59,7 @@ def set_up_mass_table():
     return dp_table
 
 
-def explain_mass_with_dp(mass: float) -> MassExplanations:
+def explain_mass_with_dp(mass: float, with_memo: bool) -> MassExplanations:
     """
     Return all possible combinations of nucleosides that could sum up to the given mass.
     """
@@ -92,6 +89,43 @@ def explain_mass_with_dp(mass: float) -> MassExplanations:
     # Read DP table
     dp_table = np.load(f"{TABLE_PATH}.npy")
 
+    memo = {}
+    def backtrack_with_memo(total_mass, current_idx):
+        current_weight = tolerated_integer_masses[current_idx]
+
+        # If the result for this state is already computed, return it
+        if (total_mass, current_idx) in memo:
+            return memo[(total_mass, current_idx)]
+
+        # Return empty list for cells outside of table
+        if total_mass < 0:
+            return []
+
+        # Initialize a new nucleoside set for a valid start in table
+        if total_mass == 0:
+            return [[]]
+
+        # Return empty list for unreachable cells
+        current_value = dp_table[current_idx, total_mass]
+        if current_value == 0.0:
+            return []
+
+        solutions = []
+        # Backtrack to the next row above if possible
+        if current_value % 2 == 1:
+            solutions += backtrack_with_memo(total_mass, current_idx-1)
+
+        # Backtrack to the next left-side column if possible
+        if current_value >= 2.0:
+            solutions += [[current_weight]+entry for entry in
+                          backtrack_with_memo(total_mass-current_weight,
+                                        current_idx)]
+
+        # Store result in memo
+        memo[(total_mass, current_idx)] = solutions
+
+        return solutions
+
     def backtrack(total_mass, current_idx):
         current_weight = tolerated_integer_masses[current_idx]
 
@@ -117,13 +151,15 @@ def explain_mass_with_dp(mass: float) -> MassExplanations:
         if current_value >= 2.0:
             solutions += [[current_weight]+entry for entry in
                           backtrack(total_mass-current_weight, current_idx)]
+
         return solutions
 
     # Compute all valid solutions within an interval of MATCHING_THRESHOLD
     solution_tolerated_integer_masses = []
     for value in range(target-MATCHING_THRESHOLD, target+MATCHING_THRESHOLD):
-        solution_tolerated_integer_masses += backtrack(
-            value, len(tolerated_integer_masses)-1)
+        solution_tolerated_integer_masses += backtrack_with_memo(
+            value, len(tolerated_integer_masses)-1) if with_memo \
+            else backtrack(value, len(tolerated_integer_masses)-1)
 
     # Convert the tolerated_integer_masses to the respective nucleoside names
     solution_names = set()
