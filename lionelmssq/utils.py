@@ -54,6 +54,7 @@ def determine_terminal_fragments(
 
     is_start = []
     is_end = []
+    is_start_end = [] #Also output a column which says if there are independent 3T and 5T explanations. We can start with one kind of explanation while skelelton building and if that fragemnet is rejected, we can try to add it to the "end" explanation!
     skip_mass = []
     nucleotide_only_masses = []
     mass_explanations = []
@@ -86,6 +87,14 @@ def determine_terminal_fragments(
                 # if the counts of the different nucleosides are less than or equal to the respective counts in the MS1 mass explanation
             }
             # print(explained_mass.explanations)
+
+            #If ms1 mass is defined, then also remove the explanations which differ in mass by more than 1% and have both kind of tags in there!
+            if abs(mass / ms1_mass - 1) > 0.01:
+                explained_mass.explanations = {
+                    explanation
+                    for explanation in explained_mass.explanations
+                    if not ("3Tag" in explanation and "5Tag" in explanation)
+                }
         else:
             # Remove explainations which have more than one tag of each kind in them!
             # This greatly increases the reliability of tag determination!
@@ -151,6 +160,7 @@ def determine_terminal_fragments(
                     nucleotide_only_masses.append(mass - label_mass_3T - label_mass_5T)
                     is_start.append(True)
                     is_end.append(True)
+                    is_start_end.append(False)
                 elif any(
                     "5Tag" in element and "3Tag" not in element
                     for element in explained_mass.explanations
@@ -158,6 +168,13 @@ def determine_terminal_fragments(
                     nucleotide_only_masses.append(mass - label_mass_5T)
                     is_start.append(True)
                     is_end.append(False)
+                    if any(
+                        "3Tag" in element and "5Tag" not in element
+                        for element in explained_mass.explanations
+                    ):
+                        is_start_end.append(True)
+                    else:
+                        is_start_end.append(False)
                 elif any(
                     "5Tag" not in element and "3Tag" in element
                     for element in explained_mass.explanations
@@ -165,10 +182,12 @@ def determine_terminal_fragments(
                     nucleotide_only_masses.append(mass - label_mass_3T)
                     is_end.append(True)
                     is_start.append(False)
+                    is_start_end.append(False)
                 else:
                     nucleotide_only_masses.append(mass)
                     is_start.append(False)
                     is_end.append(False)
+                    is_start_end.append(False)
             else:
                 if any(
                     "5Tag" in element and "3Tag" not in element
@@ -177,6 +196,13 @@ def determine_terminal_fragments(
                     nucleotide_only_masses.append(mass - label_mass_5T)
                     is_start.append(True)
                     is_end.append(False)
+                    if any(
+                        "3Tag" in element and "5Tag" not in element
+                        for element in explained_mass.explanations
+                    ):
+                        is_start_end.append(True)
+                    else:
+                        is_start_end.append(False)
                 elif any(
                     "5Tag" not in element and "3Tag" in element
                     for element in explained_mass.explanations
@@ -184,10 +210,12 @@ def determine_terminal_fragments(
                     nucleotide_only_masses.append(mass - label_mass_3T)
                     is_end.append(True)
                     is_start.append(False)
+                    is_start_end.append(False)
                 else:
                     nucleotide_only_masses.append(mass)
                     is_start.append(False)
                     is_end.append(False)
+                    is_start_end.append(False)
 
         else:
             nucleotide_only_masses.append(mass)
@@ -195,6 +223,7 @@ def determine_terminal_fragments(
             is_start.append(False)
             is_end.append(False)
             singleton_mass.append(False)
+            is_start_end.append(False)
 
     # Use ms1_mass additionally as a cutoff for the fragment masses!
     if ms1_mass:
@@ -210,6 +239,7 @@ def determine_terminal_fragments(
                     "is_start": is_start,
                     "is_end": is_end,
                     "single_nucleoside": singleton_mass,
+                    "is_start_end": is_start_end,
                 }
             )
         )
