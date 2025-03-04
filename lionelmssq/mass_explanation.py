@@ -37,7 +37,7 @@ def set_up_mass_table():
     integer_masses.sort()
 
     # Initialize numpy table
-    dp_table = np.zeros((len(integer_masses), MAX_MASS+1))
+    dp_table = np.zeros((len(integer_masses), MAX_MASS+1), dtype=np.uint8)
     dp_table[0, 0] = 3.0
 
     # Fill DP table row-wise
