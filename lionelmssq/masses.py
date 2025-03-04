@@ -5,7 +5,7 @@ import os
 _COLS = ["nucleoside", "monoisotopic_mass"]
 
 REDUCE_TABLE = True
-REDUCE_SET = True
+REDUCE_SET = False
 
 MASSES = pl.read_csv(
     (importlib.resources.files(__package__) / "assets" /
@@ -36,11 +36,19 @@ UNIQUE_MASSES = (
 TOLERANCE = 1e-5  # For perfect matching, the TOLERANCE should be the precision (digits after decimal) to which the masses of nucleosides and sequences are reported, i.e. 1e-(ROUND_DECIMAL)
 
 TABLE_PATH = (f"dp_table/{'reduced' if REDUCE_TABLE else 'full'}_table."
-              f"{'reduced' if REDUCE_SET else 'full'}_set."
-              f"tolerance{TOLERANCE}")
+              f"{'reduced' if REDUCE_SET else 'full'}_set/"
+              f"tolerance_{TOLERANCE}")
 
 if not os.path.exists("dp_table"):
     os.makedirs("dp_table")
+
+subdir_path = (
+    f"dp_table/{'reduced' if REDUCE_TABLE else 'full'}_table."
+    f"{'reduced' if REDUCE_SET else 'full'}_set"
+)
+
+if not os.path.exists(subdir_path):
+    os.makedirs(subdir_path)
 
 print(TABLE_PATH)
 
