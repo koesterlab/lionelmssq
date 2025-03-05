@@ -6,12 +6,22 @@ import pytest
 
 from lionelmssq.mass_explanation import explain_mass, explain_mass_with_dp
 
+TEST_MASSES_WITH_BACKBONE = [
+    267.09675 + 62,          # A
+    267.09675 * 2 + 62 * 2,  # AA
+    283.09167 * 2 + 62 * 2,  # GG
+    243.08552 * 2 + 62 * 2,  # CC
+    244.06954 * 2 + 62 * 2,  # UU
+    1037.34348 + 62 * 4,     # AUGC
+    1563.52067 + 62 * 6,     # CCUAGG
+]
+
 TEST_MASSES = [
     267.09675,      # A
-    267.09675 * 2,  # 2A
-    283.09167 * 2,  # 2G
-    243.08552 * 2,  # 2C
-    244.06954 * 2,  # 2U
+    267.09675 * 2,  # AA
+    283.09167 * 2,  # GG
+    243.08552 * 2,  # CC
+    244.06954 * 2,  # UU
     1037.34348,     # AUGC
     1563.52067,     # CCUAGG
 ]
@@ -26,7 +36,7 @@ TEST_SEQ = [
     ("A", "U", "G", "G", "C", "C"),
 ]
 
-MASS_SEQ_DICT = dict(zip(TEST_MASSES, TEST_SEQ))
+MASS_SEQ_DICT = dict(zip(TEST_MASSES_WITH_BACKBONE, TEST_SEQ))
 
 
 # _TESTCASES = importlib.resources.files("tests") / "testcases"

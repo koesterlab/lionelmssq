@@ -52,11 +52,16 @@ if not os.path.exists(subdir_path):
 
 print(TABLE_PATH)
 
+# TODO: Use monoisotopic masses to calculate a more accurate link mass
+# Mass of P (31) + 2*O (2*16) - H (1)
+# PHOSPHATE_LINK_MASS = 0
+PHOSPHATE_LINK_MASS = 62
+
 MATCHING_THRESHOLD = 10  # This dictates a matching threshold such that we consider -MATCHING_THRESHOLD < (sum(masses) - target_mass) < MATCHING_THRESHOLD to be matched!
 # If TOLERANCE < num_of_decimals in reported masses, then MATCHING_THRESHOLD should at least be greater or equal than the number of nucleotides expected for a target mass!
 
 EXPLANATION_MASSES = UNIQUE_MASSES.with_columns(
-    (pl.col("monoisotopic_mass") / TOLERANCE)
+    ((pl.col("monoisotopic_mass") + PHOSPHATE_LINK_MASS)  / TOLERANCE)
     .round(0)
     .cast(pl.Int64)
     .alias("tolerated_integer_masses")
