@@ -27,13 +27,13 @@ TEST_MASSES = [
 ]
 
 TEST_SEQ = [
-    ("A"),
-    ("A", "A"),
-    ("G", "G"),
-    ("C", "C"),
-    ("U", "U"),
-    ("A", "U", "G", "C"),
-    ("A", "U", "G", "G", "C", "C"),
+    {"c-y": ("A")},
+    {"c-y": ("A", "A")},
+    {"c-y": ("G", "G")},
+    {"c-y": ("C", "C")},
+    {"c-y": ("U", "U")},
+    {"c-y": ("A", "U", "G", "C")},
+    {"c-y": ("A", "U", "G", "G", "C", "C")},
 ]
 
 MASS_SEQ_DICT = dict(zip(TEST_MASSES_WITH_BACKBONE, TEST_SEQ))
@@ -50,11 +50,13 @@ def test_testcase(testcase):
     predicted_mass_explanation = explain_mass(testcase[0])
     # print(predicted_mass_explanation)
 
+    breakage = list(testcase[1].keys())[0]
+
     # Need to check if any possible permutation of testcase_permutations is in predicted_mass_explaination
-    testcase_permutations = tuple(itertools.permutations(testcase[1]))
+    testcase_permutations = tuple(itertools.permutations(testcase[1][breakage]))
 
     assert any(
-        perm in predicted_mass_explanation.explanations
+        perm in predicted_mass_explanation.explanations[breakage]
         for perm in testcase_permutations
     )
 
@@ -67,11 +69,13 @@ def test_testcase_with_dp(testcase):
     predicted_mass_explanation = explain_mass_with_dp(testcase[0], True)
     # print(predicted_mass_explanation)
 
+    breakage = list(testcase[1].keys())[0]
+
     # Need to check if any possible permutation of testcase_permutations is in predicted_mass_explaination
-    testcase_permutations = tuple(itertools.permutations(testcase[1]))
+    testcase_permutations = tuple(itertools.permutations(testcase[1][breakage]))
 
     assert any(
-        perm in predicted_mass_explanation.explanations
+        perm in predicted_mass_explanation.explanations[breakage]
         for perm in testcase_permutations
     )
 
@@ -84,10 +88,12 @@ def test_testcase_with_dp_and_memo(testcase):
     predicted_mass_explanation = explain_mass_with_dp(testcase[0], False)
     # print(predicted_mass_explanation)
 
+    breakage = list(testcase[1].keys())[0]
+
     # Need to check if any possible permutation of testcase_permutations is in predicted_mass_explaination
-    testcase_permutations = tuple(itertools.permutations(testcase[1]))
+    testcase_permutations = tuple(itertools.permutations(testcase[1][breakage]))
 
     assert any(
-        perm in predicted_mass_explanation.explanations
+        perm in predicted_mass_explanation.explanations[breakage]
         for perm in testcase_permutations
     )

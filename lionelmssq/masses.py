@@ -57,6 +57,10 @@ print(TABLE_PATH)
 # PHOSPHATE_LINK_MASS = 0
 PHOSPHATE_LINK_MASS = 62
 
+# Additional weights for different breakage options
+BREAKAGES = {0: ["c-y"]} # c-y only
+BREAKAGES = {int(val / TOLERANCE): BREAKAGES[val] for val in BREAKAGES.keys()}
+
 MATCHING_THRESHOLD = 10  # This dictates a matching threshold such that we consider -MATCHING_THRESHOLD < (sum(masses) - target_mass) < MATCHING_THRESHOLD to be matched!
 # If TOLERANCE < num_of_decimals in reported masses, then MATCHING_THRESHOLD should at least be greater or equal than the number of nucleotides expected for a target mass!
 
