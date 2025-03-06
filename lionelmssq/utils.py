@@ -52,11 +52,12 @@ def determine_terminal_fragments(
 
     explanation_masses = explanation_masses.vstack(nucleoside_df)
 
-    is_start = []
-    is_end = []
-    is_start_end = []  # Also output a column which says if there are independent 3T and 5T explanations. We can start with one kind of explanation while skelelton building and if that fragemnet is rejected, we can try to add it to the "end" explanation!
+    is_start = [] #Start tag in an explanation but NOT end tag in the same explanation
+    is_end = [] #End tag in an explanation but NOT start tag in the same explanation
+    is_start_end = [] #Both start and end tag in the same explanation (WITH OR WITHOUT MS1 MASS)
+    is_internal = [] #NO tags in an explanation
     skip_mass = []
-    nucleotide_only_masses = []
+    # nucleotide_only_masses = []
     mass_explanations = []
     singleton_mass = []
 
@@ -157,73 +158,49 @@ def determine_terminal_fragments(
                     )
                 ):  # Note that we allow for approx 1% deviation from the MS1 mass for both tags!
                     # TODO: This still first preferrentially marks this case, and then 5Tag and then 3Tag!
-                    nucleotide_only_masses.append(mass - label_mass_3T - label_mass_5T)
-                    is_start.append(True)
-                    is_end.append(True)
-                    is_start_end.append(False)
-                elif any(
-                    "5Tag" in element and "3Tag" not in element
-                    for element in explained_mass.explanations
-                ):
-                    nucleotide_only_masses.append(mass - label_mass_5T)
-                    is_start.append(True)
-                    is_end.append(False)
-                    if any(
-                        "3Tag" in element and "5Tag" not in element
-                        for element in explained_mass.explanations
-                    ):
-                        is_start_end.append(True)
-                    else:
-                        is_start_end.append(False)
-                elif any(
-                    "5Tag" not in element and "3Tag" in element
-                    for element in explained_mass.explanations
-                ):
-                    nucleotide_only_masses.append(mass - label_mass_3T)
-                    is_end.append(True)
-                    is_start.append(False)
-                    is_start_end.append(False)
+                    is_start_end.append(True)
                 else:
-                    nucleotide_only_masses.append(mass)
-                    is_start.append(False)
-                    is_end.append(False)
                     is_start_end.append(False)
             else:
                 if any(
-                    "5Tag" in element and "3Tag" not in element
-                    for element in explained_mass.explanations
-                ):
-                    nucleotide_only_masses.append(mass - label_mass_5T)
-                    is_start.append(True)
-                    is_end.append(False)
-                    if any(
-                        "3Tag" in element and "5Tag" not in element
+                        "5Tag" in element and "3Tag" in element
                         for element in explained_mass.explanations
                     ):
-                        is_start_end.append(True)
-                    else:
-                        is_start_end.append(False)
-                elif any(
-                    "5Tag" not in element and "3Tag" in element
-                    for element in explained_mass.explanations
-                ):
-                    nucleotide_only_masses.append(mass - label_mass_3T)
-                    is_end.append(True)
-                    is_start.append(False)
-                    is_start_end.append(False)
+                    is_start_end.append(True)
                 else:
-                    nucleotide_only_masses.append(mass)
-                    is_start.append(False)
-                    is_end.append(False)
                     is_start_end.append(False)
 
+            if any(
+                "5Tag" in element and "3Tag" not in element
+                for element in explained_mass.explanations
+            ):
+                is_start.append(True)
+            else:
+                is_start.append(False)
+
+            if any(
+                "5Tag" not in element and "3Tag" in element
+                for element in explained_mass.explanations
+            ):
+                is_end.append(True)
+            else:
+                is_end.append(False)
+
+            if any("5Tag" not in element and "3Tag" not in element
+                for element in explained_mass.explanations
+            ):
+                is_internal.append(True)
+            else:
+                is_internal.append(False)
+
         else:
-            nucleotide_only_masses.append(mass)
+            # nucleotide_only_masses.append(mass)
             skip_mass.append(True)
             is_start.append(False)
             is_end.append(False)
             singleton_mass.append(False)
             is_start_end.append(False)
+            is_internal.append(False)
 
     # Use ms1_mass additionally as a cutoff for the fragment masses!
     if ms1_mass:
@@ -231,7 +208,8 @@ def determine_terminal_fragments(
 
     fragment_masses = (
         fragment_masses.with_columns(
-            pl.Series(nucleotide_only_masses).alias(output_mass_column_name)
+            # pl.Series(nucleotide_only_masses).alias(output_mass_column_name)
+            pl.Series(neutral_masses).alias(output_mass_column_name)
         )
         .hstack(
             pl.DataFrame(
