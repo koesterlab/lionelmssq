@@ -218,6 +218,7 @@ def determine_terminal_fragments(
                     "is_end": is_end,
                     "single_nucleoside": singleton_mass,
                     "is_start_end": is_start_end,
+                    "is_internal": is_internal,
                 }
             )
         )
