@@ -70,7 +70,7 @@ class Predictor:
 
     def build_skeleton(
         self,
-    ):  # -> Tuple[List[Set[str]], List[TerminalFragment], List[int]]:
+    ):  # -> Tuple[List[Set[str]], List[TerminalFragment], List[int]]: #TODO
         fragment_masses = self.fragments.get_column("observed_mass").to_list()
         n_fragments = len(fragment_masses)
 
@@ -86,7 +86,7 @@ class Predictor:
         skeleton_seq_start, start_fragments, invalid_start_fragments = (
             self._predict_skeleton(
                 Side.START,
-                fragment_masses=fragment_masses,
+                # fragment_masses=fragment_masses,
                 candidate_fragments=candidate_start_fragments,
             )
         )
@@ -109,7 +109,7 @@ class Predictor:
 
         skeleton_seq_end, end_fragments, invalid_end_fragments = self._predict_skeleton(
             Side.END,
-            fragment_masses=fragment_masses,
+            # fragment_masses=fragment_masses,
             candidate_fragments=candidate_end_fragments,
             # skeleton_seq=skeleton_seq_start,
         )
@@ -628,9 +628,10 @@ class Predictor:
         self,
         side: Side,
         skeleton_seq: Optional[List[Set[str]]] = None,
-        fragment_masses=None,
+        # fragment_masses=None,
         candidate_fragments=None,
     ) -> Tuple[List[Set[str]], List[TerminalFragment], List[int]]:
+        
         if skeleton_seq is None:
             skeleton_seq = [set() for _ in range(self.seq_len)]
 
@@ -804,7 +805,7 @@ class Predictor:
                 carry_over_mass = diff
 
                 # Consider the skipped fragments as internal fragments! Add back the terminal mass to this fragments!
-                if fragment_masses and candidate_fragments:
+                if masses and candidate_fragments:
                     invalid_fragments.append(candidate_fragments[fragment_index])
 
         return skeleton_seq, valid_terminal_fragments, invalid_fragments
