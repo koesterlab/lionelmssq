@@ -118,12 +118,12 @@ def test_testcase(testcase):
             explanation_masses=explanation_masses,
             # intensity_cutoff=1e4, #for test_05
             # intensity_cutoff=5e5,  # for test_03
-            # intensity_cutoff=5e4,  # for test_04
-            intensity_cutoff=1e5, #1e5,  # for test_08
+            intensity_cutoff=5e4,  # for test_04
+            # intensity_cutoff=1e5, #1e5,  # for test_08
             matching_threshold=matching_threshold,
             # ms1_mass=7434.1794,  # for test_05
-            #ms1_mass=7447.186265,  # for test_04
-            ms1_mass=10572.588,  # for test_08
+            ms1_mass=7447.186265,  # for test_04
+            # ms1_mass=10572.588,  # for test_08
             #  ms1_mass=10595.569312,  # for test_09
             # ms1_mass=None,
         )
@@ -174,4 +174,5 @@ def test_testcase(testcase):
     #     print(f"Fragment {i}: {fragment_masses[i]} vs {prediction_masses[i]}")
     #     # assert abs(prediction_masses[i] / fragment_masses[i] - 1) <= matching_threshold
 
-test_testcase("test_08")
+
+test_testcase("test_04")

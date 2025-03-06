@@ -48,7 +48,7 @@ class Predictor:
         mass_tag_end: float = 0.0,
     ):
         self.fragments = self._sort_fragments(fragments)
-        # Sort the fragments in the order of single nucleosides, start fragments, end fragments, 
+        # Sort the fragments in the order of single nucleosides, start fragments, end fragments,
         # start fragments AND end fragments, internal fragments and then by mass for each category!
 
         with pl.Config() as cfg:
@@ -68,8 +68,9 @@ class Predictor:
         self.matching_threshold = matching_threshold
         self.mass_tags = {Side.START: mass_tag_start, Side.END: mass_tag_end}
 
-    def build_skeleton(self): #-> Tuple[List[Set[str]], List[TerminalFragment], List[int]]:
-
+    def build_skeleton(
+        self,
+    ):  # -> Tuple[List[Set[str]], List[TerminalFragment], List[int]]:
         fragment_masses = self.fragments.get_column("observed_mass").to_list()
         n_fragments = len(fragment_masses)
 
@@ -82,19 +83,21 @@ class Predictor:
             .to_list()
         )
 
-        skeleton_seq_start, start_fragments, invalid_start_fragments = self._predict_skeleton(
-            Side.START,
-            fragment_masses=fragment_masses,
-            candidate_fragments=candidate_start_fragments,
+        skeleton_seq_start, start_fragments, invalid_start_fragments = (
+            self._predict_skeleton(
+                Side.START,
+                fragment_masses=fragment_masses,
+                candidate_fragments=candidate_start_fragments,
+            )
         )
 
         print("Skeleton sequence start = ", skeleton_seq_start)
         # print("invalid_start_fragments = ", invalid_start_fragments)
 
-        #Shift the rejected start fragments to the end fragments while ladder building!
-        #But shift only the ones which also had a valid end explanation!
-        #Need to subtract and add the tag mass appropriately!
-        #   
+        # Shift the rejected start fragments to the end fragments while ladder building!
+        # But shift only the ones which also had a valid end explanation!
+        # Need to subtract and add the tag mass appropriately!
+        #
 
         candidate_end_fragments = (
             self.fragments.with_row_index()
@@ -103,7 +106,7 @@ class Predictor:
             .to_list()
         )
         print("original end cadidates = ", candidate_end_fragments)
-        
+
         skeleton_seq_end, end_fragments, invalid_end_fragments = self._predict_skeleton(
             Side.END,
             fragment_masses=fragment_masses,
@@ -112,52 +115,58 @@ class Predictor:
         )
         print("Skeleton sequence end = ", skeleton_seq_end)
         # print("Simple end fragments = ", [candidate_end_fragments[end_fragments[j].index] for j in range(len(end_fragments))])
-            # print("len simple end fragments = ", len([candidate_end_fragments[end_fragments[j].index] for j in range(len(end_fragments))]))
+        # print("len simple end fragments = ", len([candidate_end_fragments[end_fragments[j].index] for j in range(len(end_fragments))]))
 
-            # # Add the 5T masses from the rejected start fragments and subtract the 3T masses before appending them to the end fragments!
-            # shifted_start_to_end_fragments_index = []
-            # for j in invalid_start_fragments:
-            #     if self.fragments[j]["is_start_end"][0]:
-            #         print("Invalidated start but accepted = ", j)
-            #         shifted_start_to_end_fragments_index.append(j)
-            #         fragment_masses[j] -= self.mass_tags[Side.END] + self.mass_tags[Side.START]
-            
-            # self.fragments = self.fragments.with_columns("observed_mass", fragment_masses).sort("observed_mass")
-            # #TODO: Check if the above sorting destroys the order and creates downstream issues?
+        # # Add the 5T masses from the rejected start fragments and subtract the 3T masses before appending them to the end fragments!
+        # shifted_start_to_end_fragments_index = []
+        # for j in invalid_start_fragments:
+        #     if self.fragments[j]["is_start_end"][0]:
+        #         print("Invalidated start but accepted = ", j)
+        #         shifted_start_to_end_fragments_index.append(j)
+        #         fragment_masses[j] -= self.mass_tags[Side.END] + self.mass_tags[Side.START]
 
-            # candidate_end_fragments = (
-            #     self.fragments.with_row_index()
-            #     .filter(pl.col("is_end") | (pl.col("index").is_in(shifted_start_to_end_fragments_index)))
-            #     #.filter(pl.col("is_end") | (pl.col("index").is_in(invalid_start_fragments) & pl.col("is_start_end"))) 
-            #     #Shift the start_fragments which were rejected and which have _is_start_end == True (i.e. they had both 5T and 3T explanations)
-            #     #to the end_fragments while ladder building!
-            #     .sort("observed_mass")
-            #     .get_column("index")
-            #     .to_list()
-            # )
-            # print("Final end fragments = ", candidate_end_fragments)
+        # self.fragments = self.fragments.with_columns("observed_mass", fragment_masses).sort("observed_mass")
+        # #TODO: Check if the above sorting destroys the order and creates downstream issues?
 
-            # skeleton_seq_end, end_fragments, invalid_end_fragments = self._predict_skeleton(
-            #     Side.END,
-            #     fragment_masses=fragment_masses,
-            #     candidate_fragments=candidate_end_fragments,
-            # )
-            # print("len refined end fragments = ", len([candidate_end_fragments[end_fragments[j].index] for j in range(len(end_fragments))]))
-            # print("Skeleton sequence end = ", skeleton_seq_end)
+        # candidate_end_fragments = (
+        #     self.fragments.with_row_index()
+        #     .filter(pl.col("is_end") | (pl.col("index").is_in(shifted_start_to_end_fragments_index)))
+        #     #.filter(pl.col("is_end") | (pl.col("index").is_in(invalid_start_fragments) & pl.col("is_start_end")))
+        #     #Shift the start_fragments which were rejected and which have _is_start_end == True (i.e. they had both 5T and 3T explanations)
+        #     #to the end_fragments while ladder building!
+        #     .sort("observed_mass")
+        #     .get_column("index")
+        #     .to_list()
+        # )
+        # print("Final end fragments = ", candidate_end_fragments)
+
+        # skeleton_seq_end, end_fragments, invalid_end_fragments = self._predict_skeleton(
+        #     Side.END,
+        #     fragment_masses=fragment_masses,
+        #     candidate_fragments=candidate_end_fragments,
+        # )
+        # print("len refined end fragments = ", len([candidate_end_fragments[end_fragments[j].index] for j in range(len(end_fragments))]))
+        # print("Skeleton sequence end = ", skeleton_seq_end)
 
         # While building the ladder it may happen that things are unambiguous from one side, but not from the other!
         # In that case, we should consider the unambiguous side as the correct one! If the intersection is empty, then we can consider the union of the two!
         skeleton_seq = self._align_skeletons(skeleton_seq_start, skeleton_seq_end)
 
-        #TODO: Add back the 3T tag mass to the rejected end candidates to fit them as internal candidates. 
+        # TODO: Add back the 3T tag mass to the rejected end candidates to fit them as internal candidates.
         # But only do this for terminal candidates which also had additional non-tag mass explanations!
         # Need to annotate an additional column for this!
 
         print("Skeleton sequence = ", skeleton_seq)
 
-        #TODO: Append invalid start and end fragments together!
+        # TODO: Append invalid start and end fragments together!
 
-        return skeleton_seq, start_fragments, end_fragments, invalid_start_fragments, invalid_end_fragments
+        return (
+            skeleton_seq,
+            start_fragments,
+            end_fragments,
+            invalid_start_fragments,
+            invalid_end_fragments,
+        )
 
     def predict(self) -> Prediction:
         # TODO: get rid of the requirement to pass the length of the sequence
@@ -165,7 +174,9 @@ class Predictor:
 
         self._collect_singleton_masses()
         self._collect_diffs(Side.START)
-        self._collect_diffs(Side.END) #TODO: Need to collect diffs AFTER shifting the fragments!
+        self._collect_diffs(
+            Side.END
+        )  # TODO: Need to collect diffs AFTER shifting the fragments!
         self._collect_diff_explanations()
 
         # TODO:
@@ -180,16 +191,29 @@ class Predictor:
             "nucleoside"
         ).to_list()  # TODO: Handle the case of multiple nucleosides with the same mass when using "aggregate" grouping in the masses table
         nucleoside_masses = dict(masses.iter_rows())
-        
-        skeleton_seq, start_fragments, end_fragments, invalid_start_fragments, invalid_end_fragments = self.build_skeleton()
 
-        #TODO: As a temporary measure re-initiate the entire fragment class while rejecting the invalid_start and end_fragments!
+        (
+            skeleton_seq,
+            start_fragments,
+            end_fragments,
+            invalid_start_fragments,
+            invalid_end_fragments,
+        ) = self.build_skeleton()
+
+        # TODO: As a temporary measure re-initiate the entire fragment class while rejecting the invalid_start and end_fragments!
 
         ## START -- Temp
         if True:
-            
-            self.fragments = self._sort_fragments(self.fragments.with_row_index().filter(~pl.col("index").is_in(invalid_start_fragments + invalid_end_fragments)).drop("index"))
-            
+            self.fragments = self._sort_fragments(
+                self.fragments.with_row_index()
+                .filter(
+                    ~pl.col("index").is_in(
+                        invalid_start_fragments + invalid_end_fragments
+                    )
+                )
+                .drop("index")
+            ).with_row_index("orig_index")
+
             fragment_masses = self.fragments.get_column("observed_mass").to_list()
             n_fragments = len(fragment_masses)
 
@@ -204,10 +228,18 @@ class Predictor:
 
             # self._collect_singleton_masses()
             self._collect_diffs(Side.START)
-            self._collect_diffs(Side.END) #TODO: Need to collect diffs AFTER shifting the fragments!
+            self._collect_diffs(
+                Side.END
+            )  # TODO: Need to collect diffs AFTER shifting the fragments!
             self._collect_diff_explanations()
 
-            skeleton_seq, start_fragments, end_fragments, invalid_start_fragments, invalid_end_fragments = self.build_skeleton()
+            (
+                skeleton_seq,
+                start_fragments,
+                end_fragments,
+                invalid_start_fragments,
+                invalid_end_fragments,
+            ) = self.build_skeleton()
 
         ## END -- temp
 
@@ -319,11 +351,13 @@ class Predictor:
         # ensure that end fragments are aligned at the end of the sequence
         for fragment in end_fragments:
             j = fragment.index
-            if j not in [s.index for s in start_fragments]: #TODO: If this is redundant/actually needed?
-            # j = candidate_end_fragments[fragment.index]
-            # if (
-            #     j not in [candidate_start_fragments[f.index] for f in start_fragments] #TODO: If this is redundant/actually needed?
-            # ):  # Exlude fragments that are both start and end fragments, they were already considered with start fragments!
+            if j not in [
+                s.index for s in start_fragments
+            ]:  # TODO: If this is redundant/actually needed?
+                # j = candidate_end_fragments[fragment.index]
+                # if (
+                #     j not in [candidate_start_fragments[f.index] for f in start_fragments] #TODO: If this is redundant/actually needed?
+                # ):  # Exlude fragments that are both start and end fragments, they were already considered with start fragments!
                 # print("End fragment = ", fragment, "Index = ", j)
                 # min_end is exclusive
                 for i in range(fragment.min_end + 1, 0):
@@ -339,7 +373,7 @@ class Predictor:
 
         # constrain weight_diff_abs to be the absolute value of weight_diff
         for j in valid_fragment_range:
-        #if j not in invalid_start_fragments and j not in invalid_end_fragments:
+            # if j not in invalid_start_fragments and j not in invalid_end_fragments:
             prob += predicted_mass_diff_abs[j] >= predicted_mass_diff[j]
             prob += predicted_mass_diff_abs[j] >= -predicted_mass_diff[j]
 
@@ -450,7 +484,7 @@ class Predictor:
             sequence=seq,
             fragments=fragment_predictions,
         )
-    
+
     def _sort_fragments(self, fragments: pl.DataFrame) -> pl.DataFrame:
         # Sort the fragments in the order of single nucleosides, start fragments, end fragments, start fragments AND end fragments, internal fragments and then by mass for each category!
 
@@ -496,17 +530,15 @@ class Predictor:
         )
 
         return fragments
-    
-    def _align_skeletons(self,skeleton_seq_start, skeleton_seq_end) -> List[Set[str]]:
+
+    def _align_skeletons(self, skeleton_seq_start, skeleton_seq_end) -> List[Set[str]]:
         # Align the skeletons of the start and end fragments to get the final skeleton sequence!
         # Wherever there is no ambiguity, that nucleotide is preferrentially considered!
-        #TODO: Its more complicated, since if two positions are ambigious, they are not indepenedent. 
+        # TODO: Its more complicated, since if two positions are ambigious, they are not indepenedent.
         # If one nucleotide is selected this way, then the same nucleotide cannot be selected in the other position!
         skeleton_seq = [set() for _ in range(self.seq_len)]
         for i in range(self.seq_len):
-            skeleton_seq[i] = skeleton_seq_start[i].intersection(
-                skeleton_seq_end[i]
-            )
+            skeleton_seq[i] = skeleton_seq_start[i].intersection(skeleton_seq_end[i])
             if not skeleton_seq[i]:
                 skeleton_seq[i] = skeleton_seq_start[i].union(skeleton_seq_end[i])
         return skeleton_seq
@@ -705,25 +737,24 @@ class Predictor:
                             # print("i = ", i)
                             # print("possible_nucleosides = ", possible_nucleosides)
                             # print("alphabet = ", alphabet)
-                            #TODO: Review this! What's the need to clear it really?
+                            # TODO: Review this! What's the need to clear it really?
                             # if possible_nucleosides.issuperset(alphabet): #Should this be the other way around?
                             #     # the expl sharpens the possibilities
                             #     # clear the possibilities so far, the expl will add
                             #     # the sharpened ones ones below
-                            #     possible_nucleosides.clear() 
-                            
+                            #     possible_nucleosides.clear()
+
                             for j in alphabet:
                                 possible_nucleosides.add(j)
-                                #TODO: We need to do this better. 
+                                # TODO: We need to do this better.
                                 # Instead of adding just the letters, we somehow need to keep a track of the possibilities to be able to constrain the LP!
-                                #We also then probably need part of the code immediately below!
-
+                                # We also then probably need part of the code immediately below!
 
                     # for expl in p_specific_explanations:
-                #         #Maybe we can save the object as perm itself and block it for sometime!
-                #         for perm in permutations(expl):
-                #             for i, nuc in enumerate(perm):
-                #                 get_possible_nucleosides(p, i).add(nuc)
+                    #         #Maybe we can save the object as perm itself and block it for sometime!
+                    #         for perm in permutations(expl):
+                    #             for i, nuc in enumerate(perm):
+                    #                 get_possible_nucleosides(p, i).add(nuc)
 
                     print("Intermediate skeletal seq = ", skeleton_seq)
                     # add possible follow up positions
@@ -751,7 +782,7 @@ class Predictor:
                     max_fragment_end = min(pos)
                 next_pos = pos
             else:
-                is_valid = False 
+                is_valid = False
 
             if is_valid:
                 valid_terminal_fragments.append(
@@ -764,7 +795,7 @@ class Predictor:
                 )
                 pos = next_pos
                 last_mass_valid = mass  # CHECK:Review this!
-                carry_over_mass = 0.0 # TODO:Review this!
+                carry_over_mass = 0.0  # TODO:Review this!
             else:
                 logger.warning(
                     f"Skipping {side} fragment {fragment_index} with observed mass {mass} because no "

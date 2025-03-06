@@ -54,7 +54,7 @@ def determine_terminal_fragments(
 
     is_start = []
     is_end = []
-    is_start_end = [] #Also output a column which says if there are independent 3T and 5T explanations. We can start with one kind of explanation while skelelton building and if that fragemnet is rejected, we can try to add it to the "end" explanation!
+    is_start_end = []  # Also output a column which says if there are independent 3T and 5T explanations. We can start with one kind of explanation while skelelton building and if that fragemnet is rejected, we can try to add it to the "end" explanation!
     skip_mass = []
     nucleotide_only_masses = []
     mass_explanations = []
@@ -88,7 +88,7 @@ def determine_terminal_fragments(
             }
             # print(explained_mass.explanations)
 
-            #If ms1 mass is defined, then also remove the explanations which differ in mass by more than 1% and have both kind of tags in there!
+            # If ms1 mass is defined, then also remove the explanations which differ in mass by more than 1% and have both kind of tags in there!
             if abs(mass / ms1_mass - 1) > 0.01:
                 explained_mass.explanations = {
                     explanation
@@ -302,7 +302,14 @@ def estimate_MS_error_MATCHING_THRESHOLD(
         )
         if closest_mass:
             relative_errors.append(abs(closest_mass / mass))
-            print("Mass = ", mass, "Closest mass = ", closest_mass, "Relative error = ", abs(closest_mass / mass))
+            print(
+                "Mass = ",
+                mass,
+                "Closest mass = ",
+                closest_mass,
+                "Relative error = ",
+                abs(closest_mass / mass),
+            )
 
     if relative_errors:
         average_error = sum(relative_errors) / len(relative_errors)
