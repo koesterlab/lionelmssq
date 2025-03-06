@@ -104,6 +104,7 @@ def test_testcase(testcase):
         matching_threshold, _, _ = estimate_MS_error_MATCHING_THRESHOLD(
             fragment_masses_read, unique_masses=unique_masses, simulation=simulation
         )
+        matching_threshold = 20e-6
         print(
             "Matching threshold (rel errror) estimated from singleton masses = ",
             matching_threshold,
@@ -118,7 +119,7 @@ def test_testcase(testcase):
             # intensity_cutoff=1e4, #for test_05
             # intensity_cutoff=5e5,  # for test_03
             # intensity_cutoff=5e4,  # for test_04
-            intensity_cutoff=5e4,  # for test_08
+            intensity_cutoff=1e5, #1e5,  # for test_08
             matching_threshold=matching_threshold,
             # ms1_mass=7434.1794,  # for test_05
             #ms1_mass=7447.186265,  # for test_04

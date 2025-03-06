@@ -302,6 +302,7 @@ def estimate_MS_error_MATCHING_THRESHOLD(
         )
         if closest_mass:
             relative_errors.append(abs(closest_mass / mass))
+            print("Mass = ", mass, "Closest mass = ", closest_mass, "Relative error = ", abs(closest_mass / mass))
 
     if relative_errors:
         average_error = sum(relative_errors) / len(relative_errors)

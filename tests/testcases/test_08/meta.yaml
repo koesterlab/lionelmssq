@@ -1,6 +1,6 @@
 identity: 30mer_RNA/2024-09-03_SJH_30merRNA_ms2_17,20,25
 label_mass_3T: 375.18279
 label_mass_5T: 537.11889
-predicted_sequence: 
-true_sequence: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+predicted_sequence: CAGCAAAUUAAGUGGGCUUUGAUCCGCAGU
 sequence_mass: 10572.588
+true_sequence: CAGCAAAACGAUCAUAUGCAGAUCCGCAGU
