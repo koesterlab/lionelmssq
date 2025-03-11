@@ -64,7 +64,6 @@ def explain_mass_with_dp(mass: float, with_memo: bool) -> MassExplanations:
     """
     Return all possible combinations of nucleosides that could sum up to the given mass.
     """
-
     tolerated_integer_masses = pl.Series(
         EXPLANATION_MASSES.select(pl.col("tolerated_integer_masses"))
     ).to_list()
@@ -271,7 +270,7 @@ def explain_mass(mass: float) -> MassExplanations:
     solution_tolerated_integer_masses = {}
     for breakage_weight in BREAKAGES:
         # Start with the full target and all tolerated_integer_masses
-        solutions = dp(target, breakage_weight)
+        solutions = dp(target+breakage_weight, 0)
         for breakage in BREAKAGES[breakage_weight]:
             solution_tolerated_integer_masses[breakage] = solutions
 

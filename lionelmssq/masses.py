@@ -1,6 +1,7 @@
 import importlib.resources
 import polars as pl
 import os
+from itertools import product
 
 _COLS = ["nucleoside", "monoisotopic_mass"]
 
@@ -58,7 +59,16 @@ print(TABLE_PATH)
 PHOSPHATE_LINK_MASS = 62
 
 # Additional weights for different breakage options
-BREAKAGES = {0: ["c-y"]} # c-y only
+START_OPTIONS = {"START": -350, "a": -79, "b": -63, "c": 0, "d": -16}
+END_OPTIONS = {"END": -420, "w": 79, "x": 63, "y": 0, "z": 16}
+
+BREAKAGES = {}
+for start, end in list(product(START_OPTIONS, END_OPTIONS)):
+    val = START_OPTIONS[start] + END_OPTIONS[end]
+    if val not in BREAKAGES:
+        BREAKAGES[val] = []
+    BREAKAGES[val] += [f"{start}-{end}"]
+
 BREAKAGES = {int(val / TOLERANCE): BREAKAGES[val] for val in BREAKAGES.keys()}
 
 MATCHING_THRESHOLD = 10  # This dictates a matching threshold such that we consider -MATCHING_THRESHOLD < (sum(masses) - target_mass) < MATCHING_THRESHOLD to be matched!
