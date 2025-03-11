@@ -66,7 +66,7 @@ def test_testcase_with_dp(testcase):
     # with open(base_path / "meta.yaml", "r") as f:
     #    meta = yaml.safe_load(f)
 
-    predicted_mass_explanation = explain_mass_with_dp(testcase[0], True)
+    predicted_mass_explanation = explain_mass_with_dp(testcase[0], False)
     # print(predicted_mass_explanation)
 
     breakage = list(testcase[1].keys())[0]
@@ -85,7 +85,7 @@ def test_testcase_with_dp_and_memo(testcase):
     # with open(base_path / "meta.yaml", "r") as f:
     #    meta = yaml.safe_load(f)
 
-    predicted_mass_explanation = explain_mass_with_dp(testcase[0], False)
+    predicted_mass_explanation = explain_mass_with_dp(testcase[0], True)
     # print(predicted_mass_explanation)
 
     breakage = list(testcase[1].keys())[0]
