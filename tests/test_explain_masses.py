@@ -48,52 +48,29 @@ def test_testcase(testcase):
     #    meta = yaml.safe_load(f)
 
     predicted_mass_explanation = explain_mass(testcase[0])
-    # print(predicted_mass_explanation)
 
     breakage = list(testcase[1].keys())[0]
+    sorted_explanations = [tuple(sorted(solution)) for solution in
+                           predicted_mass_explanation.explanations[breakage]]
 
-    # Need to check if any possible permutation of testcase_permutations is in predicted_mass_explaination
-    testcase_permutations = tuple(itertools.permutations(testcase[1][breakage]))
-
-    assert any(
-        perm in predicted_mass_explanation.explanations[breakage]
-        for perm in testcase_permutations
-    )
+    assert (tuple(sorted(testcase[1][breakage])) in sorted_explanations)
 
 @pytest.mark.parametrize("testcase", MASS_SEQ_DICT.items())
 def test_testcase_with_dp(testcase):
-    # base_path = _TESTCASES / testcase
-    # with open(base_path / "meta.yaml", "r") as f:
-    #    meta = yaml.safe_load(f)
-
     predicted_mass_explanation = explain_mass_with_dp(testcase[0], False)
-    # print(predicted_mass_explanation)
 
     breakage = list(testcase[1].keys())[0]
+    sorted_explanations = [tuple(sorted(solution)) for solution in
+                           predicted_mass_explanation.explanations[breakage]]
 
-    # Need to check if any possible permutation of testcase_permutations is in predicted_mass_explaination
-    testcase_permutations = tuple(itertools.permutations(testcase[1][breakage]))
-
-    assert any(
-        perm in predicted_mass_explanation.explanations[breakage]
-        for perm in testcase_permutations
-    )
+    assert (tuple(sorted(testcase[1][breakage])) in sorted_explanations)
 
 @pytest.mark.parametrize("testcase", MASS_SEQ_DICT.items())
 def test_testcase_with_dp_and_memo(testcase):
-    # base_path = _TESTCASES / testcase
-    # with open(base_path / "meta.yaml", "r") as f:
-    #    meta = yaml.safe_load(f)
-
     predicted_mass_explanation = explain_mass_with_dp(testcase[0], True)
-    # print(predicted_mass_explanation)
 
     breakage = list(testcase[1].keys())[0]
+    sorted_explanations = [tuple(sorted(solution)) for solution in
+                           predicted_mass_explanation.explanations[breakage]]
 
-    # Need to check if any possible permutation of testcase_permutations is in predicted_mass_explaination
-    testcase_permutations = tuple(itertools.permutations(testcase[1][breakage]))
-
-    assert any(
-        perm in predicted_mass_explanation.explanations[breakage]
-        for perm in testcase_permutations
-    )
+    assert (tuple(sorted(testcase[1][breakage])) in sorted_explanations)
