@@ -7,6 +7,7 @@ _COLS = ["nucleoside", "monoisotopic_mass"]
 
 REDUCE_TABLE = True
 REDUCE_SET = False
+USE_BITS = True
 
 MASSES = pl.read_csv(
     (importlib.resources.files(__package__) / "assets" /
@@ -69,6 +70,7 @@ for start, end in list(product(START_OPTIONS, END_OPTIONS)):
         BREAKAGES[val] = []
     BREAKAGES[val] += [f"{start}-{end}"]
 
+# BREAKAGES = {0: ["c-y"]}
 BREAKAGES = {int(val / TOLERANCE): BREAKAGES[val] for val in BREAKAGES.keys()}
 
 MATCHING_THRESHOLD = 10  # This dictates a matching threshold such that we consider -MATCHING_THRESHOLD < (sum(masses) - target_mass) < MATCHING_THRESHOLD to be matched!

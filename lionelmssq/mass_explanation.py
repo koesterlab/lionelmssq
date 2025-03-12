@@ -14,10 +14,63 @@ from lionelmssq.masses import TABLE_PATH
 from lionelmssq.masses import MATCHING_THRESHOLD
 from lionelmssq.masses import MAX_MASS
 from lionelmssq.masses import BREAKAGES
+from lionelmssq.masses import USE_BITS
 
 @dataclass
 class MassExplanations:
     explanations: Set[Tuple[str]]
+
+
+def set_up_bit_table():
+    """
+    Calculate complete bit-representation mass table with dynamic programming.
+    """
+    integer_masses = pl.Series(
+        EXPLANATION_MASSES.select(pl.col("tolerated_integer_masses"))
+    ).to_list()
+
+    # Add a default weight for easier initialization
+    integer_masses += [0]
+
+    # Ensure unique entries after tolerance correction
+    integer_masses = list(set(integer_masses))
+
+    # Sort the tolerated_integer_masses for better overview
+    integer_masses.sort()
+
+
+    # Initialize bit-representation numpy table
+    max_col = int(np.ceil((MAX_MASS+1) / 4))  # 4 cells fit into 1 uint8
+    dp_table = np.zeros((len(integer_masses), max_col), dtype=np.uint8)
+    dp_table[0, 0] = 192
+
+    # Fill DP table row-wise
+    for i in range(1, len(integer_masses)):
+        # Case: Start new row (i.e. move on to new nucleotide) by initializing reachable cells from before
+        dp_table[i] = [((val | (val >> 1)) & 85) for val in dp_table[i-1]]
+
+        # Define number of cells to move (step) and bit shift in a cell (shift)
+        step = int(integer_masses[i] / 4)
+        shift = integer_masses[i] % 4
+
+        # Case: Add more of current nucleotide
+        for j in range(max_col):
+            # Consider cell defined by step
+            if step+j < max_col:
+                dp_table[i, j+step] |= 170 & (
+                    (dp_table[i, j] >> (2 * shift) << 1) |
+                    (dp_table[i, j] >> (2 * shift)))
+
+            # If shift is needed, consider the next cell as well
+            if shift != 0 and j+step+1 < max_col:
+                dp_table[i, j+step+1] |= 170 & (
+                    (dp_table[i, j] << 2 * (4-shift) << 1) |
+                    (dp_table[i, j] << 2 * (4-shift)))
+
+    # Adjust last column for unused cells
+    dp_table[:, -1] &= np.uint8(255) << 2 * (max_col-(MAX_MASS+1) % max_col)
+
+    return dp_table
 
 
 def set_up_mass_table():
@@ -86,8 +139,14 @@ def explain_mass_with_dp(mass: float, with_memo: bool) -> MassExplanations:
         dp_table = set_up_mass_table()
         np.save(TABLE_PATH, dp_table)
 
+    # Compute and save bit-representation DP table if not existing
+    if not pathlib.Path(f"{TABLE_PATH}.bits.npy").is_file():
+        print('Table not found')
+        dp_table = set_up_bit_table()
+        np.save(f"{TABLE_PATH}.bits", dp_table)
+
     # Read DP table
-    dp_table = np.load(f"{TABLE_PATH}.npy")
+    dp_table = np.load(f"{TABLE_PATH}{'.bits' if USE_BITS else ''}.npy")
 
     memo = {}
     def backtrack_with_memo(total_mass, current_idx):
@@ -105,9 +164,13 @@ def explain_mass_with_dp(mass: float, with_memo: bool) -> MassExplanations:
         if total_mass == 0:
             return [[]]
 
+        current_value = (
+            dp_table[current_idx, total_mass // 4] >> 2 * (3-total_mass % 4)
+            if USE_BITS
+            else dp_table[current_idx, total_mass])
+
         # Return empty list for unreachable cells
-        current_value = dp_table[current_idx, total_mass]
-        if current_value == 0.0:
+        if current_value % 4 == 0.0:
             return []
 
         solutions = []
@@ -116,7 +179,7 @@ def explain_mass_with_dp(mass: float, with_memo: bool) -> MassExplanations:
             solutions += backtrack_with_memo(total_mass, current_idx-1)
 
         # Backtrack to the next left-side column if possible
-        if current_value >= 2.0:
+        if (current_value >> 1) % 2 == 1:
             solutions += [[current_weight]+entry for entry in
                           backtrack_with_memo(total_mass-current_weight,
                                         current_idx)]
@@ -137,9 +200,13 @@ def explain_mass_with_dp(mass: float, with_memo: bool) -> MassExplanations:
         if total_mass == 0:
             return [[]]
 
+        current_value = (
+            dp_table[current_idx, total_mass // 4] >> 2 * (3-total_mass % 4)
+            if USE_BITS
+            else dp_table[current_idx, total_mass])
+
         # Return empty list for unreachable cells
-        current_value = dp_table[current_idx, total_mass]
-        if current_value == 0.0:
+        if current_value % 4 == 0.0:
             return []
 
         solutions = []
@@ -148,7 +215,7 @@ def explain_mass_with_dp(mass: float, with_memo: bool) -> MassExplanations:
             solutions += backtrack(total_mass, current_idx-1)
 
         # Backtrack to the next left-side column if possible
-        if current_value >= 2.0:
+        if (current_value >> 1) % 2 == 1:
             solutions += [[current_weight]+entry for entry in
                           backtrack(total_mass-current_weight, current_idx)]
 
