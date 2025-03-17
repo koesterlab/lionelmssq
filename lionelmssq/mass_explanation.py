@@ -133,11 +133,11 @@ def explain_mass_with_dp(mass: float, with_memo: bool) -> MassExplanations:
     # Sort the tolerated_integer_masses, makes life easier
     tolerated_integer_masses.sort()
 
-    # Compute and save DP table if not existing
-    if not pathlib.Path(f"{TABLE_PATH}.npy").is_file():
-        print('Table not found')
-        dp_table = set_up_mass_table()
-        np.save(TABLE_PATH, dp_table)
+    # # Compute and save DP table if not existing
+    # if not pathlib.Path(f"{TABLE_PATH}.npy").is_file():
+    #     print('Table not found')
+    #     dp_table = set_up_mass_table()
+    #     np.save(TABLE_PATH, dp_table)
 
     # Compute and save bit-representation DP table if not existing
     if not pathlib.Path(f"{TABLE_PATH}.bits.npy").is_file():
@@ -226,8 +226,8 @@ def explain_mass_with_dp(mass: float, with_memo: bool) -> MassExplanations:
         # Compute all valid solutions within an interval of MATCHING_THRESHOLD
         solutions = []
         for value in range(
-                target+breakage_weight-MATCHING_THRESHOLD,
-                target+breakage_weight+MATCHING_THRESHOLD):
+                target-breakage_weight-MATCHING_THRESHOLD,
+                target-breakage_weight+MATCHING_THRESHOLD):
             solutions += backtrack_with_memo(
                 value, len(tolerated_integer_masses)-1) if with_memo \
                 else backtrack(value, len(tolerated_integer_masses)-1)
@@ -337,7 +337,7 @@ def explain_mass(mass: float) -> MassExplanations:
     solution_tolerated_integer_masses = {}
     for breakage_weight in BREAKAGES:
         # Start with the full target and all tolerated_integer_masses
-        solutions = dp(target+breakage_weight, 0)
+        solutions = dp(target-breakage_weight, 0)
         for breakage in BREAKAGES[breakage_weight]:
             solution_tolerated_integer_masses[breakage] = solutions
 

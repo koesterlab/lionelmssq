@@ -54,23 +54,34 @@ if not os.path.exists(subdir_path):
 
 print(TABLE_PATH)
 
-# TODO: Use monoisotopic masses to calculate a more accurate link mass
-# Mass of P (31) + 2*O (2*16) - H (1)
-# PHOSPHATE_LINK_MASS = 0
-PHOSPHATE_LINK_MASS = 62
+PHOSPHATE_LINK_MASS = 61.95577  # P(30.97389) + 2*O(2*15.99491) + H(1.00783)
 
 # Additional weights for different breakage options
-START_OPTIONS = {"START": -350, "a": -79, "b": -63, "c": 0, "d": -16}
-END_OPTIONS = {"END": -420, "w": 79, "x": 63, "y": 0, "z": 16}
+START_OPTIONS = {
+    "START": 537.11887,           # current START tag
+    "a/w": 79.96633,              # additional P+3O+H
+    "b/x": 63.97142,              # additional P+2O+H
+    "c/y": 0,                     # neutral state (for standard unit)
+    "d/z": -15.99491,             # lost O
+}
+
+END_OPTIONS = {
+    "END": 373.16714,             # current END tag
+    "d/z": 15.99491,              # additional O
+    "c/y": 0,                     # neutral state (for standard unit)
+    "c/y-cyclization": -18.01056, # lost O+2H
+    "b/x": -63.97142,             # lost P+2O+H
+    "a/w": -79.96633,             # lost P+3O+H
+}
 
 BREAKAGES = {}
 for start, end in list(product(START_OPTIONS, END_OPTIONS)):
     val = START_OPTIONS[start] + END_OPTIONS[end]
     if val not in BREAKAGES:
         BREAKAGES[val] = []
-    BREAKAGES[val] += [f"{start}-{end}"]
+    BREAKAGES[val] += [f"{start}_{end}"]
 
-# BREAKAGES = {0: ["c-y"]}
+# BREAKAGES = {0: ["c/y_c/y"]}
 BREAKAGES = {int(val / TOLERANCE): BREAKAGES[val] for val in BREAKAGES.keys()}
 
 MATCHING_THRESHOLD = 10  # This dictates a matching threshold such that we consider -MATCHING_THRESHOLD < (sum(masses) - target_mass) < MATCHING_THRESHOLD to be matched!
