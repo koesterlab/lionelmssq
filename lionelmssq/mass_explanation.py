@@ -180,7 +180,7 @@ def explain_mass_with_dp(mass: float, with_memo: bool) -> MassExplanations:
 
         # Backtrack to the next left-side column if possible
         if (current_value >> 1) % 2 == 1:
-            solutions += [[current_weight]+entry for entry in
+            solutions += [entry+[current_weight] for entry in
                           backtrack_with_memo(total_mass-current_weight,
                                         current_idx)]
 
@@ -216,7 +216,7 @@ def explain_mass_with_dp(mass: float, with_memo: bool) -> MassExplanations:
 
         # Backtrack to the next left-side column if possible
         if (current_value >> 1) % 2 == 1:
-            solutions += [[current_weight]+entry for entry in
+            solutions += [entry+[current_weight] for entry in
                           backtrack(total_mass-current_weight, current_idx)]
 
         return solutions
