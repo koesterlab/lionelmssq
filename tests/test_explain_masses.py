@@ -46,38 +46,44 @@ def test_testcase(testcase):
     # with open(base_path / "meta.yaml", "r") as f:
     #    meta = yaml.safe_load(f)
 
-    predicted_mass_explanation = explain_mass(testcase[0])
+    predicted_mass_explanations = explain_mass(testcase[0])
 
     breakage = list(testcase[1].keys())[0]
-    sorted_explanations = [
+    explanations = [
         tuple(solution)
-        for solution in predicted_mass_explanation.explanations[breakage]
+        for expl in predicted_mass_explanations
+        for solution in expl.explanations
+        if expl.breakage == breakage
     ]
 
-    assert tuple(testcase[1][breakage]) in sorted_explanations
+    assert tuple(testcase[1][breakage]) in explanations
 
 
 @pytest.mark.parametrize("testcase", MASS_SEQ_DICT.items())
 def test_testcase_with_dp(testcase):
-    predicted_mass_explanation = explain_mass_with_dp(testcase[0], False)
+    predicted_mass_explanations = explain_mass_with_dp(testcase[0], False)
 
     breakage = list(testcase[1].keys())[0]
-    sorted_explanations = [
+    explanations = [
         tuple(solution)
-        for solution in predicted_mass_explanation.explanations[breakage]
+        for expl in predicted_mass_explanations
+        for solution in expl.explanations
+        if expl.breakage == breakage
     ]
 
-    assert tuple(testcase[1][breakage]) in sorted_explanations
+    assert tuple(testcase[1][breakage]) in explanations
 
 
 @pytest.mark.parametrize("testcase", MASS_SEQ_DICT.items())
 def test_testcase_with_dp_and_memo(testcase):
-    predicted_mass_explanation = explain_mass_with_dp(testcase[0], True)
+    predicted_mass_explanations = explain_mass_with_dp(testcase[0], True)
 
     breakage = list(testcase[1].keys())[0]
-    sorted_explanations = [
+    explanations = [
         tuple(solution)
-        for solution in predicted_mass_explanation.explanations[breakage]
+        for expl in predicted_mass_explanations
+        for solution in expl.explanations
+        if expl.breakage == breakage
     ]
 
-    assert tuple(testcase[1][breakage]) in sorted_explanations
+    assert tuple(testcase[1][breakage]) in explanations

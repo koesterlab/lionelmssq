@@ -18,6 +18,7 @@ from lionelmssq.masses import USE_BITS
 
 @dataclass
 class MassExplanations:
+    breakage: str
     explanations: Set[Tuple[str]]
 
 
@@ -114,7 +115,7 @@ def set_up_mass_table():
     return dp_table
 
 
-def explain_mass_with_dp(mass: float, with_memo: bool) -> MassExplanations:
+def explain_mass_with_dp(mass: float, with_memo: bool) -> list[MassExplanations]:
     """
     Return all possible combinations of nucleosides that could sum up to the given mass.
     """
@@ -248,7 +249,7 @@ def explain_mass_with_dp(mass: float, with_memo: bool) -> MassExplanations:
         for breakage in BREAKAGES[breakage_weight]:
             solution_tolerated_integer_masses[breakage] = solutions
 
-    solution_names = {}
+    explanations = []
     for breakage in solution_tolerated_integer_masses.keys():
         # Convert the tolerated_integer_masses to the respective nucleoside names
         solutions = set()
@@ -289,13 +290,14 @@ def explain_mass_with_dp(mass: float, with_memo: bool) -> MassExplanations:
                         .to_list()
                     )
                 )
-        solution_names[breakage] = solutions
+        # Add desired Dataclass object to list
+        explanations.append(MassExplanations(breakage=breakage, explanations=solutions))
 
-    # Return the desired Dataclass object
-    return MassExplanations(explanations=solution_names)
+    # Return list of explanations
+    return explanations
 
 
-def explain_mass(mass: float) -> MassExplanations:
+def explain_mass(mass: float) -> list[MassExplanations]:
     """
     Returns all the possible combinations of nucleosides that could sum up to the given mass.
     """
@@ -356,7 +358,7 @@ def explain_mass(mass: float) -> MassExplanations:
         for breakage in BREAKAGES[breakage_weight]:
             solution_tolerated_integer_masses[breakage] = solutions
 
-    solution_names = {}
+    explanations = []
     for breakage in solution_tolerated_integer_masses.keys():
         # Convert the tolerated_integer_masses to the respective nucleoside names
         solutions = set()
@@ -397,7 +399,8 @@ def explain_mass(mass: float) -> MassExplanations:
                         .to_list()
                     )
                 )
-        solution_names[breakage] = solutions
+        # Add desired Dataclass object to list
+        explanations.append(MassExplanations(breakage=breakage, explanations=solutions))
 
-    # Return the desired Dataclass object
-    return MassExplanations(explanations=solution_names)
+    # Return list of explanations
+    return explanations
