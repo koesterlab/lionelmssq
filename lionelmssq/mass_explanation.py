@@ -15,6 +15,7 @@ from lionelmssq.masses import MAX_MASS
 from lionelmssq.masses import BREAKAGES
 from lionelmssq.masses import USE_BITS
 
+
 @dataclass
 class MassExplanations:
     explanations: Set[Tuple[str]]
@@ -37,16 +38,15 @@ def set_up_bit_table():
     # Sort the tolerated_integer_masses for better overview
     integer_masses.sort()
 
-
     # Initialize bit-representation numpy table
-    max_col = int(np.ceil((MAX_MASS+1) / 4))  # 4 cells fit into 1 uint8
+    max_col = int(np.ceil((MAX_MASS + 1) / 4))  # 4 cells fit into 1 uint8
     dp_table = np.zeros((len(integer_masses), max_col), dtype=np.uint8)
     dp_table[0, 0] = 192
 
     # Fill DP table row-wise
     for i in range(1, len(integer_masses)):
         # Case: Start new row (i.e. move on to new nucleotide) by initializing reachable cells from before
-        dp_table[i] = [((val | (val >> 1)) & 85) for val in dp_table[i-1]]
+        dp_table[i] = [((val | (val >> 1)) & 85) for val in dp_table[i - 1]]
 
         # Define number of cells to move (step) and bit shift in a cell (shift)
         step = int(integer_masses[i] / 4)
@@ -55,19 +55,21 @@ def set_up_bit_table():
         # Case: Add more of current nucleotide
         for j in range(max_col):
             # Consider cell defined by step
-            if step+j < max_col:
-                dp_table[i, j+step] |= 170 & (
-                    (dp_table[i, j] >> (2 * shift) << 1) |
-                    (dp_table[i, j] >> (2 * shift)))
+            if step + j < max_col:
+                dp_table[i, j + step] |= 170 & (
+                    (dp_table[i, j] >> (2 * shift) << 1)
+                    | (dp_table[i, j] >> (2 * shift))
+                )
 
             # If shift is needed, consider the next cell as well
-            if shift != 0 and j+step+1 < max_col:
-                dp_table[i, j+step+1] |= 170 & (
-                    (dp_table[i, j] << 2 * (4-shift) << 1) |
-                    (dp_table[i, j] << 2 * (4-shift)))
+            if shift != 0 and j + step + 1 < max_col:
+                dp_table[i, j + step + 1] |= 170 & (
+                    (dp_table[i, j] << 2 * (4 - shift) << 1)
+                    | (dp_table[i, j] << 2 * (4 - shift))
+                )
 
     # Adjust last column for unused cells
-    dp_table[:, -1] &= np.uint8(255) << 2 * (max_col-(MAX_MASS+1) % max_col)
+    dp_table[:, -1] &= np.uint8(255) << 2 * (max_col - (MAX_MASS + 1) % max_col)
 
     return dp_table
 
@@ -90,23 +92,23 @@ def set_up_mass_table():
     integer_masses.sort()
 
     # Initialize numpy table
-    dp_table = np.zeros((len(integer_masses), MAX_MASS+1), dtype=np.uint8)
+    dp_table = np.zeros((len(integer_masses), MAX_MASS + 1), dtype=np.uint8)
     dp_table[0, 0] = 3.0
 
     # Fill DP table row-wise
     for i in range(1, len(integer_masses)):
         # Case: Start new row (i.e. move on to new nucleoside) by initializing
         # reachable cells from before
-        dp_table[i] = [int(val != 0.0) for val in dp_table[i-1]]
+        dp_table[i] = [int(val != 0.0) for val in dp_table[i - 1]]
 
         # Case: Add more of current nucleoside
-        for j in range(MAX_MASS+1):
+        for j in range(MAX_MASS + 1):
             # If cell is not reachable, skip it
             if dp_table[i, j] == 0.0:
                 continue
 
             # Add another nucleoside if possible
-            if integer_masses[i]+j <= MAX_MASS:
+            if integer_masses[i] + j <= MAX_MASS:
                 dp_table[i, j + integer_masses[i]] += 2.0
 
     return dp_table
@@ -140,7 +142,7 @@ def explain_mass_with_dp(mass: float, with_memo: bool) -> MassExplanations:
 
     # Compute and save bit-representation DP table if not existing
     if not pathlib.Path(f"{TABLE_PATH}.bits.npy").is_file():
-        print('Table not found')
+        print("Table not found")
         dp_table = set_up_bit_table()
         np.save(f"{TABLE_PATH}.bits", dp_table)
 
@@ -148,6 +150,7 @@ def explain_mass_with_dp(mass: float, with_memo: bool) -> MassExplanations:
     dp_table = np.load(f"{TABLE_PATH}{'.bits' if USE_BITS else ''}.npy")
 
     memo = {}
+
     def backtrack_with_memo(total_mass, current_idx):
         current_weight = tolerated_integer_masses[current_idx]
 
@@ -164,9 +167,10 @@ def explain_mass_with_dp(mass: float, with_memo: bool) -> MassExplanations:
             return [[]]
 
         current_value = (
-            dp_table[current_idx, total_mass // 4] >> 2 * (3-total_mass % 4)
+            dp_table[current_idx, total_mass // 4] >> 2 * (3 - total_mass % 4)
             if USE_BITS
-            else dp_table[current_idx, total_mass])
+            else dp_table[current_idx, total_mass]
+        )
 
         # Return empty list for unreachable cells
         if current_value % 4 == 0.0:
@@ -175,13 +179,16 @@ def explain_mass_with_dp(mass: float, with_memo: bool) -> MassExplanations:
         solutions = []
         # Backtrack to the next row above if possible
         if current_value % 2 == 1:
-            solutions += backtrack_with_memo(total_mass, current_idx-1)
+            solutions += backtrack_with_memo(total_mass, current_idx - 1)
 
         # Backtrack to the next left-side column if possible
         if (current_value >> 1) % 2 == 1:
-            solutions += [entry+[current_weight] for entry in
-                          backtrack_with_memo(total_mass-current_weight,
-                                        current_idx)]
+            solutions += [
+                entry + [current_weight]
+                for entry in backtrack_with_memo(
+                    total_mass - current_weight, current_idx
+                )
+            ]
 
         # Store result in memo
         memo[(total_mass, current_idx)] = solutions
@@ -200,9 +207,10 @@ def explain_mass_with_dp(mass: float, with_memo: bool) -> MassExplanations:
             return [[]]
 
         current_value = (
-            dp_table[current_idx, total_mass // 4] >> 2 * (3-total_mass % 4)
+            dp_table[current_idx, total_mass // 4] >> 2 * (3 - total_mass % 4)
             if USE_BITS
-            else dp_table[current_idx, total_mass])
+            else dp_table[current_idx, total_mass]
+        )
 
         # Return empty list for unreachable cells
         if current_value % 4 == 0.0:
@@ -211,12 +219,14 @@ def explain_mass_with_dp(mass: float, with_memo: bool) -> MassExplanations:
         solutions = []
         # Backtrack to the next row above if possible
         if current_value % 2 == 1:
-            solutions += backtrack(total_mass, current_idx-1)
+            solutions += backtrack(total_mass, current_idx - 1)
 
         # Backtrack to the next left-side column if possible
         if (current_value >> 1) % 2 == 1:
-            solutions += [entry+[current_weight] for entry in
-                          backtrack(total_mass-current_weight, current_idx)]
+            solutions += [
+                entry + [current_weight]
+                for entry in backtrack(total_mass - current_weight, current_idx)
+            ]
 
         return solutions
 
@@ -225,16 +235,18 @@ def explain_mass_with_dp(mass: float, with_memo: bool) -> MassExplanations:
         # Compute all valid solutions within an interval of MATCHING_THRESHOLD
         solutions = []
         for value in range(
-                target-breakage_weight-MATCHING_THRESHOLD,
-                target-breakage_weight+MATCHING_THRESHOLD):
-            solutions += backtrack_with_memo(
-                value, len(tolerated_integer_masses)-1) if with_memo \
-                else backtrack(value, len(tolerated_integer_masses)-1)
+            target - breakage_weight - MATCHING_THRESHOLD,
+            target - breakage_weight + MATCHING_THRESHOLD,
+        ):
+            solutions += (
+                backtrack_with_memo(value, len(tolerated_integer_masses) - 1)
+                if with_memo
+                else backtrack(value, len(tolerated_integer_masses) - 1)
+            )
 
         # Add valid solutions to dictionary of breakpoint options
         for breakage in BREAKAGES[breakage_weight]:
             solution_tolerated_integer_masses[breakage] = solutions
-
 
     solution_names = {}
     for breakage in solution_tolerated_integer_masses.keys():
@@ -253,7 +265,9 @@ def explain_mass_with_dp(mass: float, with_memo: bool) -> MassExplanations:
                 solutions.update(
                     product(
                         *combo_df.join(
-                            EXPLANATION_MASSES, on="tolerated_integer_masses", how="left"
+                            EXPLANATION_MASSES,
+                            on="tolerated_integer_masses",
+                            how="left",
                         )
                         .get_column("nucleoside")
                         .to_list()
@@ -267,7 +281,9 @@ def explain_mass_with_dp(mass: float, with_memo: bool) -> MassExplanations:
                 solutions.add(
                     tuple(
                         combo_df.join(
-                            EXPLANATION_MASSES, on="tolerated_integer_masses", how="left"
+                            EXPLANATION_MASSES,
+                            on="tolerated_integer_masses",
+                            how="left",
                         )
                         .get_column("nucleoside")
                         .to_list()
@@ -336,7 +352,7 @@ def explain_mass(mass: float) -> MassExplanations:
     solution_tolerated_integer_masses = {}
     for breakage_weight in BREAKAGES:
         # Start with the full target and all tolerated_integer_masses
-        solutions = dp(target-breakage_weight, 0)
+        solutions = dp(target - breakage_weight, 0)
         for breakage in BREAKAGES[breakage_weight]:
             solution_tolerated_integer_masses[breakage] = solutions
 
@@ -357,7 +373,9 @@ def explain_mass(mass: float) -> MassExplanations:
                 solutions.update(
                     product(
                         *combo_df.join(
-                            EXPLANATION_MASSES, on="tolerated_integer_masses", how="left"
+                            EXPLANATION_MASSES,
+                            on="tolerated_integer_masses",
+                            how="left",
                         )
                         .get_column("nucleoside")
                         .to_list()
@@ -371,7 +389,9 @@ def explain_mass(mass: float) -> MassExplanations:
                 solutions.add(
                     tuple(
                         combo_df.join(
-                            EXPLANATION_MASSES, on="tolerated_integer_masses", how="left"
+                            EXPLANATION_MASSES,
+                            on="tolerated_integer_masses",
+                            how="left",
                         )
                         .get_column("nucleoside")
                         .to_list()
