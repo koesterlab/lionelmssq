@@ -1,6 +1,5 @@
 # import importlib.resources
 # import os
-import itertools
 import pytest
 # import yaml
 

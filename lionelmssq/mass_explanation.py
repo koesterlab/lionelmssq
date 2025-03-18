@@ -5,7 +5,6 @@ from itertools import product
 # from lionelmssq.masses import MASSES
 import polars as pl
 import pathlib
-import math
 import numpy as np
 
 from lionelmssq.masses import EXPLANATION_MASSES
