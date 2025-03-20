@@ -52,10 +52,10 @@ def determine_terminal_fragments(
 
     explanation_masses = explanation_masses.vstack(nucleoside_df)
 
-    is_start = [] #Start tag in an explanation but NOT end tag in the same explanation
-    is_end = [] #End tag in an explanation but NOT start tag in the same explanation
-    is_start_end = [] #Both start and end tag in the same explanation (WITH OR WITHOUT MS1 MASS)
-    is_internal = [] #NO tags in an explanation
+    is_start = []  # Start tag in an explanation but NOT end tag in the SAME explanation
+    is_end = []  # End tag in an explanation but NOT start tag in the SAME explanation
+    is_start_end = []  # Both start and end tag in the same explanation (WITH OR WITHOUT MS1 MASS)
+    is_internal = []  # NO tags in an explanation
     skip_mass = []
     # nucleotide_only_masses = []
     mass_explanations = []
@@ -163,9 +163,9 @@ def determine_terminal_fragments(
                     is_start_end.append(False)
             else:
                 if any(
-                        "5Tag" in element and "3Tag" in element
-                        for element in explained_mass.explanations
-                    ):
+                    "5Tag" in element and "3Tag" in element
+                    for element in explained_mass.explanations
+                ):
                     is_start_end.append(True)
                 else:
                     is_start_end.append(False)
@@ -186,7 +186,8 @@ def determine_terminal_fragments(
             else:
                 is_end.append(False)
 
-            if any("5Tag" not in element and "3Tag" not in element
+            if any(
+                "5Tag" not in element and "3Tag" not in element
                 for element in explained_mass.explanations
             ):
                 is_internal.append(True)
