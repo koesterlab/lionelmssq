@@ -8,6 +8,7 @@ _COLS = ["nucleoside", "monoisotopic_mass"]
 REDUCE_TABLE = True
 REDUCE_SET = False
 USE_BITS = True
+COMPRESSION_RATE = 32
 
 MASSES = pl.read_csv(
     (
@@ -43,7 +44,7 @@ TOLERANCE = 1e-5  # For perfect matching, the TOLERANCE should be the precision 
 TABLE_PATH = (
     f"dp_table/{'reduced' if REDUCE_TABLE else 'full'}_table."
     f"{'reduced' if REDUCE_SET else 'full'}_set/"
-    f"tolerance_{TOLERANCE}"
+    f"tol_{TOLERANCE:.0E}"
 )
 
 if not os.path.exists("dp_table"):

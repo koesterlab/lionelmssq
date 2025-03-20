@@ -14,6 +14,41 @@ from lionelmssq.masses import MATCHING_THRESHOLD
 from lionelmssq.masses import MAX_MASS
 from lionelmssq.masses import BREAKAGES
 from lionelmssq.masses import USE_BITS
+from lionelmssq.masses import COMPRESSION_RATE
+
+match COMPRESSION_RATE:
+    case 4:
+        settings = {
+            "type": np.uint8,
+            "init": 0xC0,
+            "alt_first": 0xAA,
+            "alt_sec": 0x55,
+            "full": np.uint8(0xFF),
+        }
+    case 8:
+        settings = {
+            "type": np.uint16,
+            "init": 0xC000,
+            "alt_first": 0xAAAA,
+            "alt_sec": 0x5555,
+            "full": np.uint16(0xFFFF),
+        }
+    case 16:
+        settings = {
+            "type": np.uint32,
+            "init": 0xC0000000,
+            "alt_first": 0xAAAAAAAA,
+            "alt_sec": 0x55555555,
+            "full": np.uint32(0xFFFFFFFF),
+        }
+    case 32:
+        settings = {
+            "type": np.uint64,
+            "init": 0xC000000000000000,
+            "alt_first": 0xAAAAAAAAAAAAAAAA,
+            "alt_sec": 0x5555555555555555,
+            "full": np.uint64(0xFFFFFFFFFFFFFFFF),
+        }
 
 
 @dataclass
@@ -40,37 +75,39 @@ def set_up_bit_table():
     integer_masses.sort()
 
     # Initialize bit-representation numpy table
-    max_col = int(np.ceil((MAX_MASS + 1) / 4))  # 4 cells fit into 1 uint8
-    dp_table = np.zeros((len(integer_masses), max_col), dtype=np.uint8)
-    dp_table[0, 0] = 192
+    max_col = int(np.ceil((MAX_MASS + 1) / COMPRESSION_RATE))
+    dp_table = np.zeros((len(integer_masses), max_col), dtype=settings["type"])
+    dp_table[0, 0] = settings["init"]
 
     # Fill DP table row-wise
     for i in range(1, len(integer_masses)):
         # Case: Start new row (i.e. move on to new nucleotide) by initializing reachable cells from before
-        dp_table[i] = [((val | (val >> 1)) & 85) for val in dp_table[i - 1]]
+        dp_table[i] = [
+            ((val | (val >> 1)) & settings["alt_sec"]) for val in dp_table[i - 1]
+        ]
 
         # Define number of cells to move (step) and bit shift in a cell (shift)
-        step = int(integer_masses[i] / 4)
-        shift = integer_masses[i] % 4
+        step = int(integer_masses[i] / COMPRESSION_RATE)
+        shift = integer_masses[i] % COMPRESSION_RATE
 
         # Case: Add more of current nucleotide
         for j in range(max_col):
             # Consider cell defined by step
             if step + j < max_col:
-                dp_table[i, j + step] |= 170 & (
+                dp_table[i, j + step] |= settings["alt_first"] & (
                     (dp_table[i, j] >> (2 * shift) << 1)
                     | (dp_table[i, j] >> (2 * shift))
                 )
 
             # If shift is needed, consider the next cell as well
             if shift != 0 and j + step + 1 < max_col:
-                dp_table[i, j + step + 1] |= 170 & (
-                    (dp_table[i, j] << 2 * (4 - shift) << 1)
-                    | (dp_table[i, j] << 2 * (4 - shift))
+                dp_table[i, j + step + 1] |= settings["alt_first"] & (
+                    (dp_table[i, j] << 2 * (COMPRESSION_RATE - shift) << 1)
+                    | (dp_table[i, j] << 2 * (COMPRESSION_RATE - shift))
                 )
 
     # Adjust last column for unused cells
-    dp_table[:, -1] &= np.uint8(255) << 2 * (max_col - (MAX_MASS + 1) % max_col)
+    dp_table[:, -1] &= settings["full"] << 2 * (max_col - (MAX_MASS + 1) % max_col)
 
     return dp_table
 
@@ -136,19 +173,21 @@ def explain_mass_with_dp(mass: float, with_memo: bool) -> list[MassExplanations]
     tolerated_integer_masses.sort()
 
     # # Compute and save DP table if not existing
-    # if not pathlib.Path(f"{TABLE_PATH}.npy").is_file():
+    # if not pathlib.Path(f"{TABLE_PATH}.1_per_cell.npy").is_file():
     #     print('Table not found')
     #     dp_table = set_up_mass_table()
-    #     np.save(TABLE_PATH, dp_table)
+    #     np.save(f"TABLE_PATH.1_per_cell", dp_table)
 
     # Compute and save bit-representation DP table if not existing
-    if not pathlib.Path(f"{TABLE_PATH}.bits.npy").is_file():
+    if not pathlib.Path(f"{TABLE_PATH}.{COMPRESSION_RATE}_per_cell.npy").is_file():
         print("Table not found")
         dp_table = set_up_bit_table()
-        np.save(f"{TABLE_PATH}.bits", dp_table)
+        np.save(f"{TABLE_PATH}.{COMPRESSION_RATE}_per_cell", dp_table)
 
     # Read DP table
-    dp_table = np.load(f"{TABLE_PATH}{'.bits' if USE_BITS else ''}.npy")
+    dp_table = np.load(
+        f"{TABLE_PATH}.{COMPRESSION_RATE if USE_BITS else 1}_per_cell.npy"
+    )
 
     memo = {}
 
@@ -168,13 +207,14 @@ def explain_mass_with_dp(mass: float, with_memo: bool) -> list[MassExplanations]
             return [[]]
 
         current_value = (
-            dp_table[current_idx, total_mass // 4] >> 2 * (3 - total_mass % 4)
+            dp_table[current_idx, total_mass // COMPRESSION_RATE]
+            >> 2 * (COMPRESSION_RATE - 1 - total_mass % COMPRESSION_RATE)
             if USE_BITS
             else dp_table[current_idx, total_mass]
         )
 
         # Return empty list for unreachable cells
-        if current_value % 4 == 0.0:
+        if current_value % COMPRESSION_RATE == 0.0:
             return []
 
         solutions = []
@@ -208,13 +248,14 @@ def explain_mass_with_dp(mass: float, with_memo: bool) -> list[MassExplanations]
             return [[]]
 
         current_value = (
-            dp_table[current_idx, total_mass // 4] >> 2 * (3 - total_mass % 4)
+            dp_table[current_idx, total_mass // COMPRESSION_RATE]
+            >> 2 * (COMPRESSION_RATE - 1 - total_mass % COMPRESSION_RATE)
             if USE_BITS
             else dp_table[current_idx, total_mass]
         )
 
         # Return empty list for unreachable cells
-        if current_value % 4 == 0.0:
+        if current_value % COMPRESSION_RATE == 0.0:
             return []
 
         solutions = []
