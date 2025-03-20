@@ -34,11 +34,6 @@ class Prediction:
         return Prediction(sequence=seq.strip(), fragments=fragments)
 
 
-# TODO: Idea: Mark all the fragments with start = true, filter them according to proper mass and end as well.
-# Get out the invalid fragments, remove them and then also solve clashes if some fragments are accepted as part of both!
-#
-
-
 class Predictor:
     def __init__(
         self,
@@ -52,8 +47,6 @@ class Predictor:
         mass_tag_start: float = 0.0,
         mass_tag_end: float = 0.0,
     ):
-        # self.fragments = self._sort_fragments(fragments)
-
         self.fragments = (
             fragments.with_row_index(name="orig_index")
             .sort("observed_mass")
@@ -82,7 +75,6 @@ class Predictor:
         self.seq_len = seq_len
         self.solver = solver
         self.threads = threads
-        # self.diff_explanations = None
         self.explanations = {}
         self.mass_diffs = dict()
         self.mass_diffs_errors = dict()
@@ -97,64 +89,17 @@ class Predictor:
     def build_skeleton(
         self,
     ):  # -> Tuple[List[Set[str]], List[TerminalFragment], List[int]]: #TODO
-        # candidate_start_fragments = (
-        #     # self.fragments.with_row_index()
-        #     self.fragments
-        #     .filter(pl.col("is_start") | pl.col("is_start_end"))
-        #     .get_column("index")
-        #     .to_list()
-        # )
-
-        # candidate_start_fragments_masses = [i - self.mass_tags[Side.START] for i in self.fragments.filter(pl.col("is_start")).get_column("observed_mass").to_list()] + [i - self.mass_tags[Side.START] - self.mass_tags[Side.END] for i in self.fragments.filter(pl.col("is_start_end")).get_column("observed_mass").to_list()]
-
-        # print("candidate_start_fragments = ", candidate_start_fragments)
-
         skeleton_seq_start, start_fragments, invalid_start_fragments = (
             self._predict_skeleton(
                 Side.START,
             )
         )
 
-        # skeleton_seq_start, start_fragments, invalid_start_fragments = (
-        #     self._predict_skeleton(
-        #         Side.START,
-        #         fragment_masses=candidate_start_fragments_masses,
-        #         candidate_fragments=candidate_start_fragments,
-        #     )
-        # )
-
         print("Skeleton sequence start = ", skeleton_seq_start)
         print("invalid_start_fragments = ", invalid_start_fragments)
 
-        # Shift the rejected start fragments to the end fragments while ladder building!
-        # But shift only the ones which also had a valid end explanation!
-        # Need to subtract and add the tag mass appropriately!
-
-        # candidate_end_fragments = (
-        #     self.fragments.with_row_index()
-        #     .select(~[start_fragments[i].index for i in range(len(start_fragments))])
-        #     .filter(pl.col("is_end") | pl.col("is_start_end"))
-        #     .get_column("index")
-        #     .to_list()
-        # )
-
-        # print("Candidate end fragments = ", candidate_end_fragments)
-
-        # Shift the invalid start fragments which have "in_end"
-
-        # print("original end cadidates = ", candidate_end_fragments)
-
-        # candidate_end_fragments_masses = [i - self.mass_tags[Side.END] for i in self.fragments.filter(pl.col("is_end")).to_list()] + [i - self.mass_tags[Side.START] - self.mass_tags[Side.END] for i in self.fragments.filter(pl.col("is_start_end")).to_list()]
-
-        # skeleton_seq_end, end_fragments, invalid_end_fragments = self._predict_skeleton(
-        #     Side.END,
-        #     fragment_masses=candidate_end_fragments_masses,
-        #     candidate_fragments=candidate_end_fragments,
-        #     # skeleton_seq=skeleton_seq_start,
-        # )
         skeleton_seq_end, end_fragments, invalid_end_fragments = self._predict_skeleton(
             Side.END,
-            # skeleton_seq=skeleton_seq_start,
         )
         print("Skeleton sequence end = ", skeleton_seq_end)
 
@@ -163,8 +108,6 @@ class Predictor:
         skeleton_seq = self._align_skeletons(skeleton_seq_start, skeleton_seq_end)
 
         print("Skeleton sequence = ", skeleton_seq)
-
-        # TODO: Append invalid start and end fragments together!
 
         return (
             skeleton_seq,
@@ -208,12 +151,8 @@ class Predictor:
             .to_list()
         ]
 
-        fragment_masses = self.fragments.get_column("observed_mass").to_list()
-        n_fragments = len(fragment_masses)
-        print("Original n_fragments = ", n_fragments)
-
         self._collect_singleton_masses()
-        
+
         # Roughly estimate the differences as a first step with all fragments marked as start and then as end
         # Note that we do not consider fragments is_start_end now,
         # since the difference may be quite large and explained by lots of combinations
@@ -254,9 +193,6 @@ class Predictor:
             ~pl.col("index").is_in(invalid_end_fragments)
         )
 
-        # self.fragment_masses[Side.START] = self.fragment_masses[Side.START][self.fragments_side[Side.START].get_column("index").to_list()]
-        # self.fragment_masses[Side.END] = self.fragment_masses[Side.END][self.fragments_side[Side.END].get_column("index").to_list()]
-
         self.fragment_masses[Side.START] = [
             i - self.mass_tags[Side.START]
             for i in self.fragments_side[Side.START]
@@ -284,7 +220,7 @@ class Predictor:
             .to_list()
         ]
 
-        # Rewrite the observed_mass column for the start and the end fragment_sides 
+        # Rewrite the observed_mass column for the start and the end fragment_sides
         # with the tag(s) subtracted masses for latter processing!
 
         self.fragments_side[Side.START].replace_column(
@@ -303,19 +239,19 @@ class Predictor:
             )
         )
 
-        print("Start_frags = ", self.fragments_side[Side.START])
-        print(
-            "Start_mass = ",
-            self.fragment_masses[Side.START],
-            len(self.fragment_masses[Side.START]),
-        )
-        print("End_frags = ", self.fragments_side[Side.END])
-        print(
-            "End_mass = ",
-            self.fragment_masses[Side.END],
-            len(self.fragment_masses[Side.END]),
-        )
-        print("Int_frags = ", self.fragments_internal)
+        # print("Start_frags = ", self.fragments_side[Side.START])
+        # print(
+        #     "Start_mass = ",
+        #     self.fragment_masses[Side.START],
+        #     len(self.fragment_masses[Side.START]),
+        # )
+        # print("End_frags = ", self.fragments_side[Side.END])
+        # print(
+        #     "End_mass = ",
+        #     self.fragment_masses[Side.END],
+        #     len(self.fragment_masses[Side.END]),
+        # )
+        # print("Int_frags = ", self.fragments_internal)
 
         self.fragments = (
             self.fragments_side[Side.START]
@@ -332,50 +268,6 @@ class Predictor:
         )
         n_fragments = len(fragment_masses)
         print("Fragments considered for fitting, n_fragments = ", n_fragments)
-
-        ## START -- Temp
-        # TODO: As a temporary measure re-initiate the entire fragment class while rejecting the invalid_start and end_fragments!
-        if False:
-            self.fragments = self._sort_fragments(
-                self.fragments.with_row_index()
-                .filter(
-                    ~pl.col("index").is_in(
-                        invalid_start_fragments + invalid_end_fragments
-                    )
-                )
-                .drop("index")
-            ).with_row_index("orig_index")
-
-            fragment_masses = self.fragments.get_column("observed_mass").to_list()
-            n_fragments = len(fragment_masses)
-
-            with pl.Config() as cfg:
-                cfg.set_tbl_rows(-1)
-                print(self.fragments)
-
-            # self.diff_explanations = None
-            self.explanations = {}
-            self.mass_diffs = dict()
-            self.mass_diffs_errors = dict()
-
-            # self._collect_singleton_masses()
-            self._collect_diffs(Side.START)
-            self._collect_diffs(
-                Side.END
-            )  # TODO: Need to collect diffs AFTER shifting the fragments!
-            self._collect_diff_explanations()
-
-            (
-                skeleton_seq,
-                start_fragments,
-                end_fragments,
-                invalid_start_fragments,
-                invalid_end_fragments,
-            ) = self.build_skeleton()
-
-        ## END -- temp
-
-        # Remove the
 
         valid_fragment_range = [j for j in range(n_fragments)]
         # valid_fragment_range = [j for j in range(n_fragments) if j not in invalid_start_fragments and j not in invalid_end_fragments] #TODO: CHECK!
@@ -472,7 +364,7 @@ class Predictor:
 
         # ensure that start fragments are aligned at the beginning of the sequence
         for fragment in start_fragments:
-            #j is the row index where the "index" matches fragment.index
+            # j is the row index where the "index" matches fragment.index
             j = (
                 self.fragments.with_row_index("row_index")
                 .filter(pl.col("index") == fragment.index)
@@ -480,7 +372,6 @@ class Predictor:
                 .to_series()
                 .to_list()[0]
             )
-            # j = candidate_start_fragments[fragment.index]
             # min_end is exclusive
             for i in range(fragment.min_end):
                 x[i][j].setInitialValue(1)
@@ -502,11 +393,7 @@ class Predictor:
             # if j not in [
             #     s.index for s in start_fragments
             # ]:  # TODO: If this is redundant/actually needed?
-            #     # j = candidate_end_fragments[fragment.index]
-            #     # if (
-            #     #     j not in [candidate_start_fragments[f.index] for f in start_fragments] #TODO: If this is redundant/actually needed?
-            #     # ):  # Exlude fragments that are both start and end fragments, they were already considered with start fragments!
-            #     # print("End fragment = ", fragment, "Index = ", j)
+
             #     # min_end is exclusive
             for i in range(fragment.min_end + 1, 0):
                 x[i][j].setInitialValue(1)
@@ -579,7 +466,6 @@ class Predictor:
             ]
             for j in valid_fragment_range
         ]
-        # print("Predicted fragment sequence = ", fragment_seq)
         predicted_fragment_mass = [
             sum(
                 [
@@ -633,62 +519,6 @@ class Predictor:
             fragments=fragment_predictions,
         )
 
-    def _sort_fragments(self, fragments: pl.DataFrame) -> pl.DataFrame:
-        # Sort the fragments in the order of
-        # single nucleosides, start fragments, end fragments, start fragments AND end fragments, internal fragments and then by mass for each category!
-
-        # fragments = fragments.sort(by=[
-        #             "single_nucleoside",
-        #             "is_start",
-        #             "is_end",
-        #             "is_start_end",
-        #             "observed_mass",
-        #         ],
-        #         descending=[True, True, True, True, False],)
-
-        fragments = (
-            # fragments.with_row_index(name="orig_index")
-            fragments.with_columns(
-                pl.when(pl.col("is_start") & pl.col("is_end"))
-                .then(True)
-                .otherwise(False)
-                .alias("is_start_and_end")
-            )
-            .with_columns(
-                pl.when(pl.col("is_start_and_end"))
-                .then(False)
-                .otherwise(pl.col("is_start"))
-                .alias("is_start"),
-                pl.when(pl.col("is_start_and_end"))
-                .then(False)
-                .otherwise(pl.col("is_end"))
-                .alias("is_end"),
-            )
-            .sort(
-                by=[
-                    "single_nucleoside",
-                    "is_start",
-                    "is_end",
-                    "is_start_and_end",
-                    "observed_mass",
-                ],
-                descending=[True, True, True, True, False],
-            )
-            .with_columns(
-                pl.when(pl.col("is_start_and_end"))
-                .then(True)
-                .otherwise(pl.col("is_start"))
-                .alias("is_start"),
-                pl.when(pl.col("is_start_and_end"))
-                .then(True)
-                .otherwise(pl.col("is_end"))
-                .alias("is_end"),
-            )
-            .drop("is_start_and_end")
-        )
-
-        return fragments
-
     def _align_skeletons(self, skeleton_seq_start, skeleton_seq_end) -> List[Set[str]]:
         # Align the skeletons of the start and end fragments to get the final skeleton sequence!
         # Wherever there is no ambiguity, that nucleotide is preferrentially considered!
@@ -701,28 +531,9 @@ class Predictor:
                 skeleton_seq[i] = skeleton_seq_start[i].union(skeleton_seq_end[i])
         return skeleton_seq
 
-    def _collect_diffs(self, side: Side, fragment_masses=None) -> None:
-        # if fragment_masses:
-        #     masses = fragment_masses
-        # else:
-        #     masses = self.fragments.filter(pl.col(f"is_{side}")).get_column("observed_mass")
-
+    def _collect_diffs(self, side: Side) -> None:
         masses = self.fragment_masses[side]
-        # print(masses)
-        # self.mass_diffs[side] = [masses[0]] + (masses[1:] - masses[:-1]).to_list()
-        # self.mass_diffs_errors[side] = [
-        #     self.matching_threshold
-        # ]
-        # + (
-        #     [
-        #         self._calculate_diff_errors(
-        #             masses[i],
-        #             masses[i - 1],
-        #             self.matching_threshold,
-        #         )
-        #         for i in range(1, len(masses))
-        #     ]
-        # )
+
         self.mass_diffs[side] = [masses[0]] + [
             masses[i] - masses[i - 1] for i in range(1, len(masses))
         ]
@@ -813,11 +624,6 @@ class Predictor:
             skeleton_seq = [set() for _ in range(self.seq_len)]
 
         factor = 1 if side == Side.START else -1
-
-        # masses = self.fragments.filter(pl.col(f"is_{side}")).get_column("observed_mass")
-        # masses = self.fragments.select(candidate_fragments).get_column("observed_mass")
-        # if fragment_masses:
-        #     masses = fragment_masses
 
         if not fragment_masses:
             fragment_masses = self.fragment_masses[side]
