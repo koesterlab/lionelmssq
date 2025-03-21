@@ -31,7 +31,7 @@ UNIQUE_MASSES = (
 TOLERANCE = 1e-5  # For perfect matching, the TOLERANCE should be the precision (digits after decimal) to which the masses of nucleosides and sequences are reported, i.e. 1e-(ROUND_DECIMAL)
 
 # This dictates a relative matching threshold such that we consider abs(sum(masses)/target_mass - 1) < MATCHING_THRESHOLD to be matched!
-MATCHING_THRESHOLD = 3 * 20e-6  # 20 ppm
+MATCHING_THRESHOLD = 20e-6 #3 * 20e-6  # 20 ppm
 
 EXPLANATION_MASSES = UNIQUE_MASSES.with_columns(
     (pl.col("monoisotopic_mass") / TOLERANCE)

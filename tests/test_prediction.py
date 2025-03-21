@@ -37,22 +37,34 @@ def test_testcase(testcase):
 
     input_file = pl.read_csv(base_path / "fragments.tsv", separator="\t")
 
+    label_mass_3T = meta["label_mass_3T"]
+    label_mass_5T = meta["label_mass_5T"]
+
+    if "intensity_cutoff" in meta:
+        intensity_cutoff = meta["intensity_cutoff"]
+    else:
+        intensity_cutoff = 1e4
+
+    if "sequence_mass" in meta:
+        ms1_mass = meta["sequence_mass"]
+    else:
+        ms1_mass = None
+
     # If the left and right columns exist, means that the input file is from a simulation with the sequence of each fragment known!
     if "left" in input_file.columns or "right" in input_file.columns:
         simulation = True
-
-        label_mass_3T = meta["label_mass_3T"]
-        label_mass_5T = meta["label_mass_5T"]
 
         fragments = (
             pl.read_csv(base_path / "fragments.tsv", separator="\t")
             .with_columns(
                 (pl.col("observed_mass_without_backbone").alias("observed_mass")),
                 (pl.col("true_nucleoside_mass").alias("true_mass")),
+                # ((pl.col("left") == 0) & (~(pl.col("right") == (len(true_seq))))).alias("is_start"),
+                # ((pl.col("right") == (len(true_seq))) & (~(pl.col("left") == 0))).alias("is_end"),
+                # ((pl.col("left") == 0) & (pl.col("right") == (len(true_seq)))).alias("is_start_end"),
+                # ((~(pl.col("left") == 0)) & (~(pl.col("right") == (len(true_seq))))).alias("is_internal"),
             )
-            .filter(~(pl.col("is_start") & pl.col("is_end")))
         )
-        # The above is temporary, until the preeiction for the entire intact sequence is fixed!
         with pl.Config(tbl_rows=30):
             print(fragments)
 
@@ -71,16 +83,13 @@ def test_testcase(testcase):
         # TODO: Discuss why it doesn't work with the estimated error!
         matching_threshold = MATCHING_THRESHOLD
         # matching_threshold,_,_ = estimate_MS_error_MATCHING_THRESHOLD(fragments,unique_masses=unique_masses,simulation=simulation)
-        print(
-            "Matching threshold (rel errror) estimated from singleton masses = ",
-            matching_threshold,
-        )
+        # print(
+        #     "Matching threshold (rel errror) estimated from singleton masses = ",
+        #     matching_threshold,
+        # )
 
     else:
         simulation = False
-
-        label_mass_3T = meta["label_mass_3T"]
-        label_mass_5T = meta["label_mass_5T"]
 
         unique_masses = UNIQUE_MASSES.filter(
             pl.col("nucleoside").is_in(["A", "U", "G", "C"])
@@ -101,14 +110,14 @@ def test_testcase(testcase):
 
         # matching_threshold = MATCHING_THRESHOLD
         # TODO: Discuss why it doesn't work with the estimated error!
-        matching_threshold, _, _ = estimate_MS_error_MATCHING_THRESHOLD(
-            fragment_masses_read, unique_masses=unique_masses, simulation=simulation
-        )
+        # matching_threshold, _, _ = estimate_MS_error_MATCHING_THRESHOLD(
+        #     fragment_masses_read, unique_masses=unique_masses, simulation=simulation
+        # )
         matching_threshold = 20e-6
-        print(
-            "Matching threshold (rel errror) estimated from singleton masses = ",
-            matching_threshold,
-        )
+        # print(
+        #     "Matching threshold (rel errror) estimated from singleton masses = ",
+        #     matching_threshold,
+        # )
 
         fragments = determine_terminal_fragments(
             fragment_masses_read,
@@ -116,13 +125,15 @@ def test_testcase(testcase):
             label_mass_3T=label_mass_3T,
             label_mass_5T=label_mass_5T,
             explanation_masses=explanation_masses,
+            matching_threshold=matching_threshold,
+            intensity_cutoff=intensity_cutoff,
+            ms1_mass=ms1_mass,
             # intensity_cutoff=1e4, #for test_05
             # intensity_cutoff=5e5,  # for test_03
-            intensity_cutoff=5e4,  # for test_04
-            # intensity_cutoff=1e5, #1e5,  # for test_08
-            matching_threshold=matching_threshold,
+            # intensity_cutoff=5e4,  # for test_04
+            # intensity_cutoff=1e5,    # for test_08
             # ms1_mass=7434.1794,  # for test_05
-            ms1_mass=7447.186265,  # for test_04
+            # ms1_mass=7447.186265,  # for test_04
             # ms1_mass=10572.588,  # for test_08
             #  ms1_mass=10595.569312,  # for test_09
             # ms1_mass=None,
@@ -130,7 +141,7 @@ def test_testcase(testcase):
         with pl.Config(tbl_rows=30):
             print(fragments)
 
-    fragment_masses = pl.Series(fragments.select(pl.col("observed_mass"))).to_list()
+    # fragment_masses = pl.Series(fragments.select(pl.col("observed_mass"))).to_list()
 
     prediction = Predictor(
         fragments,
@@ -145,6 +156,8 @@ def test_testcase(testcase):
         mass_tag_end=label_mass_3T,
     ).predict()
 
+    fragment_masses = pl.Series(prediction.fragments.select(pl.col("observed_mass"))).to_list()
+
     prediction_masses = pl.Series(
         prediction.fragments.select(pl.col("predicted_fragment_mass"))
     ).to_list()
@@ -156,7 +169,6 @@ def test_testcase(testcase):
         plot_prediction(
             prediction,
             true_seq,
-            # fragments.filter(~(pl.col("is_start") & pl.col("is_end"))),
         ).save(base_path / "plot.html")
         # The above is temporary, until the preeiction for the entire intact sequence is fixed!)
     else:
@@ -169,10 +181,13 @@ def test_testcase(testcase):
     # Assert if the sequences match!
     assert prediction.sequence == true_seq
 
-    ## Assert if all the sequence fragments match the predicted fragments in mass at least!
-    # for i in range(len(fragment_masses)):
-    #     print(f"Fragment {i}: {fragment_masses[i]} vs {prediction_masses[i]}")
-    #     # assert abs(prediction_masses[i] / fragment_masses[i] - 1) <= matching_threshold
+    # Assert if all the sequence fragments match the predicted fragments in mass at least!
+    if simulation:
+        # This will only be true for simulated data, for experimental data, every fragment is not predicted so accurately!
+        for i in range(len(fragment_masses)):
+            # print(f"Fragment {i}: {fragment_masses[i]} vs {prediction_masses[i]}")
+            assert (
+                abs(prediction_masses[i] / fragment_masses[i] - 1) <= matching_threshold
+            )
 
-
-test_testcase("test_04")
+test_testcase("test_03")

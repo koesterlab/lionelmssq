@@ -66,7 +66,7 @@ class Predictor:
                     pl.col("single_nucleoside"),
                     pl.col("is_start_end"),
                     pl.col("is_internal"),
-                    pl.col("mass_explanations"),
+                    # pl.col("mass_explanations"),
                     pl.col("index"),
                     pl.col("orig_index"),
                 )
@@ -96,7 +96,6 @@ class Predictor:
         )
 
         print("Skeleton sequence start = ", skeleton_seq_start)
-        print("invalid_start_fragments = ", invalid_start_fragments)
 
         skeleton_seq_end, end_fragments, invalid_end_fragments = self._predict_skeleton(
             Side.END,
@@ -633,6 +632,11 @@ class Predictor:
                 self.fragments_side[side].get_column("index").to_list()
             )
 
+        print("Candidate fragments = ", candidate_fragments)
+        print("len Candidate fragments = ", len(candidate_fragments))
+        print("Fragment masses = ", fragment_masses)
+        print("len Fragment masses = ", len(fragment_masses))
+
         def get_possible_nucleosides(pos: int, i: int) -> Set[str]:
             return skeleton_seq[pos + factor * i]
 
@@ -699,10 +703,10 @@ class Predictor:
                         expl_len: set(chain(*expls))
                         for expl_len, expls in groupby(p_specific_explanations, len)
                     }
-                    print("p_specific_explanations = ", p_specific_explanations)
-                    print("alphabet_per_expl_len = ", alphabet_per_expl_len)
-                    print("p = ", p)
-                    print("fragment_index = ", fragment_index)
+                    # print("p_specific_explanations = ", p_specific_explanations)
+                    # print("alphabet_per_expl_len = ", alphabet_per_expl_len)
+                    # print("p = ", p)
+                    # print("fragment_index = ", fragment_index)
 
                     if p_specific_explanations:
                         if side is Side.START:
@@ -751,7 +755,7 @@ class Predictor:
                     #             for i, nuc in enumerate(perm):
                     #                 get_possible_nucleosides(p, i).add(nuc)
 
-                    print("Intermediate skeletal seq = ", skeleton_seq)
+                    # print("Intermediate skeletal seq = ", skeleton_seq)
                     # add possible follow up positions
                     next_pos.update(
                         p + factor * expl_len for expl_len in alphabet_per_expl_len

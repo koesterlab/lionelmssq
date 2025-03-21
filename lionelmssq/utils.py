@@ -170,28 +170,35 @@ def determine_terminal_fragments(
                 else:
                     is_start_end.append(False)
 
-            if any(
-                "5Tag" in element and "3Tag" not in element
-                for element in explained_mass.explanations
-            ):
-                is_start.append(True)
+            if not is_start_end[-1]:
+
+                if any(
+                    "5Tag" in element and "3Tag" not in element
+                    for element in explained_mass.explanations
+                ):
+                    is_start.append(True)
+                else:
+                    is_start.append(False)
+
+                if any(
+                    "5Tag" not in element and "3Tag" in element
+                    for element in explained_mass.explanations
+                ):
+                    is_end.append(True)
+                else:
+                    is_end.append(False)
+
+                if any(
+                    "5Tag" not in element and "3Tag" not in element
+                    for element in explained_mass.explanations
+                ):
+                    is_internal.append(True)
+                else:
+                    is_internal.append(False)
+
             else:
                 is_start.append(False)
-
-            if any(
-                "5Tag" not in element and "3Tag" in element
-                for element in explained_mass.explanations
-            ):
-                is_end.append(True)
-            else:
                 is_end.append(False)
-
-            if any(
-                "5Tag" not in element and "3Tag" not in element
-                for element in explained_mass.explanations
-            ):
-                is_internal.append(True)
-            else:
                 is_internal.append(False)
 
         else:
