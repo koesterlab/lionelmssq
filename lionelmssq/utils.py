@@ -171,7 +171,6 @@ def determine_terminal_fragments(
                     is_start_end.append(False)
 
             if not is_start_end[-1]:
-
                 if any(
                     "5Tag" in element and "3Tag" not in element
                     for element in explained_mass.explanations

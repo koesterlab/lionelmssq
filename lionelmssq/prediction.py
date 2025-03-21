@@ -238,20 +238,6 @@ class Predictor:
             )
         )
 
-        # print("Start_frags = ", self.fragments_side[Side.START])
-        # print(
-        #     "Start_mass = ",
-        #     self.fragment_masses[Side.START],
-        #     len(self.fragment_masses[Side.START]),
-        # )
-        # print("End_frags = ", self.fragments_side[Side.END])
-        # print(
-        #     "End_mass = ",
-        #     self.fragment_masses[Side.END],
-        #     len(self.fragment_masses[Side.END]),
-        # )
-        # print("Int_frags = ", self.fragments_internal)
-
         self.fragments = (
             self.fragments_side[Side.START]
             .vstack(self.fragments_side[Side.END])
@@ -631,11 +617,6 @@ class Predictor:
             candidate_fragments = (
                 self.fragments_side[side].get_column("index").to_list()
             )
-
-        print("Candidate fragments = ", candidate_fragments)
-        print("len Candidate fragments = ", len(candidate_fragments))
-        print("Fragment masses = ", fragment_masses)
-        print("len Fragment masses = ", len(fragment_masses))
 
         def get_possible_nucleosides(pos: int, i: int) -> Set[str]:
             return skeleton_seq[pos + factor * i]
