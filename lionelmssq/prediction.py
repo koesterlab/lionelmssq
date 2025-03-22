@@ -20,13 +20,6 @@ class TerminalFragment:
 
 
 @dataclass
-class TerminalFragment:
-    index: int
-    min_end: int
-    max_end: int
-
-
-@dataclass
 class Prediction:
     sequence: List[str]
     fragments: pl.DataFrame

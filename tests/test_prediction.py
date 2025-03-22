@@ -80,7 +80,9 @@ def test_testcase(testcase):
         )
 
         # TODO: Discuss why it doesn't work with the estimated error!
-        matching_threshold,_,_ = estimate_MS_error_MATCHING_THRESHOLD(fragments,unique_masses=unique_masses,simulation=simulation)
+        matching_threshold, _, _ = estimate_MS_error_MATCHING_THRESHOLD(
+            fragments, unique_masses=unique_masses, simulation=simulation
+        )
         matching_threshold = MATCHING_THRESHOLD
         # print(
         #     "Matching threshold (rel errror) estimated from singleton masses = ",
