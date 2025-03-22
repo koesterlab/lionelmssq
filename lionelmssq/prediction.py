@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from itertools import chain, combinations, groupby, permutations
+from itertools import chain, combinations, groupby
 from pathlib import Path
 from typing import List, Optional, Self, Set, Tuple
 from pulp import LpProblem, LpMinimize, LpInteger, LpContinuous, LpVariable, lpSum
