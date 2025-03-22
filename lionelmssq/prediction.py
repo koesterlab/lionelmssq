@@ -252,9 +252,6 @@ class Predictor:
             + [i for i in self.fragments_internal.get_column("observed_mass").to_list()]
         )
 
-        skeleton_seq, start_fragments = self._predict_skeleton(Side.START)
-        _, end_fragments = self._predict_skeleton(Side.END, skeleton_seq=skeleton_seq)
-
         prob = LpProblem("RNA sequencing", LpMinimize)
         # i = 1,...,n: positions in the sequence
         # j = 1,...,m: fragments
@@ -265,7 +262,6 @@ class Predictor:
         print("Fragments considered for fitting, n_fragments = ", n_fragments)
 
         valid_fragment_range = [j for j in range(n_fragments)]
-        # valid_fragment_range = [j for j in range(n_fragments) if j not in invalid_start_fragments and j not in invalid_end_fragments] #TODO: CHECK!
 
         prob = LpProblem("RNA sequencing", LpMinimize)
         # i = 1,...,n: positions in the sequence
