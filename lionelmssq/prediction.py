@@ -20,6 +20,13 @@ class TerminalFragment:
 
 
 @dataclass
+class TerminalFragment:
+    index: int
+    min_end: int
+    max_end: int
+
+
+@dataclass
 class Prediction:
     sequence: List[str]
     fragments: pl.DataFrame
@@ -251,6 +258,16 @@ class Predictor:
             + self.fragment_masses[Side.END]
             + [i for i in self.fragments_internal.get_column("observed_mass").to_list()]
         )
+
+        skeleton_seq, start_fragments = self._predict_skeleton(Side.START)
+        _, end_fragments = self._predict_skeleton(Side.END, skeleton_seq=skeleton_seq)
+
+        prob = LpProblem("RNA sequencing", LpMinimize)
+        # i = 1,...,n: positions in the sequence
+        # j = 1,...,m: fragments
+        # b = 1,...,k: (modified) bases
+
+        fragment_masses = self.fragments.get_column("observed_mass").to_list()
         n_fragments = len(fragment_masses)
         print("Fragments considered for fitting, n_fragments = ", n_fragments)
 
@@ -737,6 +754,7 @@ class Predictor:
                     #                 get_possible_nucleosides(p, i).add(nuc)
 
                     # print("Intermediate skeletal seq = ", skeleton_seq)
+
                     # add possible follow up positions
                     next_pos.update(
                         p + factor * expl_len for expl_len in alphabet_per_expl_len
