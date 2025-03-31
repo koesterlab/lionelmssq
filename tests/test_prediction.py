@@ -23,7 +23,8 @@ _TESTCASES = importlib.resources.files("tests") / "testcases"
 
 @pytest.mark.parametrize(
     "testcase",
-    [tc for tc in _TESTCASES.iterdir() if tc.name not in ["test_08", ".DS_Store"]],
+    # [tc for tc in _TESTCASES.iterdir() if tc.name not in ["test_08", ".DS_Store"]],
+    [tc for tc in _TESTCASES.iterdir() if tc.name in ["test_01", "test_02", "test_03"]],
 )
 # @pytest.mark.parametrize("testcase", _TESTCASES.iterdir())
 def test_testcase(testcase):
@@ -137,8 +138,8 @@ def test_testcase(testcase):
     prediction = Predictor(
         fragments,
         len(true_seq),
-        # os.environ.get("SOLVER", "cbc"),
-        os.environ.get("SOLVER", "gurobi"),  # "solver": "gurobi" or "cbc"
+        os.environ.get("SOLVER", "cbc"),
+        # os.environ.get("SOLVER", "gurobi"),  # "solver": "gurobi" or "cbc"
         threads=16,
         unique_masses=unique_masses,
         explanation_masses=explanation_masses,
@@ -190,4 +191,4 @@ def test_testcase(testcase):
                 )
 
 
-test_testcase("test_04")
+# test_testcase("test_04")

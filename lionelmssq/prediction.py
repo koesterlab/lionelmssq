@@ -126,7 +126,7 @@ class Predictor:
             pl.col("is_end") | pl.col("is_start_end")
         )
 
-        #Collect the masses of these fragments (subtract the appropriate tag masses)
+        # Collect the masses of these fragments (subtract the appropriate tag masses)
         self._collect_fragment_side_masses(Side.START)
         self._collect_fragment_side_masses(Side.END)
 
@@ -163,7 +163,7 @@ class Predictor:
             invalid_end_fragments,
         ) = self.build_skeleton()
 
-        #TODO: If the tags are considered in the LP at the end, then most of the following code will become obsolete!
+        # TODO: If the tags are considered in the LP at the end, then most of the following code will become obsolete!
 
         # We now create reduced self.fragments_side and their masses
         # which keeps the ordereing of accepted start and end candidates while rejecting
@@ -172,11 +172,11 @@ class Predictor:
             ~pl.col("index").is_in(invalid_start_fragments)
         )
 
-        #We also remove the fragments from the end side which are also present in the start side:
-        self.fragments_side[Side.END] = self.fragments_side[Side.END].filter(
-            ~pl.col("index").is_in(invalid_end_fragments)
-        ).filter(
-            ~pl.col("index").is_in([i.index for i in start_fragments])
+        # We also remove the fragments from the end side which are also present in the start side:
+        self.fragments_side[Side.END] = (
+            self.fragments_side[Side.END]
+            .filter(~pl.col("index").is_in(invalid_end_fragments))
+            .filter(~pl.col("index").is_in([i.index for i in start_fragments]))
         )
 
         # Collect the masses of the fragments for the _reduced_ start and end side
@@ -469,48 +469,47 @@ class Predictor:
             sequence=seq,
             fragments=fragment_predictions,
         )
-    
+
     def _collect_fragment_side_masses(
-            self, side: Side, restrict_is_start_end: bool = False
-        ):
-            # Collects the fragment masses for the given side (also includes the start_end fragments, i.e the entire sequence)
-            # Optionally ``restrict_is_start_end`` can be set to True to only consider the start_end fragments which have been included in self.fragments_side[side]
-            # This is useful later when a skeleton is already built and we need the masses of the accepted fragments!
+        self, side: Side, restrict_is_start_end: bool = False
+    ):
+        # Collects the fragment masses for the given side (also includes the start_end fragments, i.e the entire sequence)
+        # Optionally ``restrict_is_start_end`` can be set to True to only consider the start_end fragments which have been included in self.fragments_side[side]
+        # This is useful later when a skeleton is already built and we need the masses of the accepted fragments!
 
-            if restrict_is_start_end:
-                side_fragments = [
-                    i - self.mass_tags[side]
-                    for i in self.fragments_side[side]
-                    .filter(pl.col(f"is_{side}"))
-                    .get_column("observed_mass")
-                    .to_list()
-                ]
-                start_end_fragments = [
-                    i - self.mass_tags[Side.START] - self.mass_tags[Side.END]
-                    for i in self.fragments_side[side]
-                    .filter(pl.col("is_start_end"))
-                    .get_column("observed_mass")
-                    .to_list()
-                ]
-            else:
-                # Collect the (tag subtracted) masses of the fragments for the side
-                side_fragments = [
-                    i - self.mass_tags[side]
-                    for i in self.fragments.filter(pl.col(f"is_{side}"))
-                    .get_column("observed_mass")
-                    .to_list()
-                ]
+        if restrict_is_start_end:
+            side_fragments = [
+                i - self.mass_tags[side]
+                for i in self.fragments_side[side]
+                .filter(pl.col(f"is_{side}"))
+                .get_column("observed_mass")
+                .to_list()
+            ]
+            start_end_fragments = [
+                i - self.mass_tags[Side.START] - self.mass_tags[Side.END]
+                for i in self.fragments_side[side]
+                .filter(pl.col("is_start_end"))
+                .get_column("observed_mass")
+                .to_list()
+            ]
+        else:
+            # Collect the (tag subtracted) masses of the fragments for the side
+            side_fragments = [
+                i - self.mass_tags[side]
+                for i in self.fragments.filter(pl.col(f"is_{side}"))
+                .get_column("observed_mass")
+                .to_list()
+            ]
 
-                # Collect the (both tags subtracted) masses of the start_end fragments
-                start_end_fragments = [
-                    i - self.mass_tags[Side.START] - self.mass_tags[Side.END]
-                    for i in self.fragments.filter(pl.col("is_start_end"))
-                    .get_column("observed_mass")
-                    .to_list()
-                ]
+            # Collect the (both tags subtracted) masses of the start_end fragments
+            start_end_fragments = [
+                i - self.mass_tags[Side.START] - self.mass_tags[Side.END]
+                for i in self.fragments.filter(pl.col("is_start_end"))
+                .get_column("observed_mass")
+                .to_list()
+            ]
 
-            self.fragment_masses[side] = side_fragments + start_end_fragments
-
+        self.fragment_masses[side] = side_fragments + start_end_fragments
 
     def _align_skeletons(self, skeleton_seq_start, skeleton_seq_end) -> List[Set[str]]:
         # While building the ladder it may happen that things are unambiguous from one side, but not from the other!
