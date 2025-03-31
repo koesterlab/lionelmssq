@@ -67,10 +67,10 @@ def test_testcase(testcase):
         with pl.Config(tbl_rows=30):
             print(fragments)
 
-        unique_masses = UNIQUE_MASSES
-        # unique_masses = UNIQUE_MASSES.filter(
-        #     pl.col("nucleoside").is_in(["A", "U", "G", "C"])
-        # )
+        # unique_masses = UNIQUE_MASSES
+        unique_masses = UNIQUE_MASSES.filter(
+            pl.col("nucleoside").is_in(["A", "U", "G", "C"])
+        )
 
         explanation_masses = unique_masses.with_columns(
             (pl.col("monoisotopic_mass") / TOLERANCE)
@@ -190,4 +190,4 @@ def test_testcase(testcase):
                 )
 
 
-# test_testcase("test_06")
+test_testcase("test_08")
