@@ -31,6 +31,7 @@ def determine_terminal_fragments(
     intensity_cutoff=0.5e6,
     mass_cutoff=50000,
     matching_threshold=MATCHING_THRESHOLD,
+    ms1_mass_deviations_allowed=0.01,
 ):
     neutral_masses = (
         fragment_masses.select(pl.col(mass_column_name)).to_series().to_list()
@@ -90,7 +91,7 @@ def determine_terminal_fragments(
             # print(explained_mass.explanations)
 
             # If ms1 mass is defined, then also remove the explanations which differ in mass by more than 1% and have both kind of tags in there!
-            if abs(mass / ms1_mass - 1) > 0.01:
+            if abs(mass / ms1_mass - 1) > ms1_mass_deviations_allowed:
                 explained_mass.explanations = {
                     explanation
                     for explanation in explained_mass.explanations
@@ -151,7 +152,7 @@ def determine_terminal_fragments(
 
             if ms1_mass:
                 if (
-                    abs(mass / ms1_mass - 1) < 0.01
+                    abs(mass / ms1_mass - 1) < ms1_mass_deviations_allowed
                     and any(
                         "5Tag" in element and "3Tag" in element
                         for element in explained_mass.explanations

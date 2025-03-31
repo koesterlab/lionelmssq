@@ -16,7 +16,7 @@ neutral_mass	intensity	observed_mass	is_start	is_end	single_nucleoside	is_start_
 1823.2385996885923	29623447.95017624	1823.2385996885923	true	false	false	false	false	{('U', 'U', 'A', 'G', '5Tag')}
 1911.2538182702403	1061742.6871109009	1911.2538182702403	false	false	false	false	true	{('C', 'C', 'C', 'U', 'G', 'G')}
 1913.1767933785432	527339.122970581	1913.1767933785432	false	false	false	false	true	{('C', 'U', 'U', 'U', 'G', 'G')}
-1951.2594327636093	831077.607925415	1951.2594327636093	false	false	false	false	true	{('C', 'C', 'U', 'G', 'G', 'G'), ('U', 'A', 'A', 'A', 'A', 'A')}
+1951.2594327636093	831077.607925415	1951.2594327636093	false	false	false	false	true	{('U', 'A', 'A', 'A', 'A', 'A'), ('C', 'C', 'U', 'G', 'G', 'G')}
 1982.3359576101986	12160029.469909668	1982.3359576101986	false	true	false	false	false	{('C', 'U', 'U', 'G', 'G', '3Tag')}
 2062.30071552574	17867647.938782953	2062.30071552574	true	false	false	false	false	{('C', 'C', 'C', 'C', 'C', '5Tag')}
 2168.2789489567153	9510801.89780426	2168.2789489567153	true	false	false	false	false	{('U', 'U', 'A', 'G', 'G', '5Tag')}
@@ -27,6 +27,7 @@ neutral_mass	intensity	observed_mass	is_start	is_end	single_nucleoside	is_start_
 2482.3508653172353	851509.7685546875	2482.3508653172353	false	false	false	false	true	{('C', 'C', 'C', 'C', 'C', 'U', 'U', 'G')}
 2492.3106065267366	790156.6846008301	2492.3106065267366	false	false	false	false	true	{('C', 'C', 'U', 'U', 'U', 'U', 'A', 'A')}
 2588.3290146524055	13067621.250923157	2588.3290146524055	false	false	false	false	true	{('U', 'U', 'U', 'U', 'A', 'G', 'G', 'G')}
+2633.3979374264036	12855203.532783508	2633.3979374264036	false	true	false	false	true	{('C', 'U', 'U', 'U', 'G', 'G', 'G', '3Tag'), ('C', 'U', 'A', 'A', 'A', 'G', 'G', 'G')}
 2633.3979374264036	12855203.532783508	2633.3979374264036	false	true	false	false	true	{('C', 'U', 'U', 'U', 'G', 'G', 'G', '3Tag'), ('C', 'U', 'A', 'A', 'A', 'G', 'G', 'G')}
 2698.367171871081	1073569.704650879	2698.367171871081	true	false	false	false	false	{('C', 'C', 'C', 'C', 'U', 'U', 'A', '5Tag')}
 2699.3701548591785	3994032.9580078125	2699.3701548591785	true	false	false	false	false	{('C', 'C', 'C', 'U', 'U', 'U', 'A', '5Tag')}
@@ -51,10 +52,11 @@ neutral_mass	intensity	observed_mass	is_start	is_end	single_nucleoside	is_start_
 3409.374920516793	596649.3394012451	3409.374920516793	false	false	false	false	true	{('C', 'C', 'C', 'U', 'U', 'U', 'U', 'U', 'U', 'A', 'A')}
 3410.378551798554	506638.3448486328	3410.378551798554	false	false	false	false	true	{('C', 'C', 'U', 'U', 'U', 'U', 'U', 'U', 'U', 'A', 'A')}
 3411.3854162327243	722444.7179870605	3411.3854162327243	false	false	false	false	true	{('C', 'U', 'U', 'U', 'U', 'U', 'U', 'U', 'U', 'A', 'A'), ('U', 'G', 'G', 'G', 'G', 'G', 'G', 'G', 'G', 'G')}
+3411.3854162327243	722444.7179870605	3411.3854162327243	false	false	false	false	true	{('C', 'U', 'U', 'U', 'U', 'U', 'U', 'U', 'U', 'A', 'A'), ('U', 'G', 'G', 'G', 'G', 'G', 'G', 'G', 'G', 'G')}
 3429.389619844239	714623.5595397949	3429.389619844239	false	false	false	false	true	{('C', 'C', 'C', 'C', 'C', 'C', 'U', 'U', 'A', 'A', 'A')}
-3430.3973812229724	15507089.110031128	3430.3973812229724	true	false	false	false	true	{('C', 'U', 'U', 'U', 'U', 'A', 'G', 'G', 'G', '5Tag'), ('C', 'C', 'C', 'C', 'C', 'U', 'U', 'U', 'A', 'A', 'A')}
+3430.3973812229724	15507089.110031128	3430.3973812229724	true	false	false	false	true	{('C', 'C', 'C', 'C', 'C', 'U', 'U', 'U', 'A', 'A', 'A'), ('C', 'U', 'U', 'U', 'U', 'A', 'G', 'G', 'G', '5Tag')}
 3448.406750852174	534114.5319824219	3448.406750852174	false	false	false	false	true	{('C', 'C', 'C', 'U', 'U', 'U', 'U', 'U', 'A', 'A', 'G')}
-3543.4087176117646	1962607.4174804688	3543.4087176117646	false	false	false	false	true	{('U', 'U', 'U', 'U', 'A', 'A', 'A', 'A', 'A', 'A', 'G'), ('C', 'C', 'U', 'U', 'U', 'U', 'A', 'G', 'G', 'G', 'G')}
+3543.4087176117646	1962607.4174804688	3543.4087176117646	false	false	false	false	true	{('C', 'C', 'U', 'U', 'U', 'U', 'A', 'G', 'G', 'G', 'G'), ('U', 'U', 'U', 'U', 'A', 'A', 'A', 'A', 'A', 'A', 'G')}
 3544.4259996709807	3945041.0908737183	3544.4259996709807	false	false	false	false	true	{('C', 'U', 'U', 'U', 'U', 'U', 'A', 'G', 'G', 'G', 'G')}
 3696.4705619470374	584909.41015625	3696.4705619470374	true	false	false	false	false	{('C', 'C', 'U', 'U', 'U', 'U', 'U', 'A', 'G', 'G', '5Tag')}
 3712.4563342134434	1014184.4990234375	3712.4563342134434	true	false	false	false	true	{('C', 'C', 'C', 'C', 'C', 'C', 'U', 'U', 'U', 'U', 'A', 'A'), ('C', 'C', 'U', 'U', 'U', 'U', 'U', 'G', 'G', 'G', '5Tag'), ('U', 'U', 'U', 'U', 'U', 'A', 'A', 'A', 'A', 'A', '5Tag')}
