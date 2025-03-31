@@ -190,4 +190,4 @@ def test_testcase(testcase):
                 )
 
 
-# test_testcase("test_06")
+test_testcase("test_04")
