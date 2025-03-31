@@ -188,7 +188,7 @@ class Predictor:
                             weight=(0.001 + len_explanations)
                             * 2 ** (-len_explanations)
                             * intensity[latter_node_idx],
-                            # 2 and 0.5 are tunable paramater here to control the penalty!
+                            # 2 and 0.001 are tunable paramater here to control the penalty!
                             explanation=mass_explanations,
                         )
                         # Idea: The weight should be peanlized if the length of the explanation is more,
@@ -244,9 +244,9 @@ class Predictor:
                         max_end=pos,
                     )
                 )
-        print("Valid terminal fragments = ", valid_terminal_fragments)
-        print("Candidate fragments = ", candidate_fragments)
-        print("Invalid fragments = ", invalid_nodes)
+        # print("Valid terminal fragments = ", valid_terminal_fragments)
+        # print("Candidate fragments = ", candidate_fragments)
+        # print("Invalid fragments = ", invalid_nodes)
         skeleton_seq = []
         for node in range(len(longest_path) - 1):
             if (
@@ -265,8 +265,8 @@ class Predictor:
             skeleton_seq = skeleton_seq[::-1]
 
         # print("Longest path = ", longest_path)
-        print("Invalid nodes graph = ", invalid_nodes)
-        print("Skeleton sequence graph = ", skeleton_seq)
+        # print("Invalid nodes graph = ", invalid_nodes)
+        print(f"Skeleton sequence graph {side} = ", skeleton_seq)
 
         # TODO: Instead of the longest paths, one can also list ALL topological ordering from source to sink.
         # This will give other possible options for the sequences!
