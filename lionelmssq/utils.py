@@ -31,7 +31,7 @@ def determine_terminal_fragments(
     intensity_cutoff=0.5e6,
     mass_cutoff=50000,
     matching_threshold=MATCHING_THRESHOLD,
-    ms1_mass_deviations_allowed=0.01,
+    ms1_mass_deviations_allowed=0.001,  # 0.01,
 ):
     neutral_masses = (
         fragment_masses.select(pl.col(mass_column_name)).to_series().to_list()
@@ -212,7 +212,7 @@ def determine_terminal_fragments(
 
     # Use ms1_mass additionally as a cutoff for the fragment masses!
     if ms1_mass:
-        mass_cutoff = 1.01 * ms1_mass
+        mass_cutoff = (1.0 + ms1_mass_deviations_allowed) * ms1_mass  # 1.01 * ms1_mass
 
     fragment_masses = (
         fragment_masses.with_columns(

@@ -120,16 +120,21 @@ def test_testcase(testcase):
         #     matching_threshold,
         # )
 
-        fragments = determine_terminal_fragments(
-            fragment_masses_read,
-            output_file_path=base_path / "fragments_terminal_marked.tsv",
-            label_mass_3T=label_mass_3T,
-            label_mass_5T=label_mass_5T,
-            explanation_masses=explanation_masses,
-            matching_threshold=matching_threshold,
-            intensity_cutoff=intensity_cutoff,
-            ms1_mass=ms1_mass,
-        )
+        terminal_marked_path = base_path / "fragments_terminal_marked.tsv"
+        if not terminal_marked_path.exists():
+            # raise FileNotFoundError(f"File {terminal_marked_path} does not exist.")
+            fragments = determine_terminal_fragments(
+                fragment_masses_read,
+                output_file_path=base_path / "fragments_terminal_marked.tsv",
+                label_mass_3T=label_mass_3T,
+                label_mass_5T=label_mass_5T,
+                explanation_masses=explanation_masses,
+                matching_threshold=matching_threshold,
+                intensity_cutoff=intensity_cutoff,
+                ms1_mass=ms1_mass,
+            )
+        else:
+            fragments = pl.read_csv(terminal_marked_path, separator="\t")
         with pl.Config(tbl_rows=30):
             print(fragments)
 
@@ -156,7 +161,7 @@ def test_testcase(testcase):
         prediction.fragments.select(pl.col("predicted_fragment_mass"))
     ).to_list()
 
-    print("Predicted sequence = ", prediction.sequence)
+    print("Pred sequence = ", prediction.sequence)
     print("True sequence = ", true_seq)
 
     if simulation:
@@ -190,4 +195,5 @@ def test_testcase(testcase):
                     <= matching_threshold
                 )
 
-test_testcase("test_08")
+
+test_testcase("test_08_2")
