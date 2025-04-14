@@ -136,12 +136,25 @@ class Predictor:
         candidate_fragments = self.fragments_side[side].get_column("index").to_list()
 
         masses = [0.0] + self.fragment_masses[side]
+
+        def _accumulate_intesity(intensity, side):
+            first_fragment_index = 1
+            for index in range(1, len(masses) - 1):
+                if abs(
+                    masses[index] - masses[index + 1]
+                ) < self.matching_threshold * abs(masses[index] + self.mass_tags[side]):
+                    intensity[first_fragment_index] += intensity[index]
+                else:
+                    first_fragment_index = index + 1
+
         if use_ms_intensity_as_weight:
             intensity = [1.0] + self.fragments_side[side].get_column(
                 "intensity"
             ).to_list()
+            _accumulate_intesity(intensity, side)
         else:
             intensity = [1.0] * len(masses)
+        total_intensity = sum(intensity)
 
         G = DiGraph()
         # Add nodes:
@@ -164,11 +177,13 @@ class Predictor:
                     abs(last_mass_diff - mass_diff)
                     < self.matching_threshold
                     * abs(masses[prior_node_idx] + self.mass_tags[side])
-                ):  # NOTE: Remoeve this last_mass_diff and continue to include "same mass in the graph!" as well!
+                ):  # NOTE: Remove this last_mass_diff and continue to include "same mass in the graph!" as well!
                     continue
                 else:
                     last_mass_diff = mass_diff
                     last_node_idx = latter_node_idx
+                    # The last node idx, keeps a track of the last unique "MS1" mass node,
+                    # its used later to find the last node that the top paths must end at!
 
                 if mass_diff in self.explanations:
                     mass_explanations = self.explanations.get(mass_diff, [])
@@ -214,7 +229,8 @@ class Predictor:
                             * peanlize_explanation_length_params["base"]
                             ** (-len_explanations)
                         )
-                        * intensity[latter_node_idx],
+                        * intensity[latter_node_idx]
+                        / total_intensity,
                         explanation=mass_explanations,
                     )
                     # NOTE: If the offset is 0, it ignores the different fragments of the 'same' mass from the longest path
@@ -314,9 +330,9 @@ class Predictor:
         # Add the 'same' mass fragments back to the longest paths and include them in the valid terminal fragments!
         new_longest_paths = []
         for idx_path, path in enumerate(longest_paths):
-            #NOTE: The following uses a different approach to add the 'same' mass fragments to the longest path!
-            #Instead of using a for loop, this uses a while loop to add the 'same' mass fragments to the longest path!
-            
+            # NOTE: The following uses a different approach to add the 'same' mass fragments to the longest path!
+            # Instead of using a for loop, this uses a while loop to add the 'same' mass fragments to the longest path!
+
             # new_longest_path = (path[0], [])
             # for longest_path_node in path[1]:
             #     print("Longest path node = ", longest_path_node)
@@ -453,7 +469,7 @@ class Predictor:
             Side.START,
             # use_ms_intensity_as_weight=True,
             use_ms_intensity_as_weight=False,
-            num_top_paths=100,
+            num_top_paths=10,
             peanlize_explanation_length_params={"zero_len_weight": 0.0, "base": e},
         )
 
@@ -464,12 +480,27 @@ class Predictor:
         _, end_fragments, skeleton_seq_end, invalid_end_fragments, seq_score_end = (
             self.graph_skeleton(
                 Side.END,
-                use_ms_intensity_as_weight=False,
                 # use_ms_intensity_as_weight=True,
-                num_top_paths=100,
+                use_ms_intensity_as_weight=False,
+                num_top_paths=10,
                 peanlize_explanation_length_params={"zero_len_weight": 0.0, "base": e},
             )
         )
+
+        seq_set, score, start_seq_index, end_seq_index = (
+            self._align_skeletons_multi_seq(
+                skeleton_seq_start=skeleton_seq_start,
+                skeleton_seq_end=skeleton_seq_end,
+                score_seq_start=seq_score_start,
+                # score_seq_start=None,
+                score_seq_end=seq_score_end,
+                # score_seq_end=None,
+            )
+        )
+
+        print(seq_set)
+
+        print("Score = ", score)
 
         if True:
             skeleton_seq_start = skeleton_seq_start[0]
@@ -482,9 +513,6 @@ class Predictor:
             invalid_end_fragments = invalid_end_fragments[0]
 
         skeleton_seq = self._align_skeletons(
-            # skeleton_seq_start, skeleton_seq_end, align_depth=10
-            # skeleton_seq_start, skeleton_seq_end, align_depth=None
-            # skeleton_seq_start, skeleton_seq_end, align_depth=None, trust_range=True
             skeleton_seq_start,
             skeleton_seq_end,
             align_depth=None,
@@ -861,6 +889,80 @@ class Predictor:
             ]
 
         self.fragment_masses[side] = side_fragments + start_end_fragments
+
+    def _align_skeletons_multi_seq(
+        self,
+        skeleton_seq_start,
+        skeleton_seq_end,
+        score_seq_start=None,
+        score_seq_end=None,
+    ) -> Tuple[List[List[Set[str]]], List[float], List[int], List[int]]:
+        # While building the ladder it may happen that things are unambiguous from one side, but not from the other!
+        # In that case, we should consider the unambiguous side as the correct one! If the intersection is empty, then we can consider the union of the two!
+
+        # Align the skeletons of the start and end fragments to get the final skeleton sequence!
+        # Wherever there is no ambiguity, that nucleotide is preferrentially considered!
+
+        skeleton_seq = []
+        skeleton_seq_score = []
+        start_seq_index = []
+        end_seq_index = []
+
+        for idx_1, seq_1 in enumerate(skeleton_seq_start):
+            for idx_2, seq_2 in enumerate(skeleton_seq_end):
+                temp_seq = [set() for _ in range(self.seq_len)]
+                perfect_match = True
+                temp_score = 0.
+
+                for i in range(self.seq_len):
+                    temp_seq[i] = seq_1[i].intersection(seq_2[i])
+                    if temp_seq[i]:
+                        if score_seq_start is not None and score_seq_end is not None:
+                            temp_score += (
+                                score_seq_start[idx_1] + score_seq_end[idx_2]
+                            ) / len(temp_seq[i])
+                        else:
+                            temp_score += 1.0 / len(temp_seq[i])
+                    else:
+                    # if not temp_seq[i]:
+                        perfect_match = False
+
+                    # if not temp_seq[i]:
+                    #     if len(seq_1[i]) < len(seq_2[i]):
+                    #             temp_seq[i] = seq_1[i]
+                    #     else:
+                    #         temp_seq[i] = seq_2[i]
+                    # TODO: Also output cases if and where no perfect match is found!
+
+                if perfect_match and temp_seq not in skeleton_seq:
+                    skeleton_seq.append(temp_seq)
+                    skeleton_seq_score.append(temp_score)
+                    start_seq_index.append(idx_1)
+                    end_seq_index.append(idx_2)
+
+        sorted_skeleton_seq = [
+            seq
+            for _, seq in sorted(zip(skeleton_seq_score, skeleton_seq), reverse=False)
+        ]
+        sorted_start_seq_index = [
+            index
+            for _, index in sorted(
+                zip(skeleton_seq_score, start_seq_index), reverse=False
+            )
+        ]
+        sorted_end_seq_index = [
+            index
+            for _, index in sorted(
+                zip(skeleton_seq_score, end_seq_index), reverse=False
+            )
+        ]
+
+        return (
+            sorted_skeleton_seq,
+            sorted(skeleton_seq_score, reverse=False),
+            sorted_start_seq_index,
+            sorted_end_seq_index,
+        )
 
     def _align_skeletons(
         self,
