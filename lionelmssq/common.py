@@ -28,6 +28,7 @@ def get_singleton_set_item(set_: Set[Any]) -> Any:
         raise ValueError(f"Expected a set with one item, got {set_}")
     return next(iter(set_))
 
+
 def dag_top_n_longest_paths(G, N, weight="weight", default_weight=1, topo_order=None):
     """Returns the top N longest paths in a directed acyclic graph (DAG).
     This function extends the networkx function "dag_longest_path" to output the top N paths
@@ -92,7 +93,10 @@ def dag_top_n_longest_paths(G, N, weight="weight", default_weight=1, topo_order=
 
     return all_paths[:N]
 
-def dag_top_n_longest_paths_with_start_end(G, N, start_node, end_node, weight="weight", default_weight=1):
+
+def dag_top_n_longest_paths_with_start_end(
+    G, N, start_node, end_node, weight="weight", default_weight=1
+):
     """Returns the top N longest paths in a DAG that start at a specific node and end at a specific node.
 
     Parameters
@@ -126,7 +130,9 @@ def dag_top_n_longest_paths_with_start_end(G, N, start_node, end_node, weight="w
 
     # Ensure start_node and end_node exist in the graph
     if start_node not in G or end_node not in G:
-        raise ValueError(f"Start node {start_node} or end node {end_node} is not in the graph.")
+        raise ValueError(
+            f"Start node {start_node} or end node {end_node} is not in the graph."
+        )
 
     # Compute topological order
     topo_order = list(nx.topological_sort(G))
@@ -139,7 +145,6 @@ def dag_top_n_longest_paths_with_start_end(G, N, start_node, end_node, weight="w
 
     # Process nodes in topological order
     for v in topo_order:
-        
         # # Skip nodes that have no paths leading to them
         # if not dp[v]:
         #     continue
