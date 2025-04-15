@@ -639,10 +639,11 @@ class Predictor:
         def is_valid_pos(pos: int, ext: int) -> bool:
             pos = pos + factor * ext
             return (
-                0 <= pos <= self.seq_len
+                # 0 <= pos <= self.seq_len
+                0 <= pos < self.seq_len
                 if side == Side.START
-                else -(self.seq_len + 1) <= pos < 0
-                # else -self.seq_len <= pos < 0
+                # else -(self.seq_len + 1) <= pos < 0
+                else -self.seq_len <= pos < 0
             )
 
         pos = {0} if side == Side.START else {-1}
