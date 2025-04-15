@@ -3,7 +3,7 @@ import re
 from typing import Any, Set
 from heapq import heappush, heappop
 from itertools import chain
-import networkx as nx
+from networkx import topological_sort
 
 
 # _NUCLEOSIDE_RE = re.compile(r"\d*[ACGUT]")
@@ -60,7 +60,7 @@ def dag_top_n_longest_paths(G, N, weight="weight", default_weight=1, topo_order=
         return []
 
     if topo_order is None:
-        topo_order = list(nx.topological_sort(G))
+        topo_order = list(topological_sort(G))
 
     # Dictionary to store the top N longest paths to each node
     dist = {v: [] for v in G.nodes}
@@ -135,7 +135,7 @@ def dag_top_n_longest_paths_with_start_end(
         )
 
     # Compute topological order
-    topo_order = list(nx.topological_sort(G))
+    topo_order = list(topological_sort(G))
 
     # Initialize DP table: {node: priority queue of top N paths}
     dp = {v: [] for v in G.nodes}

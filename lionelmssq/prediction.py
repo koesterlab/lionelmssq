@@ -14,9 +14,7 @@ from lionelmssq.mass_explanation import explain_mass
 import polars as pl
 from loguru import logger
 from networkx import DiGraph, dag_longest_path
-import networkx
 from math import e
-# from common import dag_top_n_longest_paths
 
 LP_relaxation_threshold = 0.9
 
