@@ -469,9 +469,9 @@ class Predictor:
             )
         )
 
-        print(seq_set)
+        print("Top sequences = ", seq_set)
 
-        print("Score = ", score)
+        print("Top sequences scores = ", score)
 
         if True:
             skeleton_seq_start = skeleton_seq_start[0]
@@ -483,16 +483,6 @@ class Predictor:
             invalid_start_fragments = invalid_start_fragments[0]
             invalid_end_fragments = invalid_end_fragments[0]
 
-        skeleton_seq = self._align_skeletons(
-            skeleton_seq_start,
-            skeleton_seq_end,
-            align_depth=None,
-            trust_range=None,
-            trust_smaller_set=True,
-        )
-
-        print("Graph aligned_skeleton_seq = ", skeleton_seq)
-
         # (
         #     skeleton_seq,
         #     start_fragments,
@@ -502,6 +492,16 @@ class Predictor:
         # ) = self.build_skeleton()
 
         # print("Ladder skeleton seq = ", skeleton_seq)
+
+        skeleton_seq = self._align_skeletons(
+            skeleton_seq_start,
+            skeleton_seq_end,
+            align_depth=None,
+            trust_range=None,
+            trust_smaller_set=True,
+        )
+
+        print("Graph aligned_skeleton_seq = ", skeleton_seq)
 
         # TODO: If the tags are considered in the LP at the end, then most of the following code will become obsolete!
         self.fragments_side[Side.START] = self.fragments_side[Side.START].filter(
