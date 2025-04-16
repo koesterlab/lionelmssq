@@ -36,17 +36,12 @@ TEST_SEQ = [
 ]
 
 MASS_SEQ_DICT = dict(zip(TEST_MASSES_WITH_BACKBONE, TEST_SEQ))
+THRESHOLDS = [10]
 
-
-# _TESTCASES = importlib.resources.files("tests") / "testcases"
-# @pytest.mark.parametrize("testcase", _TESTCASES.iterdir())
 @pytest.mark.parametrize("testcase", MASS_SEQ_DICT.items())
-def test_testcase(testcase):
-    # base_path = _TESTCASES / testcase
-    # with open(base_path / "meta.yaml", "r") as f:
-    #    meta = yaml.safe_load(f)
-
-    predicted_mass_explanations = explain_mass(testcase[0])
+@pytest.mark.parametrize("threshold", THRESHOLDS)
+def test_testcase(testcase, threshold):
+    predicted_mass_explanations = explain_mass(testcase[0], threshold)
 
     breakage = list(testcase[1].keys())[0]
     explanations = [
@@ -58,15 +53,16 @@ def test_testcase(testcase):
 
     assert tuple(testcase[1][breakage]) in explanations
 
-WITH_MEMO = [True]
+WITH_MEMO = [False, True]
 COMPRESSION_RATES = [32]
 
 @pytest.mark.parametrize("testcase", MASS_SEQ_DICT.items())
 @pytest.mark.parametrize("compression", COMPRESSION_RATES)
 @pytest.mark.parametrize("memo", WITH_MEMO)
-def test_testcase_with_dp(testcase, compression, memo):
+@pytest.mark.parametrize("threshold", THRESHOLDS)
+def test_testcase_with_dp(testcase, compression, memo, threshold):
     predicted_mass_explanations = explain_mass_with_dp(
-        testcase[0], memo, compression)
+        testcase[0], memo, compression, threshold)
 
     breakage = list(testcase[1].keys())[0]
     explanations = [

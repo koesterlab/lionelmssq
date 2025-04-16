@@ -152,7 +152,8 @@ def set_up_mass_table():
 
 
 def explain_mass_with_dp(
-        mass: float, with_memo: bool, compression_rate=COMPRESSION_RATE) -> list[MassExplanations]:
+        mass: float, with_memo: bool, compression_rate=COMPRESSION_RATE,
+        threshold=MATCHING_THRESHOLD) -> list[MassExplanations]:
     """
     Return all possible combinations of nucleosides that could sum up to the given mass.
     """
@@ -269,11 +270,11 @@ def explain_mass_with_dp(
 
     solution_tolerated_integer_masses = {}
     for breakage_weight in BREAKAGES:
-        # Compute all valid solutions within an interval of MATCHING_THRESHOLD
+        # Compute all valid solutions within the threshold interval
         solutions = []
         for value in range(
-            target - breakage_weight - MATCHING_THRESHOLD,
-            target - breakage_weight + MATCHING_THRESHOLD,
+            target - breakage_weight - threshold,
+            target - breakage_weight + threshold,
         ):
             solutions += (
                 backtrack_with_memo(value, len(tolerated_integer_masses) - 1)
@@ -333,7 +334,7 @@ def explain_mass_with_dp(
     return explanations
 
 
-def explain_mass(mass: float) -> list[MassExplanations]:
+def explain_mass(mass: float, threshold=MATCHING_THRESHOLD) -> list[MassExplanations]:
     """
     Returns all the possible combinations of nucleosides that could sum up to the given mass.
     """
@@ -358,8 +359,8 @@ def explain_mass(mass: float) -> list[MassExplanations]:
         if (remaining, start) in memo:
             return memo[(remaining, start)]
 
-        # Base case: if abs(target) is less than MATCHING_THRESHOLD, return a list with one empty combination
-        if abs(remaining) < MATCHING_THRESHOLD:
+        # Base case: if abs(target) is less than threshold, return a list with one empty combination
+        if abs(remaining) < threshold:
             return [[]]
 
         # Base case: if target is zero, return a list with one empty combination
