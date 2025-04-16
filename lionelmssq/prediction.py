@@ -653,9 +653,7 @@ class Predictor:
             is_valid = True
             if diff in self.explanations:
                 explanations = self.explanations.get(diff, [])
-                # last_mass_valid = mass
             else:
-                # CHECK: Review if the correct values of the mass, i.e "last_mass_valid" are used here!
                 threshold = self._calculate_diff_errors(
                     last_mass_valid + self.mass_tags[side],
                     last_mass_valid + diff + self.mass_tags[side],
@@ -664,8 +662,6 @@ class Predictor:
                 explanations = self._calculate_diff_dp(
                     diff, threshold, self.explanation_masses
                 )
-            # if explanations:
-            #     carry_over_mass = 0.0 #CHECK: Review this!
 
             # METHOD: if there is only one single nucleoside explanation, we can
             # directly assign the nucleoside if there are tuples, we have to assign a
@@ -746,7 +742,6 @@ class Predictor:
                     is_valid = False
             elif (
                 abs(diff) <= self.matching_threshold * abs(mass + self.mass_tags[side])
-                # abs(diff/mass) <= self._calculate_diff_errors(mass+self.mass_tags[side],mass+diff+self.mass_tags[side],self.matching_threshold)
                 # Problem! The above approach might blow up if the masses are very close, i.e. diff is very close to zero!
             ):
                 if side == Side.START:
@@ -768,8 +763,8 @@ class Predictor:
                     )
                 )
                 pos = next_pos
-                last_mass_valid = mass  # CHECK:Review this!
-                carry_over_mass = 0.0  # TODO:Review this!
+                last_mass_valid = mass
+                carry_over_mass = 0.0
             else:
                 logger.warning(
                     f"Skipping {side} fragment {fragment_index} with observed mass {mass} because no "
