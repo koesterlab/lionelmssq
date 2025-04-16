@@ -13,7 +13,6 @@ from lionelmssq.masses import TABLE_PATH
 from lionelmssq.masses import MATCHING_THRESHOLD
 from lionelmssq.masses import MAX_MASS
 from lionelmssq.masses import BREAKAGES
-from lionelmssq.masses import USE_BITS
 from lionelmssq.masses import COMPRESSION_RATE
 
 match COMPRESSION_RATE:
@@ -172,21 +171,16 @@ def explain_mass_with_dp(mass: float, with_memo: bool) -> list[MassExplanations]
     # Sort the tolerated_integer_masses, makes life easier
     tolerated_integer_masses.sort()
 
-    # # Compute and save DP table if not existing
-    # if not pathlib.Path(f"{TABLE_PATH}.1_per_cell.npy").is_file():
-    #     print('Table not found')
-    #     dp_table = set_up_mass_table()
-    #     np.save(f"TABLE_PATH.1_per_cell", dp_table)
-
     # Compute and save bit-representation DP table if not existing
     if not pathlib.Path(f"{TABLE_PATH}.{COMPRESSION_RATE}_per_cell.npy").is_file():
         print("Table not found")
-        dp_table = set_up_bit_table()
+        dp_table = set_up_mass_table() if COMPRESSION_RATE == 1 else (
+            set_up_bit_table())
         np.save(f"{TABLE_PATH}.{COMPRESSION_RATE}_per_cell", dp_table)
 
     # Read DP table
     dp_table = np.load(
-        f"{TABLE_PATH}.{COMPRESSION_RATE if USE_BITS else 1}_per_cell.npy"
+        f"{TABLE_PATH}.{COMPRESSION_RATE}_per_cell.npy"
     )
 
     memo = {}
@@ -207,10 +201,10 @@ def explain_mass_with_dp(mass: float, with_memo: bool) -> list[MassExplanations]
             return [[]]
 
         current_value = (
+            dp_table[current_idx, total_mass]
+            if COMPRESSION_RATE == 1 else
             dp_table[current_idx, total_mass // COMPRESSION_RATE]
             >> 2 * (COMPRESSION_RATE - 1 - total_mass % COMPRESSION_RATE)
-            if USE_BITS
-            else dp_table[current_idx, total_mass]
         )
 
         # Return empty list for unreachable cells
@@ -248,10 +242,10 @@ def explain_mass_with_dp(mass: float, with_memo: bool) -> list[MassExplanations]
             return [[]]
 
         current_value = (
+            dp_table[current_idx, total_mass]
+            if COMPRESSION_RATE == 1 else
             dp_table[current_idx, total_mass // COMPRESSION_RATE]
             >> 2 * (COMPRESSION_RATE - 1 - total_mass % COMPRESSION_RATE)
-            if USE_BITS
-            else dp_table[current_idx, total_mass]
         )
 
         # Return empty list for unreachable cells

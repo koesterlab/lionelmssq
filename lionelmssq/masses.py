@@ -7,7 +7,6 @@ _COLS = ["nucleoside", "monoisotopic_mass"]
 
 REDUCE_TABLE = True
 REDUCE_SET = False
-USE_BITS = True
 COMPRESSION_RATE = 32
 
 MASSES = pl.read_csv(
