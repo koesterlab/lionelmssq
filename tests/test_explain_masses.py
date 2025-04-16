@@ -58,25 +58,12 @@ def test_testcase(testcase):
 
     assert tuple(testcase[1][breakage]) in explanations
 
+WITH_MEMO = [False, True]
 
 @pytest.mark.parametrize("testcase", MASS_SEQ_DICT.items())
-def test_testcase_with_dp(testcase):
-    predicted_mass_explanations = explain_mass_with_dp(testcase[0], False)
-
-    breakage = list(testcase[1].keys())[0]
-    explanations = [
-        tuple(solution)
-        for expl in predicted_mass_explanations
-        for solution in expl.explanations
-        if expl.breakage == breakage
-    ]
-
-    assert tuple(testcase[1][breakage]) in explanations
-
-
-@pytest.mark.parametrize("testcase", MASS_SEQ_DICT.items())
-def test_testcase_with_dp_and_memo(testcase):
-    predicted_mass_explanations = explain_mass_with_dp(testcase[0], True)
+@pytest.mark.parametrize("memo", WITH_MEMO)
+def test_testcase_with_dp(testcase, memo):
+    predicted_mass_explanations = explain_mass_with_dp(testcase[0], memo)
 
     breakage = list(testcase[1].keys())[0]
     explanations = [
