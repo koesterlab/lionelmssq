@@ -209,7 +209,7 @@ def explain_mass_with_dp(
         )
 
         # Return empty list for unreachable cells
-        if current_value % compression_rate == 0.0:
+        if compression_rate != 1 and current_value % compression_rate == 0.0:
             return []
 
         solutions = []
@@ -250,7 +250,7 @@ def explain_mass_with_dp(
         )
 
         # Return empty list for unreachable cells
-        if current_value % compression_rate == 0.0:
+        if compression_rate != 1 and current_value % compression_rate == 0.0:
             return []
 
         solutions = []
