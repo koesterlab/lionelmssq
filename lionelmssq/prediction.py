@@ -2,13 +2,15 @@ from dataclasses import dataclass
 from itertools import chain, combinations, groupby
 from pathlib import Path
 from typing import List, Optional, Self, Set, Tuple
-from pulp import LpProblem, LpMinimize, LpInteger, LpContinuous, LpVariable, lpSum
+from pulp import LpProblem, LpMinimize, LpInteger, LpContinuous, LpVariable, lpSum, getSolver
 from lionelmssq.common import Side, get_singleton_set_item
 from lionelmssq.masses import UNIQUE_MASSES, EXPLANATION_MASSES, MATCHING_THRESHOLD
 from lionelmssq.mass_explanation import explain_mass
 import polars as pl
 from loguru import logger
 
+# Sometime the LP does not exactly output probabilities of 1 for one nucleotide or one position.
+# This is due to the LP relaxation. Hence, we need to set a threshold for the LP relaxation.
 LP_relaxation_threshold = 0.9
 
 
@@ -213,11 +215,6 @@ class Predictor:
             + [i for i in self.fragments_internal.get_column("observed_mass").to_list()]
         )
 
-        prob = LpProblem("RNA sequencing", LpMinimize)
-        # i = 1,...,n: positions in the sequence
-        # j = 1,...,m: fragments
-        # b = 1,...,k: (modified) bases
-
         fragment_masses = self.fragments.get_column("observed_mass").to_list()
         n_fragments = len(fragment_masses)
         print("Fragments considered for fitting, n_fragments = ", n_fragments)
@@ -376,15 +373,13 @@ class Predictor:
                 y[i][nuc].setInitialValue(1)
                 y[i][nuc].fixValue()
 
-        import pulp
-
         match self.solver:
             case "gurobi":
                 solver_name = "GUROBI_CMD"
             case "cbc":
                 solver_name = "PULP_CBC_CMD"
 
-        solver = pulp.getSolver(solver_name, threads=self.threads)
+        solver = getSolver(solver_name, threads=self.threads)
         # gurobi.msg = False
         # TODO the returned value resembles the accuracy of the prediction
         _ = prob.solve(solver)
@@ -477,37 +472,34 @@ class Predictor:
         # Optionally ``restrict_is_start_end`` can be set to True to only consider the start_end fragments which have been included in self.fragments_side[side]
         # This is useful later when a skeleton is already built and we need the masses of the accepted fragments!
 
-        if restrict_is_start_end:
-            side_fragments = [
+        def _get_side_fragments(side: Side, fragments: pl.DataFrame):
+            return [
                 i - self.mass_tags[side]
-                for i in self.fragments_side[side]
+                for i in fragments
                 .filter(pl.col(f"is_{side}"))
                 .get_column("observed_mass")
                 .to_list()
             ]
-            start_end_fragments = [
+        
+        def _get_start_end_fragments(side: Side, fragments: pl.DataFrame):
+            return [
                 i - self.mass_tags[Side.START] - self.mass_tags[Side.END]
-                for i in self.fragments_side[side]
+                for i in fragments
                 .filter(pl.col("is_start_end"))
                 .get_column("observed_mass")
                 .to_list()
             ]
+
+        if restrict_is_start_end:
+            # Collect the (tag subtracted) masses of the fragments for the side
+            side_fragments = _get_side_fragments(side=side, fragments=self.fragments_side[side])
+            # Collect the (both tags subtracted) masses of the start_end fragments
+            start_end_fragments = _get_start_end_fragments(side=side, fragments=self.fragments_side[side])
         else:
             # Collect the (tag subtracted) masses of the fragments for the side
-            side_fragments = [
-                i - self.mass_tags[side]
-                for i in self.fragments.filter(pl.col(f"is_{side}"))
-                .get_column("observed_mass")
-                .to_list()
-            ]
-
+            side_fragments = _get_side_fragments(side=side, fragments=self.fragments)
             # Collect the (both tags subtracted) masses of the start_end fragments
-            start_end_fragments = [
-                i - self.mass_tags[Side.START] - self.mass_tags[Side.END]
-                for i in self.fragments.filter(pl.col("is_start_end"))
-                .get_column("observed_mass")
-                .to_list()
-            ]
+            start_end_fragments = _get_start_end_fragments(side=side, fragments=self.fragments)
 
         self.fragment_masses[side] = side_fragments + start_end_fragments
 
@@ -700,30 +692,16 @@ class Predictor:
                         expl_len: set(chain(*expls))
                         for expl_len, expls in groupby(p_specific_explanations, len)
                     }
-                    # print("p_specific_explanations = ", p_specific_explanations)
-                    # print("alphabet_per_expl_len = ", alphabet_per_expl_len)
-                    # print("p = ", p)
-                    # print("fragment_index = ", fragment_index)
 
                     if p_specific_explanations:
-                        if side is Side.START:
-                            if p == min_p:
-                                min_fragment_end = min_p + min(
-                                    expl_len for expl_len in alphabet_per_expl_len
-                                )
-                            elif p == max_p:
-                                max_fragment_end = max_p + max(
-                                    expl_len for expl_len in alphabet_per_expl_len
-                                )
-                        else:
-                            if p == min_p:
-                                min_fragment_end = min_p - min(
-                                    expl_len for expl_len in alphabet_per_expl_len
-                                )
-                            elif p == max_p:
-                                max_fragment_end = max_p - max(
-                                    expl_len for expl_len in alphabet_per_expl_len
-                                )
+                        if p == min_p:
+                            min_fragment_end = min_p + factor*min(
+                                expl_len for expl_len in alphabet_per_expl_len
+                            )
+                        elif p == max_p:
+                            max_fragment_end = max_p + factor*max(
+                                expl_len for expl_len in alphabet_per_expl_len
+                            )
 
                     # constrain already existing sets in the range of the expl
                     # by the nucs that are given in the explanations
@@ -785,7 +763,6 @@ class Predictor:
                 valid_terminal_fragments.append(
                     TerminalFragment(
                         index=candidate_fragments[fragment_index],
-                        # index=fragment_index,
                         min_end=min_fragment_end,
                         max_end=max_fragment_end,
                     )

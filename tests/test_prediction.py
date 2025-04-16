@@ -138,8 +138,8 @@ def test_testcase(testcase):
     prediction = Predictor(
         fragments,
         len(true_seq),
-        os.environ.get("SOLVER", "cbc"),
-        # os.environ.get("SOLVER", "gurobi"),  # "solver": "gurobi" or "cbc"
+        # os.environ.get("SOLVER", "cbc"),
+        os.environ.get("SOLVER", "gurobi"),  # "solver": "gurobi" or "cbc"
         threads=16,
         unique_masses=unique_masses,
         explanation_masses=explanation_masses,
@@ -191,4 +191,4 @@ def test_testcase(testcase):
                 )
 
 
-# test_testcase("test_04")
+test_testcase("test_04")
