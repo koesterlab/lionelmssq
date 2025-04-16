@@ -2,7 +2,15 @@ from dataclasses import dataclass
 from itertools import chain, combinations, groupby
 from pathlib import Path
 from typing import List, Optional, Self, Set, Tuple
-from pulp import LpProblem, LpMinimize, LpInteger, LpContinuous, LpVariable, lpSum, getSolver
+from pulp import (
+    LpProblem,
+    LpMinimize,
+    LpInteger,
+    LpContinuous,
+    LpVariable,
+    lpSum,
+    getSolver,
+)
 from lionelmssq.common import Side, get_singleton_set_item
 from lionelmssq.masses import UNIQUE_MASSES, EXPLANATION_MASSES, MATCHING_THRESHOLD
 from lionelmssq.mass_explanation import explain_mass
@@ -475,31 +483,35 @@ class Predictor:
         def _get_side_fragments(side: Side, fragments: pl.DataFrame):
             return [
                 i - self.mass_tags[side]
-                for i in fragments
-                .filter(pl.col(f"is_{side}"))
+                for i in fragments.filter(pl.col(f"is_{side}"))
                 .get_column("observed_mass")
                 .to_list()
             ]
-        
+
         def _get_start_end_fragments(side: Side, fragments: pl.DataFrame):
             return [
                 i - self.mass_tags[Side.START] - self.mass_tags[Side.END]
-                for i in fragments
-                .filter(pl.col("is_start_end"))
+                for i in fragments.filter(pl.col("is_start_end"))
                 .get_column("observed_mass")
                 .to_list()
             ]
 
         if restrict_is_start_end:
             # Collect the (tag subtracted) masses of the fragments for the side
-            side_fragments = _get_side_fragments(side=side, fragments=self.fragments_side[side])
+            side_fragments = _get_side_fragments(
+                side=side, fragments=self.fragments_side[side]
+            )
             # Collect the (both tags subtracted) masses of the start_end fragments
-            start_end_fragments = _get_start_end_fragments(side=side, fragments=self.fragments_side[side])
+            start_end_fragments = _get_start_end_fragments(
+                side=side, fragments=self.fragments_side[side]
+            )
         else:
             # Collect the (tag subtracted) masses of the fragments for the side
             side_fragments = _get_side_fragments(side=side, fragments=self.fragments)
             # Collect the (both tags subtracted) masses of the start_end fragments
-            start_end_fragments = _get_start_end_fragments(side=side, fragments=self.fragments)
+            start_end_fragments = _get_start_end_fragments(
+                side=side, fragments=self.fragments
+            )
 
         self.fragment_masses[side] = side_fragments + start_end_fragments
 
@@ -691,11 +703,11 @@ class Predictor:
 
                     if p_specific_explanations:
                         if p == min_p:
-                            min_fragment_end = min_p + factor*min(
+                            min_fragment_end = min_p + factor * min(
                                 expl_len for expl_len in alphabet_per_expl_len
                             )
                         elif p == max_p:
-                            max_fragment_end = max_p + factor*max(
+                            max_fragment_end = max_p + factor * max(
                                 expl_len for expl_len in alphabet_per_expl_len
                             )
 
