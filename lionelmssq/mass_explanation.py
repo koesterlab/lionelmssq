@@ -151,7 +151,8 @@ def set_up_mass_table():
     return dp_table
 
 
-def explain_mass_with_dp(mass: float, with_memo: bool) -> list[MassExplanations]:
+def explain_mass_with_dp(
+        mass: float, with_memo: bool, compression_rate=COMPRESSION_RATE) -> list[MassExplanations]:
     """
     Return all possible combinations of nucleosides that could sum up to the given mass.
     """
@@ -172,15 +173,15 @@ def explain_mass_with_dp(mass: float, with_memo: bool) -> list[MassExplanations]
     tolerated_integer_masses.sort()
 
     # Compute and save bit-representation DP table if not existing
-    if not pathlib.Path(f"{TABLE_PATH}.{COMPRESSION_RATE}_per_cell.npy").is_file():
+    if not pathlib.Path(f"{TABLE_PATH}.{compression_rate}_per_cell.npy").is_file():
         print("Table not found")
-        dp_table = set_up_mass_table() if COMPRESSION_RATE == 1 else (
+        dp_table = set_up_mass_table() if compression_rate == 1 else (
             set_up_bit_table())
-        np.save(f"{TABLE_PATH}.{COMPRESSION_RATE}_per_cell", dp_table)
+        np.save(f"{TABLE_PATH}.{compression_rate}_per_cell", dp_table)
 
     # Read DP table
     dp_table = np.load(
-        f"{TABLE_PATH}.{COMPRESSION_RATE}_per_cell.npy"
+        f"{TABLE_PATH}.{compression_rate}_per_cell.npy"
     )
 
     memo = {}
@@ -202,13 +203,13 @@ def explain_mass_with_dp(mass: float, with_memo: bool) -> list[MassExplanations]
 
         current_value = (
             dp_table[current_idx, total_mass]
-            if COMPRESSION_RATE == 1 else
-            dp_table[current_idx, total_mass // COMPRESSION_RATE]
-            >> 2 * (COMPRESSION_RATE - 1 - total_mass % COMPRESSION_RATE)
+            if compression_rate == 1 else
+            dp_table[current_idx, total_mass // compression_rate]
+            >> 2 * (compression_rate - 1 - total_mass % compression_rate)
         )
 
         # Return empty list for unreachable cells
-        if current_value % COMPRESSION_RATE == 0.0:
+        if current_value % compression_rate == 0.0:
             return []
 
         solutions = []
@@ -243,13 +244,13 @@ def explain_mass_with_dp(mass: float, with_memo: bool) -> list[MassExplanations]
 
         current_value = (
             dp_table[current_idx, total_mass]
-            if COMPRESSION_RATE == 1 else
-            dp_table[current_idx, total_mass // COMPRESSION_RATE]
-            >> 2 * (COMPRESSION_RATE - 1 - total_mass % COMPRESSION_RATE)
+            if compression_rate == 1 else
+            dp_table[current_idx, total_mass // compression_rate]
+            >> 2 * (compression_rate - 1 - total_mass % compression_rate)
         )
 
         # Return empty list for unreachable cells
-        if current_value % COMPRESSION_RATE == 0.0:
+        if current_value % compression_rate == 0.0:
             return []
 
         solutions = []

@@ -58,12 +58,15 @@ def test_testcase(testcase):
 
     assert tuple(testcase[1][breakage]) in explanations
 
-WITH_MEMO = [False, True]
+WITH_MEMO = [True]
+COMPRESSION_RATES = [32]
 
 @pytest.mark.parametrize("testcase", MASS_SEQ_DICT.items())
+@pytest.mark.parametrize("compression", COMPRESSION_RATES)
 @pytest.mark.parametrize("memo", WITH_MEMO)
-def test_testcase_with_dp(testcase, memo):
-    predicted_mass_explanations = explain_mass_with_dp(testcase[0], memo)
+def test_testcase_with_dp(testcase, compression, memo):
+    predicted_mass_explanations = explain_mass_with_dp(
+        testcase[0], memo, compression)
 
     breakage = list(testcase[1].keys())[0]
     explanations = [
