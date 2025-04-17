@@ -473,16 +473,43 @@ class Predictor:
 
         print("Top sequences scores = ", score)
 
-        if True:
-            skeleton_seq_start = skeleton_seq_start[0]
-            skeleton_seq_end = skeleton_seq_end[0]
-            seq_score_start = seq_score_start[0]
-            seq_score_end = seq_score_end[0]
-            start_fragments = start_fragments[0]
-            end_fragments = end_fragments[0]
-            invalid_start_fragments = invalid_start_fragments[0]
-            invalid_end_fragments = invalid_end_fragments[0]
+        # if True:
+        #     skeleton_seq_start = skeleton_seq_start[0]
+        #     skeleton_seq_end = skeleton_seq_end[0]
+        #     seq_score_start = seq_score_start[0]
+        #     seq_score_end = seq_score_end[0]
+        #     start_fragments = start_fragments[0]
+        #     end_fragments = end_fragments[0]
+        #     invalid_start_fragments = invalid_start_fragments[0]
+        #     invalid_end_fragments = invalid_end_fragments[0]
 
+        chosen_seq_index = 0
+
+        if True:
+            skeleton_seq = seq_set[chosen_seq_index]
+            start_fragments = start_fragments[start_seq_index[chosen_seq_index]]
+            end_fragments = end_fragments[end_seq_index[chosen_seq_index]]
+            invalid_start_fragments = invalid_start_fragments[start_seq_index[chosen_seq_index]]
+            invalid_end_fragments = invalid_end_fragments[end_seq_index[chosen_seq_index]]
+            # skeleton_seq_start = skeleton_seq_start[start_seq_index[0]]
+            # skeleton_seq_end = skeleton_seq_end[end_seq_index[0]]
+
+            print("Multi-Graph aligned_skeleton_seq = ", skeleton_seq)
+
+
+        #This is the old _align_skeletons function when the algorithm only output a single sequence!
+        # skeleton_seq = self._align_skeletons(
+        #     skeleton_seq_start,
+        #     skeleton_seq_end,
+        #     align_depth=None,
+        #     trust_range=None,
+        #     trust_smaller_set=True,
+        # )
+        # print("Graph aligned_skeleton_seq = ", skeleton_seq)
+
+
+
+        #This is the old code for building the skeleton sequence
         # (
         #     skeleton_seq,
         #     start_fragments,
@@ -490,18 +517,8 @@ class Predictor:
         #     invalid_start_fragments,
         #     invalid_end_fragments,
         # ) = self.build_skeleton()
-
+        
         # print("Ladder skeleton seq = ", skeleton_seq)
-
-        skeleton_seq = self._align_skeletons(
-            skeleton_seq_start,
-            skeleton_seq_end,
-            align_depth=None,
-            trust_range=None,
-            trust_smaller_set=True,
-        )
-
-        print("Graph aligned_skeleton_seq = ", skeleton_seq)
 
         # TODO: If the tags are considered in the LP at the end, then most of the following code will become obsolete!
         self.fragments_side[Side.START] = self.fragments_side[Side.START].filter(
