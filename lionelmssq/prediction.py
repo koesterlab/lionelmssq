@@ -98,7 +98,13 @@ class Predictor:
 
     def build_skeleton(
         self,
-    ):  # -> Tuple[List[Set[str]], List[TerminalFragment], List[int]]: #TODO
+    ) -> Tuple[
+        List[Set[str]],
+        List[TerminalFragment],
+        List[TerminalFragment],
+        List[int],
+        List[int],
+    ]:
         skeleton_seq_start, start_fragments, invalid_start_fragments = (
             self._predict_skeleton(
                 Side.START,
@@ -651,11 +657,18 @@ class Predictor:
             )
 
         pos = {0} if side == Side.START else {-1}
+
+        # We reject some masses/some fragments which are not explained well by mass differences.
+        # While iterating through the fragments, the "carry_over_mass" keeps a track of the rejected mass difference.
+        # This is added to "diff" to get the next mass_difference.
         carry_over_mass = 0
+
+        # "last_mass_valid" keeps a track of the last mass which was NOT rejected.
+        # This is useful for calculating the difference threshold
+        last_mass_valid = 0.0
 
         valid_terminal_fragments = []
         invalid_fragments = []
-        last_mass_valid = 0.0
         for fragment_index, (diff, mass) in enumerate(
             zip(self.mass_diffs[side], fragment_masses)
         ):
