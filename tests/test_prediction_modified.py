@@ -13,18 +13,20 @@ import polars as pl
 import yaml
 
 from lionelmssq.masses import (
+    _COLS,
+    MASSES,
     UNIQUE_MASSES,
     TOLERANCE,
     MATCHING_THRESHOLD,
 )
 
-_TESTCASES = importlib.resources.files("tests") / "testcases"
+_TESTCASES = importlib.resources.files("tests") / "testcases_modified" / "20mers"
 
 
 @pytest.mark.parametrize(
     "testcase",
     # [tc for tc in _TESTCASES.iterdir() if tc.name not in ["test_08", ".DS_Store"]],
-    [tc for tc in _TESTCASES.iterdir() if tc.name in ["test_01", "test_02", "test_03"]],
+    # [tc for tc in _TESTCASES.iterdir() if tc.name in ["test_01", "test_02", "test_03"]],
 )
 # @pytest.mark.parametrize("testcase", _TESTCASES.iterdir())
 def test_testcase(testcase):
@@ -93,9 +95,28 @@ def test_testcase(testcase):
     else:
         simulation = False
 
-        unique_masses = UNIQUE_MASSES.filter(
-            pl.col("nucleoside").is_in(["A", "U", "G", "C"])
-        ).with_columns(
+        # unique_masses = UNIQUE_MASSES.filter(
+        #     pl.col("nucleoside").is_in(["A", "U", "G", "C"])
+        # ).with_columns(
+        #     (pl.col("monoisotopic_mass") + 61.95577).alias(
+        #         "monoisotopic_mass"
+        #     )  # Added the appropriate backbone mass!
+        # )
+
+        # TODO: Add the appropriate backbone masses and the terminal extra masses to the nucleosides!
+        UNIQUE_MASSES = (
+            MASSES.filter(
+                # pl.col("nucleoside").is_in(["A", "U", "G", "C", "0C", "0G", "0A", "0U", "9A"])
+                # pl.col("nucleoside").is_in(["A", "U", "G", "C", "0C"])
+                # pl.col("nucleoside").is_in(["A", "U", "G", "C", "9A"])
+                pl.col("nucleoside").is_in(["A", "U", "G", "C", "0A","0U"])
+            )
+            .group_by("monoisotopic_mass", maintain_order=True)
+            .first()
+            .select(pl.col(_COLS))
+        )
+
+        unique_masses = UNIQUE_MASSES.with_columns(
             (pl.col("monoisotopic_mass") + 61.95577).alias(
                 "monoisotopic_mass"
             )  # Added the appropriate backbone mass!
@@ -196,4 +217,4 @@ def test_testcase(testcase):
                 )
 
 
-test_testcase("test_08_2")
+test_testcase("test_02")

@@ -445,6 +445,8 @@ class Predictor:
             peanlize_explanation_length_params={"zero_len_weight": 0.0, "base": e},
         )
 
+        # print("Skeleton sequence start = ", skeleton_seq_start) 
+
         # We now create reduced self.fragments_side and their masses
         # which keeps the ordereing of accepted start and end candidates while rejecting
         # the invalid ones, but keeping the ones with internal marking as internal candidates!
@@ -459,12 +461,16 @@ class Predictor:
             )
         )
 
+        # print("Skeleton sequence end = ", skeleton_seq_end)
+
         seq_set, score, start_seq_index, end_seq_index = (
             self._align_skeletons_multi_seq(
                 skeleton_seq_start=skeleton_seq_start,
                 skeleton_seq_end=skeleton_seq_end,
-                score_seq_start=seq_score_start, #None
-                score_seq_end=seq_score_end, #None
+                # score_seq_start=seq_score_start, #None
+                score_seq_start=None,
+                # score_seq_end=seq_score_end, #None
+                score_seq_end=None,
                 nucleosides=nucleosides,
             )
         )
@@ -509,7 +515,7 @@ class Predictor:
 
 
 
-        #This is the old code for building the skeleton sequence
+        # #This is the old code for building the skeleton sequence
         # (
         #     skeleton_seq,
         #     start_fragments,
@@ -917,16 +923,24 @@ class Predictor:
                             temp_score += float(len(nucleosides) - len(temp_seq[i]))
                     else:
                         if score_seq_start is not None and score_seq_end is not None:
-                            temp_score += float(len(nucleosides))/(
-                                score_seq_start[idx_1] + score_seq_end[idx_2]
+                            # temp_score += float(len(nucleosides))/(
+                            #     score_seq_start[idx_1] + score_seq_end[idx_2]
+                            temp_score += float(len(nucleosides))*(
+                            score_seq_start[idx_1] + score_seq_end[idx_2]
                             ) #Penalize this by the number of nucelosides being considered!
                         else:
                             temp_score += float(len(nucleosides)) #Penalize this by the number of nucelosides being considered!
 
                         if len(seq_1[i]) < len(seq_2[i]):
                             temp_seq[i] = seq_1[i]
-                        else:
+                        elif len(seq_1[i]) > len(seq_2[i]):
                             temp_seq[i] = seq_2[i]
+                        else:
+                            if i < self.seq_len / 2:
+                                temp_seq[i] = seq_1[i]
+                            else:
+                                temp_seq[i] = seq_2[i]
+
                         perfect_match = False
 
                 if perfect_match and temp_seq not in skeleton_seq:
@@ -961,6 +975,9 @@ class Predictor:
             sorted_skeleton_seq_score = sorted(skeleton_seq_score, reverse=True)
 
         elif skeleton_seq_imperfect:
+
+            print("No perfect match found, using imperfect matches!")
+
             sorted_skeleton_seq = [
                 seq
                 for _, seq in sorted(

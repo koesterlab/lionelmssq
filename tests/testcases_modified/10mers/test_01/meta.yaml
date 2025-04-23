@@ -1,0 +1,7 @@
+identity: 10mer_RNA_01_mC
+intensity_cutoff: 10000
+label_mass_3T: 437.146387
+label_mass_5T: 475.163104
+predicted_sequence: GAU0CUAGAUC
+sequence_mass: 4131.72324
+true_sequence: GAU0CUAGAUC
