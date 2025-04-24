@@ -24,9 +24,9 @@ LP_relaxation_threshold = 0.9
 
 @dataclass
 class TerminalFragment:
-    index: int
-    min_end: int
-    max_end: int
+    index: int  # fragment index
+    min_end: int  # minimum length of fragment (negative for end fragments)
+    max_end: int  # maximum length of fragment (negative for end fragments)
 
 
 @dataclass
