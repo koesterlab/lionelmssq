@@ -200,6 +200,3 @@ def test_testcase(testcase):
                     abs(prediction_masses[i] / fragment_masses[i] - 1)
                     <= matching_threshold
                 )
-
-
-test_testcase("test_08_2")
