@@ -475,7 +475,12 @@ class Predictor:
             )
         )
 
-        print("Top sequences = ", seq_set)
+        # print("Top sequences = ", seq_set)
+
+        # Print the indices of seq_set corresponding to the top score
+        top_score = max(score)
+        top_score_indices = [idx for idx, sc in enumerate(score) if sc == top_score]
+        print("Top sequences = ", [seq_set[i] for i in top_score_indices])
 
         print("Top sequences scores = ", score)
 
@@ -500,7 +505,7 @@ class Predictor:
             # skeleton_seq_start = skeleton_seq_start[start_seq_index[0]]
             # skeleton_seq_end = skeleton_seq_end[end_seq_index[0]]
 
-            print("Multi-Graph aligned_skeleton_seq = ", skeleton_seq)
+            print("Multi-Graph aligned_skeleton_seq selected = ", skeleton_seq)
 
 
         #This is the old _align_skeletons function when the algorithm only output a single sequence!

@@ -107,9 +107,10 @@ def test_testcase(testcase):
         UNIQUE_MASSES = (
             MASSES.filter(
                 # pl.col("nucleoside").is_in(["A", "U", "G", "C", "0C", "0G", "0A", "0U", "9A"])
-                # pl.col("nucleoside").is_in(["A", "U", "G", "C", "0C"])
+                pl.col("nucleoside").is_in(["A", "U", "G", "C", "0C"])
                 # pl.col("nucleoside").is_in(["A", "U", "G", "C", "9A"])
-                pl.col("nucleoside").is_in(["A", "U", "G", "C", "0A","0U"])
+                # pl.col("nucleoside").is_in(["A", "U", "G", "C", "0A","0U","9A"])
+                # pl.col("nucleoside").is_in(["A", "U", "G", "C", "0A","0U"])
             )
             .group_by("monoisotopic_mass", maintain_order=True)
             .first()
@@ -131,15 +132,15 @@ def test_testcase(testcase):
 
         fragment_masses_read = pl.read_csv(base_path / "fragments.tsv", separator="\t")
 
-        matching_threshold = MATCHING_THRESHOLD
         # TODO: Discuss why it doesn't work with the estimated error!
-        # matching_threshold, _, _ = estimate_MS_error_MATCHING_THRESHOLD(
-        #     fragment_masses_read, unique_masses=unique_masses, simulation=simulation
-        # )
-        # print(
-        #     "Matching threshold (rel errror) estimated from singleton masses = ",
-        #     matching_threshold,
-        # )
+        matching_threshold, _, _ = estimate_MS_error_MATCHING_THRESHOLD(
+            fragment_masses_read, unique_masses=unique_masses, simulation=simulation
+        )
+        print(
+            "Matching threshold (rel errror) estimated from singleton masses = ",
+            matching_threshold,
+        )
+        matching_threshold = MATCHING_THRESHOLD
 
         terminal_marked_path = base_path / "fragments_terminal_marked.tsv"
         if not terminal_marked_path.exists():
@@ -217,4 +218,4 @@ def test_testcase(testcase):
                 )
 
 
-test_testcase("test_02")
+test_testcase("test_01")

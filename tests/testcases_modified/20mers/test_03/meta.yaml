@@ -1,7 +1,7 @@
 identity: 20mer_RNA_01_Inosine
 intensity_cutoff: 10000
-label_mass_3T: 569.225087
+label_mass_3T: 569.217207
 label_mass_5T: 475.163104
-predicted_sequence: UGCCUCAUU9AC9AUCAUCCUG
-sequence_mass: 7326.152809
+predicted_sequence: UGCCUCACCAC9AUCAUCCUG
+sequence_mass: 7327.16751
 true_sequence: UGCCUCACCAC9AUCAUCCUG

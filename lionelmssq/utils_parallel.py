@@ -266,6 +266,7 @@ def estimate_MS_error_MATCHING_THRESHOLD(
             )
 
     if relative_errors:
+        print("Relative errors = ", relative_errors)
         average_error = sum(relative_errors) / len(relative_errors)
         std_deviation = (
             sum((x - average_error) ** 2 for x in relative_errors)

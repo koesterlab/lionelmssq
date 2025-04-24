@@ -18,7 +18,8 @@ from lionelmssq.masses import (
     MATCHING_THRESHOLD,
 )
 
-_TESTCASES = importlib.resources.files("tests") / "testcases"
+# _TESTCASES = importlib.resources.files("tests") / "testcases"
+_TESTCASES = importlib.resources.files("tests") / "testcases_april" / "30mers"
 
 
 @pytest.mark.parametrize(
@@ -110,15 +111,18 @@ def test_testcase(testcase):
 
         fragment_masses_read = pl.read_csv(base_path / "fragments.tsv", separator="\t")
 
-        matching_threshold = MATCHING_THRESHOLD
-        # TODO: Discuss why it doesn't work with the estimated error!
+        # # TODO: Discuss why it doesn't work with the estimated error!
         # matching_threshold, _, _ = estimate_MS_error_MATCHING_THRESHOLD(
         #     fragment_masses_read, unique_masses=unique_masses, simulation=simulation
         # )
-        # print(
-        #     "Matching threshold (rel errror) estimated from singleton masses = ",
-        #     matching_threshold,
-        # )
+        _, matching_threshold, _ = estimate_MS_error_MATCHING_THRESHOLD(
+            fragment_masses_read, unique_masses=unique_masses, simulation=simulation
+        )
+        print(
+            "Matching threshold (rel errror) estimated from singleton masses = ",
+            matching_threshold,
+        )
+        matching_threshold = MATCHING_THRESHOLD
 
         terminal_marked_path = base_path / "fragments_terminal_marked.tsv"
         if not terminal_marked_path.exists():
@@ -196,4 +200,4 @@ def test_testcase(testcase):
                 )
 
 
-test_testcase("test_08_2")
+test_testcase("test_02")
