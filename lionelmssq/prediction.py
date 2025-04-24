@@ -328,7 +328,6 @@ class Predictor:
         # Add the 'same' mass fragments back to the longest paths and include them in the valid terminal fragments!
         new_longest_paths = []
         for idx_path, path in enumerate(longest_paths):
-
             temp_path = []
             for idx_nodes, longest_path_node in enumerate(path[1]):
                 temp_path.append(longest_path_node)
@@ -463,8 +462,8 @@ class Predictor:
             self._align_skeletons_multi_seq(
                 skeleton_seq_start=skeleton_seq_start,
                 skeleton_seq_end=skeleton_seq_end,
-                score_seq_start=seq_score_start, #None
-                score_seq_end=seq_score_end, #None
+                score_seq_start=seq_score_start,  # None
+                score_seq_end=seq_score_end,  # None
                 nucleosides=nucleosides,
             )
         )
@@ -489,15 +488,18 @@ class Predictor:
             skeleton_seq = seq_set[chosen_seq_index]
             start_fragments = start_fragments[start_seq_index[chosen_seq_index]]
             end_fragments = end_fragments[end_seq_index[chosen_seq_index]]
-            invalid_start_fragments = invalid_start_fragments[start_seq_index[chosen_seq_index]]
-            invalid_end_fragments = invalid_end_fragments[end_seq_index[chosen_seq_index]]
+            invalid_start_fragments = invalid_start_fragments[
+                start_seq_index[chosen_seq_index]
+            ]
+            invalid_end_fragments = invalid_end_fragments[
+                end_seq_index[chosen_seq_index]
+            ]
             # skeleton_seq_start = skeleton_seq_start[start_seq_index[0]]
             # skeleton_seq_end = skeleton_seq_end[end_seq_index[0]]
 
             print("Multi-Graph aligned_skeleton_seq = ", skeleton_seq)
 
-
-        #This is the old _align_skeletons function when the algorithm only output a single sequence!
+        # This is the old _align_skeletons function when the algorithm only output a single sequence!
         # skeleton_seq = self._align_skeletons(
         #     skeleton_seq_start,
         #     skeleton_seq_end,
@@ -507,9 +509,7 @@ class Predictor:
         # )
         # print("Graph aligned_skeleton_seq = ", skeleton_seq)
 
-
-
-        #This is the old code for building the skeleton sequence
+        # This is the old code for building the skeleton sequence
         # (
         #     skeleton_seq,
         #     start_fragments,
@@ -517,7 +517,7 @@ class Predictor:
         #     invalid_start_fragments,
         #     invalid_end_fragments,
         # ) = self.build_skeleton()
-        
+
         # print("Ladder skeleton seq = ", skeleton_seq)
 
         # TODO: If the tags are considered in the LP at the end, then most of the following code will become obsolete!
@@ -878,7 +878,7 @@ class Predictor:
         skeleton_seq_end,
         score_seq_start=None,
         score_seq_end=None,
-        nucleosides = {'A','U','C','G'},
+        nucleosides={"A", "U", "C", "G"},
     ) -> Tuple[List[List[Set[str]]], List[float], List[int], List[int]]:
         # While building the ladder it may happen that things are unambiguous from one side, but not from the other!
         # In that case, we should consider the unambiguous side as the correct one! If the intersection is empty, then we can consider the union of the two!
@@ -900,7 +900,7 @@ class Predictor:
             for idx_2, seq_2 in enumerate(skeleton_seq_end):
                 temp_seq = [set() for _ in range(self.seq_len)]
                 perfect_match = True
-                temp_score = 0.
+                temp_score = 0.0
 
                 for i in range(self.seq_len):
                     temp_seq[i] = seq_1[i].intersection(seq_2[i])
@@ -909,7 +909,7 @@ class Predictor:
                             # temp_score += float(len(temp_seq[i]))/(
                             #     score_seq_start[idx_1] + score_seq_end[idx_2]
                             # )*float(min(i,abs(i-self.seq_len)))/self.seq_len
-                            temp_score += float(len(nucleosides) - len(temp_seq[i]))*(
+                            temp_score += float(len(nucleosides) - len(temp_seq[i])) * (
                                 score_seq_start[idx_1] + score_seq_end[idx_2]
                             )
                         else:
@@ -917,11 +917,14 @@ class Predictor:
                             temp_score += float(len(nucleosides) - len(temp_seq[i]))
                     else:
                         if score_seq_start is not None and score_seq_end is not None:
-                            temp_score += float(len(nucleosides))/(
-                                score_seq_start[idx_1] + score_seq_end[idx_2]
-                            ) #Penalize this by the number of nucelosides being considered!
+                            temp_score += (
+                                float(len(nucleosides))
+                                / (score_seq_start[idx_1] + score_seq_end[idx_2])
+                            )  # Penalize this by the number of nucelosides being considered!
                         else:
-                            temp_score += float(len(nucleosides)) #Penalize this by the number of nucelosides being considered!
+                            temp_score += float(
+                                len(nucleosides)
+                            )  # Penalize this by the number of nucelosides being considered!
 
                         if len(seq_1[i]) < len(seq_2[i]):
                             temp_seq[i] = seq_1[i]
@@ -944,7 +947,9 @@ class Predictor:
         if skeleton_seq:
             sorted_skeleton_seq = [
                 seq
-                for _, seq in sorted(zip(skeleton_seq_score, skeleton_seq), reverse=True)
+                for _, seq in sorted(
+                    zip(skeleton_seq_score, skeleton_seq), reverse=True
+                )
             ]
             sorted_start_seq_index = [
                 index
@@ -982,7 +987,9 @@ class Predictor:
                     reverse=True,
                 )
             ]
-            sorted_skeleton_seq_score = sorted(skeleton_seq_score_imperfect, reverse=True)
+            sorted_skeleton_seq_score = sorted(
+                skeleton_seq_score_imperfect, reverse=True
+            )
 
         return (
             sorted_skeleton_seq,

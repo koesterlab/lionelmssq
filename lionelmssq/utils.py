@@ -307,3 +307,75 @@ def estimate_MS_error_MATCHING_THRESHOLD(
         return max(relative_errors), average_error, std_deviation
     else:
         return None, None, None
+
+
+def determine_sequence_length(
+    terminally_marked_fragments=None,
+    ms1_mass=None,
+    label_mass_3T=0.0,
+    label_mass_5T=0.0,
+    explanation_masses=EXPLANATION_MASSES,
+    matching_threshold=MATCHING_THRESHOLD,
+    ms1_mass_deviations_allowed=0.001,
+):
+    """
+    Determine the sequence length of the input sequence.
+    #TODO: Implement the direct computaton without passing terminally_marked_fragments!
+    """
+
+    def _calculate_entropy(sequence):
+        """
+        Calculate the entropy of a sequence.
+        """
+        from collections import Counter
+        from math import log2
+
+        counts = Counter(sequence)
+        probabilities = [count / len(sequence) for count in counts.values()]
+
+        return -sum(p * log2(p) for p in probabilities if p > 0)
+
+    if terminally_marked_fragments is not None:
+        # Check if the terminally marked fragments are already determined
+        if terminally_marked_fragments.is_empty():
+            raise ValueError("The terminally marked fragments are empty.")
+        else:
+            start_end_fragments_series = (
+                terminally_marked_fragments.filter(pl.col("is_start_end"))
+                .select(pl.col("mass_explanations"))
+                .to_series()
+                .to_list()
+            )
+
+            sequence_explanations = []
+            for explanations in start_end_fragments_series:
+                for explanation in eval(explanations):
+                    sequence_explanations.append(list(explanation))
+
+            len_sequence_explanations = [
+                (len(explanations) - 2)
+                for explanations in sequence_explanations
+                if "3Tag" in explanations and "5Tag" in explanations
+            ]
+
+            entropy_sequence_explanations = [
+                _calculate_entropy(explanations)
+                for explanations in sequence_explanations
+            ]
+
+            # Order sequence_explanations and their lengths according to entropy
+            ordered_data = sorted(
+                zip(
+                    sequence_explanations,
+                    len_sequence_explanations,
+                    entropy_sequence_explanations,
+                ),
+                key=lambda x: x[2],
+                reverse=True,  # Sort by entropy
+            )
+
+            ordered_sequence_explanations = [data[0] for data in ordered_data]
+            ordered_lengths = [data[1] for data in ordered_data]
+            ordered_entropies = [data[2] for data in ordered_data]
+
+            return ordered_lengths, ordered_entropies, ordered_sequence_explanations
