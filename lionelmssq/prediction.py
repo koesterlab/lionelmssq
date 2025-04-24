@@ -732,12 +732,10 @@ class Predictor:
                             # print("i = ", i)
                             # print("possible_nucleosides = ", possible_nucleosides)
                             # print("alphabet = ", alphabet)
-                            # TODO: Review this! What's the need to clear it really?
-                            # if possible_nucleosides.issuperset(alphabet): #Should this be the other way around?
-                            #     # the expl sharpens the possibilities
-                            #     # clear the possibilities so far, the expl will add
-                            #     # the sharpened ones ones below
-                            #     possible_nucleosides.clear()
+                            if possible_nucleosides.issuperset(alphabet):
+                                # If the current explanation sharpens the list of possibilities, clear all
+                                # prior possibilities before the new explanation will add the sharpened ones below
+                                possible_nucleosides.clear()
 
                             for j in alphabet:
                                 possible_nucleosides.add(j)
