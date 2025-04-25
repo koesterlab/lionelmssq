@@ -19,7 +19,7 @@ from lionelmssq.masses import (
 )
 
 # _TESTCASES = importlib.resources.files("tests") / "testcases"
-_TESTCASES = importlib.resources.files("tests") / "testcases_april" / "30mers"
+_TESTCASES = importlib.resources.files("tests") / "testcases_april"
 
 
 @pytest.mark.parametrize(
@@ -200,4 +200,4 @@ def test_testcase(testcase):
                 )
 
 
-test_testcase("test_02")
+test_testcase("25mers/test_01")

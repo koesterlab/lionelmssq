@@ -108,6 +108,7 @@ def test_testcase(testcase):
             MASSES.filter(
                 # pl.col("nucleoside").is_in(["A", "U", "G", "C", "0C", "0G", "0A", "0U", "9A"])
                 pl.col("nucleoside").is_in(["A", "U", "G", "C", "0C"])
+                # pl.col("nucleoside").is_in(["A", "U", "G", "C", "0G"])
                 # pl.col("nucleoside").is_in(["A", "U", "G", "C", "9A"])
                 # pl.col("nucleoside").is_in(["A", "U", "G", "C", "0A","0U","9A"])
                 # pl.col("nucleoside").is_in(["A", "U", "G", "C", "0A","0U"])

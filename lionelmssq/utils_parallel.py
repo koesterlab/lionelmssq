@@ -126,12 +126,9 @@ def determine_terminal_fragments(
                 result["skip_mass"] = True
 
             if ms1_mass:
-                if (
-                    abs(mass / ms1_mass - 1) < ms1_mass_deviations_allowed
-                    and any(
-                        "5Tag" in element and "3Tag" in element
-                        for element in explained_mass.explanations
-                    )
+                if abs(mass / ms1_mass - 1) < ms1_mass_deviations_allowed and any(
+                    "5Tag" in element and "3Tag" in element
+                    for element in explained_mass.explanations
                 ):
                     result["is_start_end"] = True
             else:

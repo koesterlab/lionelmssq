@@ -1,0 +1,7 @@
+identity: 20mer_RNA_12
+intensity_cutoff: 10000
+label_mass_3T: 437.138562
+label_mass_5T: 475.163104
+predicted_sequence: GCGUAUCCGGCGAGGUGACG
+sequence_mass: 7448.16
+true_sequence: GCGUAUCCGGCGAGGUGACG

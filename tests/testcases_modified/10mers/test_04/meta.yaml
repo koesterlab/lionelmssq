@@ -1,7 +1,7 @@
 identity: 10merRNA_02_Inosine
 intensity_cutoff: 10000
-label_mass_3T: 569.225087
+label_mass_3T: 569.217207
 label_mass_5T: 475.163104
-predicted_sequence: UCGA9AUUGAG
+predicted_sequence: UCGAU9AUGAG
 sequence_mass: 4290.77262
 true_sequence: UCGA9AUUGAG

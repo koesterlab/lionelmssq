@@ -1,0 +1,7 @@
+identity: 25mer_RNA_01
+intensity_cutoff: 10000
+label_mass_3T: 437.138562
+label_mass_5T: 475.163104
+predicted_sequence: AUAGAUAGCCUUUUAUAAAGAGCUA
+sequence_mass: 8944.36398
+true_sequence: AUAGAUAGCCUAAAUCUCAGAGCUA

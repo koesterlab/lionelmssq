@@ -3,5 +3,5 @@ intensity_cutoff: 10000
 label_mass_3T: 437.138562
 label_mass_5T: 475.163104
 predicted_sequence: GGUU0CUUCGGGGUUUUUUUG
-sequence_mass: 7401.11887
+sequence_mass: 7401.118416
 true_sequence: GGUU0CUUCGGAUAUCGGCGG
