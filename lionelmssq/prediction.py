@@ -729,9 +729,7 @@ class Predictor:
                     for expl_len, alphabet in alphabet_per_expl_len.items():
                         for i in range(expl_len):
                             possible_nucleosides = get_possible_nucleosides(p, i)
-                            # print("i = ", i)
-                            # print("possible_nucleosides = ", possible_nucleosides)
-                            # print("alphabet = ", alphabet)
+
                             if possible_nucleosides.issuperset(alphabet):
                                 # If the current explanation sharpens the list of possibilities, clear all
                                 # prior possibilities before the new explanation will add the sharpened ones below
@@ -742,14 +740,6 @@ class Predictor:
                                 # TODO: We need to do this better.
                                 # Instead of adding just the letters, we somehow need to keep a track of the possibilities to be able to constrain the LP!
                                 # We also then probably need part of the code immediately below!
-
-                    # for expl in p_specific_explanations:
-                    #         #Maybe we can save the object as perm itself and block it for sometime!
-                    #         for perm in permutations(expl):
-                    #             for i, nuc in enumerate(perm):
-                    #                 get_possible_nucleosides(p, i).add(nuc)
-
-                    # print("Intermediate skeletal seq = ", skeleton_seq)
 
                     # add possible follow up positions
                     next_pos.update(
