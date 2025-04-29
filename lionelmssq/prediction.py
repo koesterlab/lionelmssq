@@ -482,7 +482,7 @@ class Predictor:
             Side.START,
             # use_ms_intensity_as_weight=True,
             use_ms_intensity_as_weight=False,
-            num_top_paths=10,
+            num_top_paths=100,
             peanlize_explanation_length_params={"zero_len_weight": 0.0, "base": e},
         )
 
@@ -495,7 +495,7 @@ class Predictor:
                 Side.END,
                 # use_ms_intensity_as_weight=True,
                 use_ms_intensity_as_weight=False,
-                num_top_paths=10,
+                num_top_paths=100,
                 peanlize_explanation_length_params={"zero_len_weight": 0.0, "base": e},
             )
         )
@@ -516,7 +516,6 @@ class Predictor:
         top_score = max(score)
         top_score_indices = [idx for idx, sc in enumerate(score) if sc == top_score]
         print("Top sequences = ", [seq_set[i] for i in top_score_indices])
-
         print("Top sequences scores = ", score)
 
         # if True:
@@ -528,6 +527,8 @@ class Predictor:
         #     end_fragments = end_fragments[0]
         #     invalid_start_fragments = invalid_start_fragments[0]
         #     invalid_end_fragments = invalid_end_fragments[0]
+
+        seq_set,list_set,start_seq_index,end_seq_index = self._align_list_explanations(list_explanations_start, list_explanations_end)
 
         chosen_seq_index = 0
 
@@ -926,25 +927,124 @@ class Predictor:
 
         self.fragment_masses[side] = side_fragments + start_end_fragments
 
-    def _align_list_explanations(self, list_explanation_start, list_explanation_end):
+    def _align_list_explanations(self,list_explanations_start, list_explanations_end):
+        """
+        Aligns the list_explanation_start and list_explanation_end to get the final skeleton sequence!
+        """
         
-        skeleton_seq = []*self.seq_len
+        def _calculate_intersection(list1, list2):
+        
+            intersection = []
+            from copy import deepcopy
+            list1_copy = deepcopy(list1)
+            list2_copy = deepcopy(list2)
 
-        seq_idx = 0
-        for list1 in list_explanation_start:
+            for l1 in list1:
+                for l2 in list2:
+                    if l1 == l2:
+                        if l1 in list1_copy and l2 in list2_copy:
+                            intersection.append(l1)
+                            list1_copy.remove(l1)
+                            list2_copy.remove(l2)
+                            break
+                        break
+
+            return intersection
+        
+        def _align_individual_lists(list_explanation_start, list_explanation_end):
+        
+            skeleton_list_explanation = []
+            skeleton_seq = []                                   
+            seq_idx = 0                                                                                  
             list1_idx = 0
-            for list2 in list_explanation_end:
-                list2_idx = 0
-                while list1_idx < len(list1):
-                    nuc = list1 & list2
-                    len_nuc = len(nuc)
-                    skeleton_seq[seq_idx:seq_idx+len_nuc] = nuc
-                    list1.remove(nuc)
-                    list2.remove(nuc)
+            list2_idx = 0
+
+            start_inner_list = list_explanation_start[list1_idx]
+            end_inner_list = list_explanation_end[list2_idx]
+
+            while start_inner_list and end_inner_list:
+
+                if list1_idx < len(list_explanation_start):
+                    start_inner_list = list_explanation_start[list1_idx]
+
+                if list2_idx < len(list_explanation_end):
+                    end_inner_list = list_explanation_end[list2_idx]                                                 
+                                                                                                
+                while end_inner_list:
+                    while start_inner_list:
+                        
+                        # print(f"list1: {list_explanation_start[list1_idx]}")
+                        # print(f"list2: {list_explanation_end[list2_idx]}")
+
+                        #Calculate intersection of the two lists:
+                        nuc = _calculate_intersection(start_inner_list, end_inner_list)
+                        # print(f"nuc: {nuc}")
+
+                        #TODO: Treat the special case where nuc is empty
+                        if not nuc:
+                            return [], []
+                        
+                        #Special case where nuc is a list of n times the same nuclotide, e.g: ["A", "A", "A"]
+                        if len(nuc) > 1 and len(set(nuc)) == 1:
+                            for n in nuc:
+                                skeleton_list_explanation.append(list(n))  
+                        else:
+                            skeleton_list_explanation.append(list(nuc))
+
+                        for n in nuc:
+                            skeleton_seq.append(set(nuc))
+                            seq_idx += 1
+
+                        for n in nuc:
+                            if n in start_inner_list:
+                                start_inner_list.remove(n)
+                            if n in end_inner_list:
+                                end_inner_list.remove(n)
+
+                        if not end_inner_list:
+                            list2_idx += 1
+                            if list2_idx < len(list_explanation_end):
+                                end_inner_list = list_explanation_end[list2_idx]
+                            else:
+                                end_inner_list = []
+
                     list1_idx += 1
+                    if list1_idx < len(list_explanation_start):
+                        start_inner_list = list_explanation_start[list1_idx]
+                    else:
+                        start_inner_list = []
 
+                list2_idx += 1
+                if list2_idx < len(list_explanation_end):
+                    end_inner_list = list_explanation_end[list2_idx]
+                else:
+                    end_inner_list = []
 
-                
+            # print(f"Skeleton_list_explanation: {skeleton_list_explanation}")
+            # print(f"Skeleton_Seq: {skeleton_seq}")
+
+            return skeleton_seq, skeleton_list_explanation
+        
+        start_seq_index = []
+        end_seq_index = []
+        skeleton_seq = []
+        skeleton_list_explanation = []
+        
+        for idx_1, seq_1 in enumerate(list_explanations_start):
+                for idx_2, seq_2 in enumerate(list_explanations_end):
+                    skeleton_seq_temp, skeleton_list_explanation_temp = _align_individual_lists(seq_1, seq_2)
+
+                    if skeleton_seq_temp and skeleton_list_explanation_temp:
+                        print(f"Skeleton_seq: {skeleton_seq_temp}")
+                        print(f"Skeleton_list_explanation: {skeleton_list_explanation_temp}")
+
+                        skeleton_seq.append(skeleton_seq_temp)
+                        skeleton_list_explanation.append(skeleton_list_explanation_temp)
+                        start_seq_index.append(idx_1)
+                        end_seq_index.append(idx_2)
+        
+        return skeleton_seq, skeleton_list_explanation, start_seq_index, end_seq_index
+
 
     def _align_skeletons_multi_seq(
         self,
