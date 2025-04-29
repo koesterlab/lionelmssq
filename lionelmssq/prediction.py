@@ -313,6 +313,27 @@ class Predictor:
                     )
 
             return skeleton_seq
+        
+        def _generate_list_explanations(longest_path=longest_paths[0][1]):
+            skeleton_seq = []
+            for node in range(len(longest_path) - 1):
+                if (
+                    len(
+                        G.edges[longest_path[node], longest_path[node + 1]][
+                            "explanation"
+                        ]
+                    )
+                    > 0
+                ):
+                    seq = G.edges[longest_path[node], longest_path[node + 1]][
+                                "explanation"
+                            ]
+                    list_seq = [[str(s) for s in subseq] for subseq in seq]
+
+                    skeleton_seq.extend(
+                            list_seq
+                        )
+            return skeleton_seq
 
         # Calculate the longest paths and the skeleton sequence
         # Remove the paths which are not of the same length as the sequence
@@ -321,16 +342,27 @@ class Predictor:
         sequence_score = []
         valid_terminal_fragments = []
         new_longest_paths = []
+        list_explanations = []
         for path in longest_paths:
             seq = _generate_sequence_from_path(path[1])
+            # seq = _generate_list_explanations(path[1])
             if len(seq) == self.seq_len:
                 new_longest_paths.append(path)
-                print("Seq = ", seq)
-                print("Path = ", path[1])
-                print("Mass = ", [G.nodes[node]["mass"] for node in path[1]])
                 skeleton_seq.append(seq)
                 sequence_score.append(path[0])
                 valid_terminal_fragments.append(_assign_valid_nodes(path[1]))
+                list_explanations.append(
+                    _generate_list_explanations(path[1])
+                )
+                if side == Side.END:
+                    print("Seq = ", seq[::-1])
+                    print("List_explnations = ", _generate_list_explanations(path[1])[::-1])
+                else:
+                    print("Seq = ", seq)
+                    print("List_explnations = ", _generate_list_explanations(path[1]))
+                print("Path = ", path[1])
+                print("Mass = ", [G.nodes[node]["mass"] for node in path[1]])
+                print("Score = ", path[0])
         longest_paths = new_longest_paths
 
         # Add the 'same' mass fragments back to the longest paths and include them in the valid terminal fragments!
@@ -384,6 +416,7 @@ class Predictor:
         for i in range(len(skeleton_seq)):
             if side == Side.END:
                 skeleton_seq[i] = skeleton_seq[i][::-1]
+                list_explanations[i] = list_explanations[i][::-1]
 
             print(
                 "Index = ",
@@ -395,7 +428,7 @@ class Predictor:
             )
             print(f"Skeleton sequence graph {side} = ", skeleton_seq[i])
 
-        return G, valid_terminal_fragments, skeleton_seq, invalid_nodes, sequence_score
+        return G, valid_terminal_fragments, skeleton_seq, invalid_nodes, sequence_score, list_explanations
 
     def predict(self) -> Prediction:
         # TODO: get rid of the requirement to pass the length of the sequence
@@ -444,6 +477,7 @@ class Predictor:
             skeleton_seq_start,
             invalid_start_fragments,
             seq_score_start,
+            list_explanations_start,
         ) = self.graph_skeleton(
             Side.START,
             # use_ms_intensity_as_weight=True,
@@ -456,7 +490,7 @@ class Predictor:
         # which keeps the ordereing of accepted start and end candidates while rejecting
         # the invalid ones, but keeping the ones with internal marking as internal candidates!
 
-        _, end_fragments, skeleton_seq_end, invalid_end_fragments, seq_score_end = (
+        _, end_fragments, skeleton_seq_end, invalid_end_fragments, seq_score_end, list_explanations_end = (
             self.graph_skeleton(
                 Side.END,
                 # use_ms_intensity_as_weight=True,
@@ -891,6 +925,26 @@ class Predictor:
             ]
 
         self.fragment_masses[side] = side_fragments + start_end_fragments
+
+    def _align_list_explanations(self, list_explanation_start, list_explanation_end):
+        
+        skeleton_seq = []*self.seq_len
+
+        seq_idx = 0
+        for list1 in list_explanation_start:
+            list1_idx = 0
+            for list2 in list_explanation_end:
+                list2_idx = 0
+                while list1_idx < len(list1):
+                    nuc = list1 & list2
+                    len_nuc = len(nuc)
+                    skeleton_seq[seq_idx:seq_idx+len_nuc] = nuc
+                    list1.remove(nuc)
+                    list2.remove(nuc)
+                    list1_idx += 1
+
+
+                
 
     def _align_skeletons_multi_seq(
         self,
