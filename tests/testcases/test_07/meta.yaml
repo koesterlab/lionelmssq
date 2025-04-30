@@ -1,0 +1,5 @@
+identity: Simulated_data
+label_mass_3T: 0.0
+label_mass_5T: 0.0
+predicted_sequence: CAGCAAAACGAUCAUAUAGA
+true_sequence: CAGCAAAACGAUCAUAUAGA

@@ -15,17 +15,24 @@ class MassExplanations:
     explanations: Set[Tuple[str]]
 
 
-def explain_mass(mass: float) -> MassExplanations:
+def explain_mass(
+    mass: float,
+    explanation_masses=EXPLANATION_MASSES,
+    matching_threshold=MATCHING_THRESHOLD,
+) -> MassExplanations:
     """
     Returns all the possible combinations of nucleosides that could sum up to the given mass.
     """
 
     tolerated_integer_masses = pl.Series(
-        EXPLANATION_MASSES.select(pl.col("tolerated_integer_masses"))
+        explanation_masses.select(pl.col("tolerated_integer_masses"))
     ).to_list()
 
     # Convert the targets and tolerated_integer_masses to integers for easy opearations
     target = int(round(mass / TOLERANCE, 0))
+
+    if target == 0:
+        return MassExplanations(explanations=set())
 
     # Sort the tolerated_integer_masses, makes life easier
     tolerated_integer_masses.sort()
@@ -41,7 +48,11 @@ def explain_mass(mass: float) -> MassExplanations:
             return memo[(remaining, start)]
 
         # Base case: if abs(target) is less than MATCHING_THRESHOLD, return a list with one empty combination
-        if abs(remaining) < MATCHING_THRESHOLD:
+        # if abs(remaining) < MATCHING_THRESHOLD:
+        # Base case: if the relative error between the target and our estimate is less than the MATCHING_THRESHOLD, return a list with one empty combination
+        if (
+            abs(remaining / target) < matching_threshold
+        ):  # TODO: Replace this by proper error function based comparison!
             return [[]]
 
         # Base case: if target is zero, return a list with one empty combination
@@ -81,13 +92,13 @@ def explain_mass(mass: float) -> MassExplanations:
 
         # Determines the type of data in the column nucleosdies
         if isinstance(
-            EXPLANATION_MASSES.select(pl.col("nucleoside")).dtypes[0], pl.List
+            explanation_masses.select(pl.col("nucleoside")).dtypes[0], pl.List
         ):
             # When using "agg function" in the group_by (masses.py), we can get all the nucleosides with the same mass, then the following needs to be used:
             solution_names.update(
                 product(
                     *combo_df.join(
-                        EXPLANATION_MASSES, on="tolerated_integer_masses", how="left"
+                        explanation_masses, on="tolerated_integer_masses", how="left"
                     )
                     .get_column("nucleoside")
                     .to_list()
@@ -95,13 +106,14 @@ def explain_mass(mass: float) -> MassExplanations:
             )
 
         elif isinstance(
-            EXPLANATION_MASSES.select(pl.col("nucleoside")).dtypes[0], pl.String
+            explanation_masses.select(pl.col("nucleoside")).dtypes[0], pl.String
         ):
+            # print(combo_df)
             # When using the "first" function in the group_by (masses.py), we can only get the first nucleoside with the given mass, then the following needs to be used:
             solution_names.add(
                 tuple(
                     combo_df.join(
-                        EXPLANATION_MASSES, on="tolerated_integer_masses", how="left"
+                        explanation_masses, on="tolerated_integer_masses", how="left"
                     )
                     .get_column("nucleoside")
                     .to_list()

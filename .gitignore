@@ -2,6 +2,9 @@ __pycache__
 .pytest_cache
 poetry.lock
 tests/testcases/*/plot.html
-.DS_Store
+*.DS_Store
 lionelmssq/playground.ipynb
 tests/self_test.py
+*gurobi.log
+*.code-workspace
+tests/self_test*
