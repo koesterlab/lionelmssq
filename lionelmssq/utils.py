@@ -246,7 +246,7 @@ def determine_terminal_fragments(
     return fragment_masses
 
 
-def estimate_MS_error_MATCHING_THRESHOLD(
+def estimate_MS_error_matching_threshold(
     fragments, unique_masses=UNIQUE_MASSES, rejection_threshold=0.5, simulation=False
 ):
     """

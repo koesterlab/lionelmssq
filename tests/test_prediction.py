@@ -7,7 +7,7 @@ from lionelmssq.common import parse_nucleosides
 from lionelmssq.plotting import plot_prediction
 from lionelmssq.utils import (
     determine_terminal_fragments,
-    estimate_MS_error_MATCHING_THRESHOLD,
+    estimate_MS_error_matching_threshold,
 )
 import polars as pl
 import yaml
@@ -81,7 +81,7 @@ def test_testcase(testcase):
         )
 
         # TODO: Discuss why it doesn't work with the estimated error!
-        matching_threshold, _, _ = estimate_MS_error_MATCHING_THRESHOLD(
+        matching_threshold, _, _ = estimate_MS_error_matching_threshold(
             fragments, unique_masses=unique_masses, simulation=simulation
         )
         matching_threshold = MATCHING_THRESHOLD

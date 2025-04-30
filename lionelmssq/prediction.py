@@ -11,15 +11,11 @@ from pulp import (
     lpSum,
     getSolver,
 )
-from lionelmssq.common import Side, get_singleton_set_item
+from lionelmssq.common import Side, get_singleton_set_item, milp_is_one
 from lionelmssq.masses import UNIQUE_MASSES, EXPLANATION_MASSES, MATCHING_THRESHOLD
 from lionelmssq.mass_explanation import explain_mass
 import polars as pl
 from loguru import logger
-
-# Sometime the LP does not exactly output probabilities of 1 for one nucleotide or one position.
-# This is due to the LP relaxation. Hence, we need to set a threshold for the LP relaxation.
-LP_relaxation_threshold = 0.9
 
 
 @dataclass
@@ -328,12 +324,14 @@ class Predictor:
         # ensure that start fragments are aligned at the beginning of the sequence
         for fragment in start_fragments:
             # j is the row index where the "index" matches fragment.index
+            # fragment.index uses the original (mass sorted) index of the read fragment files,
+            # but in self.fragments we disqualify many fragments of the original file.
+            # Hence, we need to find the correct row index in self.fragments which corresponds to the original index
+            # since in the MILP we fit all the fragments of self.fragments
             j = (
                 self.fragments.with_row_index("row_index")
                 .filter(pl.col("index") == fragment.index)
-                .select(pl.col("row_index"))
-                .to_series()
-                .to_list()[0]
+                .item(0, "row_index")
             )
             # min_end is exclusive
             for i in range(fragment.min_end):
@@ -349,9 +347,7 @@ class Predictor:
             j = (
                 self.fragments.with_row_index("row_index")
                 .filter(pl.col("index") == fragment.index)
-                .select(pl.col("row_index"))
-                .to_series()
-                .to_list()[0]
+                .item(0, "row_index")
             )
             # min_end is exclusive
             for i in range(fragment.min_end + 1, 0):
@@ -400,14 +396,13 @@ class Predictor:
 
         def get_base(i):
             for b in nucleosides:
-                # if y[i][b].value() == 1:
-                if y[i][b].value() > LP_relaxation_threshold:
+                if milp_is_one(y[i][b]):
                     return b
             return None
 
         def get_base_fragmentwise(i, j):
             for b in nucleosides:
-                if z[i][j][b].value() > LP_relaxation_threshold:
+                if milp_is_one(z[i][j][b]):
                     return b
             return None
 
@@ -442,19 +437,11 @@ class Predictor:
                 {
                     # Because of the relaxation of the LP, sometimes the value is not exactly 1
                     "left": min(
-                        (
-                            i
-                            for i in range(self.seq_len)
-                            if x[i][j].value() > LP_relaxation_threshold
-                        ),
+                        (i for i in range(self.seq_len) if milp_is_one(x[i][j])),
                         default=0,
                     ),
                     "right": max(
-                        (
-                            i
-                            for i in range(self.seq_len)
-                            if x[i][j].value() > LP_relaxation_threshold
-                        ),
+                        (i for i in range(self.seq_len) if milp_is_one(x[i][j])),
                         default=-1,
                     )
                     + 1,  # right bound shall be exclusive, hence add 1
