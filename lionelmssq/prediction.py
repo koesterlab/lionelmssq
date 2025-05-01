@@ -542,6 +542,12 @@ class Predictor:
             invalid_end_fragments = invalid_end_fragments[
                 end_seq_index[chosen_seq_index]
             ]
+            invalid_start_fragments = invalid_start_fragments[
+                start_seq_index[chosen_seq_index]
+            ]
+            invalid_end_fragments = invalid_end_fragments[
+                end_seq_index[chosen_seq_index]
+            ]
             # skeleton_seq_start = skeleton_seq_start[start_seq_index[0]]
             # skeleton_seq_end = skeleton_seq_end[end_seq_index[0]]
 

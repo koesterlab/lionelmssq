@@ -8,6 +8,7 @@ from lionelmssq.plotting import plot_prediction
 from lionelmssq.utils_parallel import (
     determine_terminal_fragments,
     estimate_MS_error_MATCHING_THRESHOLD,
+    determine_sequence_length,
 )
 import polars as pl
 import yaml
@@ -144,9 +145,14 @@ def test_testcase(testcase):
 
     # fragment_masses = pl.Series(fragments.select(pl.col("observed_mass"))).to_list()
 
+    # len_seq = len(true_seq)
+    lengths_seq, _, _ = determine_sequence_length(terminally_marked_fragments=fragments)
+    len_seq = lengths_seq[0]
+    print("Length of the sequence = ", len_seq)
+
     prediction = Predictor(
         fragments,
-        len(true_seq),
+        len_seq,
         # os.environ.get("SOLVER", "cbc"),
         os.environ.get("SOLVER", "gurobi"),  # "solver": "gurobi" or "cbc"
         threads=16,
