@@ -19,6 +19,12 @@ from lionelmssq.masses import (
     MATCHING_THRESHOLD,
 )
 
+from lionelmssq.masses import (
+    UNIQUE_MASSES,
+    TOLERANCE,
+    MATCHING_THRESHOLD,
+)
+
 # _TESTCASES = importlib.resources.files("tests") / "testcases"
 _TESTCASES = importlib.resources.files("tests") / "testcases_april"
 

@@ -5,9 +5,17 @@ from heapq import heappush, heappop
 from itertools import chain
 from networkx import topological_sort
 
+MILP_QUASI_ONE_THRESHOLD = 0.9
+
 
 # _NUCLEOSIDE_RE = re.compile(r"\d*[ACGUT]")
 _NUCLEOSIDE_RE = re.compile(r"\d*[ACGU]")
+
+
+def milp_is_one(var, threshold=MILP_QUASI_ONE_THRESHOLD):
+    # Sometime the LP does not exactly output probabilities of 1 for one nucleotide or one position.
+    # This is due to the LP relaxation. Hence, we need to set a threshold for the LP relaxation.
+    return var.value() >= threshold
 
 
 def parse_nucleosides(sequence: str):
