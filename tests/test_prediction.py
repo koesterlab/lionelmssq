@@ -5,7 +5,7 @@ import pytest
 from lionelmssq.prediction import Predictor
 from lionelmssq.common import parse_nucleosides
 from lionelmssq.plotting import plot_prediction
-from lionelmssq.utils_parallel import (
+from lionelmssq.utils import (
     determine_terminal_fragments,
     estimate_MS_error_MATCHING_THRESHOLD,
     determine_sequence_length,
@@ -25,8 +25,8 @@ from lionelmssq.masses import (
     MATCHING_THRESHOLD,
 )
 
-# _TESTCASES = importlib.resources.files("tests") / "testcases"
-_TESTCASES = importlib.resources.files("tests") / "testcases_april"
+_TESTCASES = importlib.resources.files("tests") / "testcases"
+# _TESTCASES = importlib.resources.files("tests") / "testcases_april"
 
 
 @pytest.mark.parametrize(
@@ -212,4 +212,5 @@ def test_testcase(testcase):
                 )
 
 
-test_testcase("25mers/test_01")
+# test_testcase("25mers/test_01")
+test_testcase("test_05_2")

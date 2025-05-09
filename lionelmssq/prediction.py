@@ -2,12 +2,13 @@ from dataclasses import dataclass
 from itertools import chain, combinations, groupby
 from pathlib import Path
 from typing import List, Optional, Self, Set, Tuple
-from pulp import LpProblem, LpMinimize, LpInteger, LpContinuous, LpVariable, lpSum
+from pulp import LpProblem, LpMinimize, LpInteger, LpContinuous, LpVariable, lpSum, getSolver
 from lionelmssq.common import (
     Side,
     get_singleton_set_item,
     dag_top_n_longest_paths,
     dag_top_n_longest_paths_with_start_end,
+    milp_is_one
 )
 from lionelmssq.masses import UNIQUE_MASSES, EXPLANATION_MASSES, MATCHING_THRESHOLD
 from lionelmssq.mass_explanation import explain_mass
@@ -52,17 +53,7 @@ class Predictor:
         explanation_masses: pl.DataFrame = EXPLANATION_MASSES,
         matching_threshold: float = MATCHING_THRESHOLD,
         mass_tag_start: float = 0.0,
-        mass_tag_end: float = 0.0,
-        self,
-        fragments: pl.DataFrame,
-        seq_len: int,
-        solver: str,
-        threads: int,
-        unique_masses: pl.DataFrame = UNIQUE_MASSES,
-        explanation_masses: pl.DataFrame = EXPLANATION_MASSES,
-        matching_threshold: float = MATCHING_THRESHOLD,
-        mass_tag_start: float = 0.0,
-        mass_tag_end: float = 0.0,
+        mass_tag_end: float = 0.0
     ):
         self.fragments = (
             fragments.with_row_index(name="orig_index")
@@ -847,8 +838,6 @@ class Predictor:
         # LP decide.
 
         # constrain weight_diff_abs to be the absolute value of weight_diff
-        for j in valid_fragment_range:
-            # if j not in invalid_start_fragments and j not in invalid_end_fragments:
         for j in valid_fragment_range:
             # if j not in invalid_start_fragments and j not in invalid_end_fragments:
             prob += predicted_mass_diff_abs[j] >= predicted_mass_diff[j]
