@@ -133,11 +133,14 @@ def align_skeletons_multi_seq(
     score_seq_end=None,
     nucleosides={"A", "U", "C", "G"},
 ) -> Tuple[List[List[Set[str]]], List[float], List[int], List[int]]:
+    """
+    Aligns the skeleton_seq_start and skeleton_seq_end position wise to get the final skeleton sequence!
+    If and when there is a disagreement, the nucleotide from the sequence closer to the respective end is preferrentially considered!
+    This additionally propagates the scores of the sequences using a formula to get the final alignemnt score based on how much disagreement there is!
+    """
+
     # While building the ladder it may happen that things are unambiguous from one side, but not from the other!
     # In that case, we should consider the unambiguous side as the correct one! If the intersection is empty, then we can consider the union of the two!
-
-    # Align the skeletons of the start and end fragments to get the final skeleton sequence!
-    # Wherever there is no ambiguity, that nucleotide is preferrentially considered!
 
     skeleton_seq = []
     skeleton_seq_score = []
@@ -265,6 +268,12 @@ def align_skeletons(
     trust_range=None,
     trust_smaller_set=False,
 ) -> List[Set[str]]:
+    """
+    Old function to align the skeleton_seq_start and skeleton_seq_end position wise to get the final skeleton sequence!
+    Implements various ideas to get the final skeleton sequence!
+    Could be useful in the future and hence retained!
+    """
+
     # While building the ladder it may happen that things are unambiguous from one side, but not from the other!
     # In that case, we should consider the unambiguous side as the correct one! If the intersection is empty, then we can consider the union of the two!
 
@@ -281,7 +290,7 @@ def align_skeletons(
                 )
                 if not skeleton_seq[
                     i
-                ]:  # TODO: If the intersection is empty, then we can also choose to trust the left sequence in the left part and the right sequence in the right part!
+                ]:
                     if not trust_smaller_set:
                         skeleton_seq[i] = skeleton_seq_start[i].union(
                             skeleton_seq_end[i]
