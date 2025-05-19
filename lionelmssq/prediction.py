@@ -2,31 +2,36 @@ from dataclasses import dataclass
 from itertools import chain, combinations, groupby
 from pathlib import Path
 from typing import List, Optional, Self, Set, Tuple
-from pulp import LpProblem, LpMinimize, LpInteger, LpContinuous, LpVariable, lpSum, getSolver
+from pulp import (
+    LpProblem,
+    LpMinimize,
+    LpInteger,
+    LpContinuous,
+    LpVariable,
+    lpSum,
+    getSolver,
+)
 from lionelmssq.common import (
     Side,
     get_singleton_set_item,
-    dag_top_n_longest_paths,
-    dag_top_n_longest_paths_with_start_end,
-    milp_is_one
+    milp_is_one,
+    TerminalFragment,
+    Explanation,
+)
+from lionelmssq.graph_skeleton import construct_graph_skeleton
+from lionelmssq.alignment import (
+    align_skeletons,
+    align_list_explanations,
+    align_skeletons_multi_seq,
 )
 from lionelmssq.masses import UNIQUE_MASSES, EXPLANATION_MASSES, MATCHING_THRESHOLD
 from lionelmssq.mass_explanation import explain_mass
 import polars as pl
 from loguru import logger
-from networkx import DiGraph, dag_longest_path
-from math import e
 from copy import deepcopy
-
+from math import e
 
 LP_relaxation_threshold = 0.9
-
-
-@dataclass
-class TerminalFragment:
-    index: int  # fragment index
-    min_end: int  # minimum length of fragment (negative for end fragments)
-    max_end: int  # maximum length of fragment (negative for end fragments)
 
 
 @dataclass
@@ -55,7 +60,7 @@ class Predictor:
         explanation_masses: pl.DataFrame = EXPLANATION_MASSES,
         matching_threshold: float = MATCHING_THRESHOLD,
         mass_tag_start: float = 0.0,
-        mass_tag_end: float = 0.0
+        mass_tag_end: float = 0.0,
     ):
         self.fragments = (
             fragments.with_row_index(name="orig_index")
@@ -96,463 +101,26 @@ class Predictor:
         self.fragments_side = dict()
         self.fragment_masses = dict()
 
-    def build_skeleton(
-        self,
-    ):  # -> Tuple[List[Set[str]], List[TerminalFragment], List[int]]: #TODO
-        skeleton_seq_start, start_fragments, invalid_start_fragments = (
-            self._predict_skeleton(
-                Side.START,
-            )
+        # Defining functions on the classes defined in other files:
+        # self.graph_skeleton = construct_graph_skeleton
+        self._graph_skeleton = lambda *args, **kwargs: construct_graph_skeleton(
+            self, *args, **kwargs
         )
-
-        print("Skeleton sequence start = ", skeleton_seq_start)
-
-        skeleton_seq_end, end_fragments, invalid_end_fragments = self._predict_skeleton(
-            Side.END,
+        self._align_skeletons = lambda *args, **kwargs: align_skeletons(
+            self, *args, **kwargs
         )
-        print("Skeleton sequence end = ", skeleton_seq_end)
-
-        skeleton_seq = self._align_skeletons(skeleton_seq_start, skeleton_seq_end)
-
-        print("Skeleton sequence = ", skeleton_seq)
-
-        return (
-            skeleton_seq,
-            start_fragments,
-            end_fragments,
-            invalid_start_fragments,
-            invalid_end_fragments,
+        self._align_list_explanations = lambda *args, **kwargs: align_list_explanations(
+            self, *args, **kwargs
         )
-
-    def graph_skeleton(
-        self,
-        side,
-        num_top_paths=1,
-        use_ms_intensity_as_weight=False,
-        peanlize_explanation_length_params={"zero_len_weight": 0.0, "base": e},
-        node_horizon=None,
-    ):
-        # Note that the penalization of explanation length can be removed by setting the base = 1
-
-        candidate_fragments = self.fragments_side[side].get_column("index").to_list()
-
-        masses = [0.0] + self.fragment_masses[side]
-
-        def _accumulate_intesity(intensity, side):
-            first_fragment_index = 1
-            for index in range(1, len(masses) - 1):
-                if abs(
-                    masses[index] - masses[index + 1]
-                ) < self.matching_threshold * abs(masses[index] + self.mass_tags[side]):
-                    intensity[first_fragment_index] += intensity[index]
-                else:
-                    first_fragment_index = index + 1
-
-        if use_ms_intensity_as_weight:
-            intensity = [1.0] + self.fragments_side[side].get_column(
-                "intensity"
-            ).to_list()
-            _accumulate_intesity(intensity, side)
-        else:
-            intensity = [1.0] * len(masses)
-        total_intensity = sum(intensity)
-
-        G = DiGraph()
-        # Add nodes:
-        nodes_list = [(i, {"mass": masses[i]}) for i in range(len(masses))]
-        G.add_nodes_from(nodes_list)
-
-        for prior_node_idx in range(len(G.nodes)):
-            if node_horizon is None:
-                # If the number of fragments are much larger, the number of dp calls will be very large, N(N-1)/2 calls for N fragments!
-                # the node horizon can be used to calculate how many next nunmber of nodes to consider for calculating the edges!
-                prior_node_horizon = len(G.nodes)
-            else:
-                prior_node_horizon = min(len(G.nodes), prior_node_idx + node_horizon)
-
-            last_mass_diff = 0.0
-            pos = 0
-            for latter_node_idx in range(prior_node_idx + 1, prior_node_horizon):
-                mass_diff = masses[latter_node_idx] - masses[prior_node_idx]
-
-                if (
-                    abs(last_mass_diff - mass_diff)
-                    < self.matching_threshold
-                    * abs(masses[prior_node_idx] + self.mass_tags[side])
-                ):  # NOTE: Remove this last_mass_diff and continue to include "same mass in the graph!" as well!
-                    continue
-                else:
-                    last_mass_diff = mass_diff
-                    last_node_idx = latter_node_idx
-                    # The last node idx, keeps a track of the last unique "MS1" mass node,
-                    # its used later to find the last node that the top paths must end at!
-
-                if mass_diff in self.explanations:
-                    mass_explanations = self.explanations.get(mass_diff, [])
-                else:
-                    threshold = self._calculate_diff_errors(
-                        masses[prior_node_idx] + self.mass_tags[side],
-                        masses[latter_node_idx] + self.mass_tags[side],
-                        self.matching_threshold,
-                    )
-                    mass_explanations = self._calculate_diff_dp(
-                        mass_diff, threshold, self.explanation_masses
-                    )
-
-                if len(mass_explanations) > 0:
-                    # or abs(
-                    #     mass_diff
-                    # ) <= self.matching_threshold * abs(
-                    #     masses[prior_node_idx] + self.mass_tags[side]
-                    # ):
-                    # Idea: The weight should be peanlized if the length of the explanation is more,
-                    # i.e. for bigger mass differences, the weight should be less!
-
-                    #         if len(mass_explanations) > 0:
-                    #             len_explanations = min(
-                    #                 len(mass_explanations[i])
-                    #                 for i in range(len(mass_explanations))
-                    #             )
-                    #         else:
-                    #             len_explanations = 0
-
-                    len_explanations = min(
-                        len(mass_explanations[i]) for i in range(len(mass_explanations))
-                    )
-
-                    pos += len_explanations
-
-                    G.add_edge(
-                        prior_node_idx,
-                        latter_node_idx,
-                        weight=((
-                            (
-                                peanlize_explanation_length_params["zero_len_weight"]
-                                + len_explanations
-                            )
-                            * peanlize_explanation_length_params["base"]
-                            ** (-len_explanations)
-                        )
-                        + e ** (-pos / self.seq_len)) #Score the sequences with shorter explanations higher when they are at the beginning of the sequence!
-                        * intensity[latter_node_idx]
-                        / total_intensity,
-                        explanation=mass_explanations,
-                    )
-                    # NOTE: If the offset is 0, it ignores the different fragments of the 'same' mass from the longest path
-                    # But we add them later!
-                    # To include them use a value of about 0.001 as the "zero_len_weight"!
-
-        # longest_paths = dag_top_n_longest_paths(G, N=num_top_paths, weight="weight")
-        longest_paths = dag_top_n_longest_paths_with_start_end(
-            G, N=num_top_paths, weight="weight", start_node=0, end_node=last_node_idx
+        self._align_skeletons_multi_seq = (
+            lambda *args, **kwargs: align_skeletons_multi_seq(self, *args, **kwargs)
         )
-
-        def _assign_valid_nodes(longest_path=longest_paths[0][1]):
-            # Assign the valid and invalid nodes to the start and end fragments!
-            # The valid nodes are the ones which are part of the longest path!
-            # The invalid nodes are the ones which are not part of the longest path!
-
-            valid_terminal_fragments = []
-            if side == Side.START:
-                pos = 0
-            else:
-                pos = -1
-
-            for idx, node in enumerate(longest_path):
-                if node != 0:
-                    explanations = G.edges[longest_path[idx - 1], longest_path[idx]][
-                        "explanation"
-                    ]
-                    if len(explanations) > 0:
-                        if side == Side.START:
-                            pos += min(
-                                len(explanations[i]) for i in range(len(explanations))
-                            )
-                        else:
-                            pos -= min(
-                                len(explanations[i]) for i in range(len(explanations))
-                            )
-                    else:
-                        pos += 0
-
-                    valid_terminal_fragments.append(
-                        TerminalFragment(
-                            index=candidate_fragments[longest_path[idx] - 1],
-                            min_end=pos,
-                            max_end=pos,
-                        )
-                    )
-
-            return valid_terminal_fragments
-
-        def _unionize_explanations(explanations):
-            print("Explanations = ", explanations)
-            len_explanations = min(
-                len(explanations[i]) for i in range(len(explanations))
-            )
-            # TODO: Need to do this more carefully, its possible that the different explanations are of different lengths
-            # One then needs to consider the min and the max positions, as Johannes did earlier!
-            return [
-                set(chain.from_iterable([set(expl) for expl in explanations]))
-            ] * len_explanations
-
-        def _generate_sequence_from_path(longest_path=longest_paths[0][1]):
-            skeleton_seq = []
-            for node in range(len(longest_path) - 1):
-                if (
-                    len(
-                        G.edges[longest_path[node], longest_path[node + 1]][
-                            "explanation"
-                        ]
-                    )
-                    > 0
-                ):
-                    skeleton_seq.extend(
-                        _unionize_explanations(
-                            G.edges[longest_path[node], longest_path[node + 1]][
-                                "explanation"
-                            ]
-                        )
-                    )
-
-            return skeleton_seq
-        
-        # def _generate_list_explanations(longest_path=longest_paths[0][1]):
-        #     skeleton_seq = []
-        #     for node in range(len(longest_path) - 1):
-        #         if (
-        #             len(
-        #                 G.edges[longest_path[node], longest_path[node + 1]][
-        #                     "explanation"
-        #                 ]
-        #             )
-        #             > 0
-        #         ):
-        #             seq = G.edges[longest_path[node], longest_path[node + 1]][
-        #                         "explanation"
-        #                     ]
-        #             list_seq = [[str(s) for s in subseq] for subseq in seq]
-
-        #             skeleton_seq.extend(
-        #                     list_seq
-        #                 )
-        #     return skeleton_seq
-
-        def _generate_list_explanations_all_combinations(longest_path=longest_paths[0][1]):
-            skeleton_seq = []
-            for node in range(len(longest_path) - 1):
-                if (
-                    len(
-                        G.edges[longest_path[node], longest_path[node + 1]][
-                            "explanation"
-                        ]
-                    )
-                    > 0
-                ):
-                    seq = G.edges[longest_path[node], longest_path[node + 1]][
-                                "explanation"
-                            ]
-                    
-                    list_seq = [[str(s) for s in subseq] for subseq in seq]
-
-                    len_list_seq = len(list_seq)
-
-                    if not skeleton_seq:
-                        for subseq in list_seq:
-                            skeleton_seq.extend([[subseq]])
-                    else:
-                        original_skeleton_seq = deepcopy(skeleton_seq)
-                        for skeleton in skeleton_seq:
-                            skeleton.extend([list_seq[0]])
-
-                        if len(list_seq) > 1:
-                            for skeleton in original_skeleton_seq:
-                                skeleton_seq.extend(skeleton + [list_seq[i]] for i in range(1, len_list_seq))
-
-            return skeleton_seq
-
-        # Calculate the longest paths and the skeleton sequence
-        # Remove the paths which are not of the same length as the sequence
-        # Also calculate the valid terminal fragments
-        skeleton_seq = []
-        sequence_score = []
-        valid_terminal_fragments = []
-        new_longest_paths = []
-        list_explanations = []
-        for path in longest_paths:
-            seq = _generate_sequence_from_path(path[1])
-            if len(seq) == self.seq_len:
-                new_longest_paths.append(path)
-                skeleton_seq.append(seq)
-                sequence_score.append(path[0])
-                valid_terminal_fragments.append(_assign_valid_nodes(path[1]))
-                print("Path = ", path[1])
-                print("Mass = ", [G.nodes[node]["mass"] for node in path[1]])
-                print("Score = ", path[0])
-
-            list_explanations_single = _generate_list_explanations_all_combinations(path[1])
-            for exp in list_explanations_single:
-                if sum(len(sublist) for sublist in exp) != self.seq_len:
-                    list_explanations_single.remove(exp)
-            
-            list_explanations.append(
-                list_explanations_single
-            )
-            if side == Side.END:
-                print("Seq = ", seq[::-1])
-                print("List_explnations = ", list_explanations_single[:][::-1])
-            else:
-                print("Seq = ", seq)
-                print("List_explnations = ", list_explanations_single)
-
-        longest_paths = new_longest_paths
-
-        #TODO: Also contrain the length of the list_explanations to only consider sequences of the same length!
-
-        # Add the 'same' mass fragments back to the longest paths and include them in the valid terminal fragments!
-        new_longest_paths = []
-        for idx_path, path in enumerate(longest_paths):
-            temp_path = []
-            for idx_nodes, longest_path_node in enumerate(path[1]):
-                temp_path.append(longest_path_node)
-
-                if longest_path_node != 0:
-                    pos = valid_terminal_fragments[idx_path][idx_nodes - 1].min_end
-                    for graph_node in G.nodes:
-                        if (
-                            graph_node not in path[1]
-                            and graph_node not in temp_path
-                            and abs(
-                                G.nodes[graph_node]["mass"]
-                                - G.nodes[longest_path_node]["mass"]
-                            )
-                            <= self.matching_threshold
-                            * abs(
-                                G.nodes[longest_path_node]["mass"]
-                                + self.mass_tags[side]
-                            )
-                        ):
-                            temp_path.append(graph_node)
-                            # Add this node to the valid terminal fragment:
-                            valid_terminal_fragments[idx_path].append(
-                                TerminalFragment(
-                                    index=candidate_fragments[graph_node - 1],
-                                    min_end=pos,
-                                    max_end=pos,
-                                )
-                            )
-
-            new_longest_path = (path[0], sorted(temp_path))
-            new_longest_paths.append(new_longest_path)
-        longest_paths = new_longest_paths
-
-        # Calculate the invalid nodes (not included in the longest path) for each of the longest paths
-        invalid_nodes = []
-        for path in longest_paths:
-            invalid_nodes.append(
-                [
-                    candidate_fragments[node - 1]
-                    for node in G.nodes
-                    if node not in path[1]
-                ]
-            )
-
-        for i in range(len(skeleton_seq)):
-            if side == Side.END:
-                skeleton_seq[i] = skeleton_seq[i][::-1]
-                list_explanations[i] = list_explanations[i][::-1]
-
-            print(
-                "Index = ",
-                i,
-                "Score = ",
-                sequence_score[i],
-                "len = ",
-                len(skeleton_seq[i]),
-            )
-            print(f"Skeleton sequence graph {side} = ", skeleton_seq[i])
-
-        return G, valid_terminal_fragments, skeleton_seq, invalid_nodes, sequence_score, list_explanations
-
-    def build_skeleton(
-        self,
-    ) -> Tuple[
-        List[Set[str]],
-        List[TerminalFragment],
-        List[TerminalFragment],
-        List[int],
-        List[int],
-    ]:
-        skeleton_seq_start, start_fragments, invalid_start_fragments = (
-            self._predict_skeleton(
-                Side.START,
-            )
-        )
-
-        print("Skeleton sequence start = ", skeleton_seq_start)
-
-        skeleton_seq_end, end_fragments, invalid_end_fragments = self._predict_skeleton(
-            Side.END,
-        )
-        print("Skeleton sequence end = ", skeleton_seq_end)
-
-        skeleton_seq = self._align_skeletons(skeleton_seq_start, skeleton_seq_end)
-
-        print("Skeleton sequence = ", skeleton_seq)
-
-        return (
-            skeleton_seq,
-            start_fragments,
-            end_fragments,
-            invalid_start_fragments,
-            invalid_end_fragments,
-        )
-    
-    def calculate_diffs_and_nucleosides(self):
-
-        # Collect the fragments for the start and end side which also include the start_end fragments (entire sequences)
-        self.fragments_side[Side.START] = self.fragments.filter(
-            pl.col("is_start") | pl.col("is_start_end")
-        )
-        self.fragments_side[Side.END] = self.fragments.filter(
-            pl.col("is_end") | pl.col("is_start_end")
-        )
-
-        # Collect the masses of these fragments (subtract the appropriate tag masses)
-        self._collect_fragment_side_masses(Side.START)
-        self._collect_fragment_side_masses(Side.END)
-
-        # Collect the masses of the single nucleosides
-        self._collect_singleton_masses()
-
-        # Roughly estimate the differences as a first step with all fragments marked as start and then as end
-        # Note that we do not consider fragments is_start_end now,
-        # since the difference may be quite large and explained by lots of combinations
-        # Note that there may be faulty mass fragments which will lead to bad (not truly existent) differences here!
-        self._collect_diffs(Side.START)
-        self._collect_diffs(Side.END)
-        self._collect_diff_explanations()
-
-        # TODO:
-        # also consider that the observations are not complete and that we probably don't see all the letters as diffs or singletons.
-        # Hence, maybe do the following: solve first with the reduced alphabet, and if the optimization does not yield a sufficiently
-        # good result, then try again with an extended alphabet.
-        masses = (  # self.unique_masses
-            self._reduce_alphabet()
-        )
-
-        nucleosides = masses.get_column(
-            "nucleoside"
-        ).to_list()  # TODO: Handle the case of multiple nucleosides with the same mass when using "aggregate" grouping in the masses table
-        nucleoside_masses = dict(masses.iter_rows())
-
-        return nucleosides, nucleoside_masses
 
     def predict(self) -> Prediction:
         # TODO: get rid of the requirement to pass the length of the sequence
         # and instead infer it from the fragments
-        
-        nucleosides, nucleoside_masses = self.calculate_diffs_and_nucleosides()
+
+        nucleosides, nucleoside_masses = self._calculate_diffs_and_nucleosides()
 
         # Now we build the skeleton sequence from both sides and align them to get the final skeleton sequence!
         (
@@ -562,11 +130,11 @@ class Predictor:
             invalid_start_fragments,
             seq_score_start,
             list_explanations_start,
-        ) = self.graph_skeleton(
+        ) = self._graph_skeleton(
             Side.START,
             # use_ms_intensity_as_weight=True,
             use_ms_intensity_as_weight=False,
-            num_top_paths=25,
+            num_top_paths=100,
             peanlize_explanation_length_params={"zero_len_weight": 0.0, "base": e},
         )
 
@@ -574,14 +142,19 @@ class Predictor:
         # which keeps the ordereing of accepted start and end candidates while rejecting
         # the invalid ones, but keeping the ones with internal marking as internal candidates!
 
-        _, end_fragments, skeleton_seq_end, invalid_end_fragments, seq_score_end, list_explanations_end = (
-            self.graph_skeleton(
-                Side.END,
-                # use_ms_intensity_as_weight=True,
-                use_ms_intensity_as_weight=False,
-                num_top_paths=25,
-                peanlize_explanation_length_params={"zero_len_weight": 0.0, "base": e},
-            )
+        (
+            _,
+            end_fragments,
+            skeleton_seq_end,
+            invalid_end_fragments,
+            seq_score_end,
+            list_explanations_end,
+        ) = self._graph_skeleton(
+            Side.END,
+            # use_ms_intensity_as_weight=True,
+            use_ms_intensity_as_weight=False,
+            num_top_paths=100,
+            peanlize_explanation_length_params={"zero_len_weight": 0.0, "base": e},
         )
 
         # seq_set, score, start_seq_index, end_seq_index = (
@@ -612,9 +185,13 @@ class Predictor:
         #     invalid_start_fragments = invalid_start_fragments[0]
         #     invalid_end_fragments = invalid_end_fragments[0]
 
-        seq_set,list_set,start_seq_index,end_seq_index = self._align_list_explanations(list_explanations_start, list_explanations_end)
+        seq_set, list_set, start_seq_index, end_seq_index = (
+            self._align_list_explanations(
+                list_explanations_start, list_explanations_end
+            )
+        )
 
-        #TODO: Write a function to remove the 'duplicates' from the seq_set!
+        # TODO: Write a function to remove the 'duplicates' from the seq_set!
         # They are not all literally duplicates, but effectively will be duplicates!
         # Some may actually be literally duplicates!
 
@@ -665,7 +242,7 @@ class Predictor:
         #     end_fragments,
         #     invalid_start_fragments,
         #     invalid_end_fragments,
-        # ) = self.build_skeleton()
+        # ) = self._build_skeleton()
 
         # print("Ladder skeleton seq = ", skeleton_seq)
 
@@ -970,6 +547,79 @@ class Predictor:
             fragments=fragment_predictions,
         )
 
+    def _build_skeleton(
+        self,
+    ) -> Tuple[
+        List[Set[str]],
+        List[TerminalFragment],
+        List[TerminalFragment],
+        List[int],
+        List[int],
+    ]:
+        skeleton_seq_start, start_fragments, invalid_start_fragments = (
+            self._predict_skeleton(
+                Side.START,
+            )
+        )
+
+        print("Skeleton sequence start = ", skeleton_seq_start)
+
+        skeleton_seq_end, end_fragments, invalid_end_fragments = self._predict_skeleton(
+            Side.END,
+        )
+        print("Skeleton sequence end = ", skeleton_seq_end)
+
+        skeleton_seq = self._align_skeletons(skeleton_seq_start, skeleton_seq_end)
+
+        print("Skeleton sequence = ", skeleton_seq)
+
+        return (
+            skeleton_seq,
+            start_fragments,
+            end_fragments,
+            invalid_start_fragments,
+            invalid_end_fragments,
+        )
+
+    def _calculate_diffs_and_nucleosides(self):
+        # Collect the fragments for the start and end side which also include the start_end fragments (entire sequences)
+        self.fragments_side[Side.START] = self.fragments.filter(
+            pl.col("is_start") | pl.col("is_start_end")
+        )
+        self.fragments_side[Side.END] = self.fragments.filter(
+            pl.col("is_end") | pl.col("is_start_end")
+        )
+
+        # Collect the masses of these fragments (subtract the appropriate tag masses)
+        self._collect_fragment_side_masses(Side.START)
+        self._collect_fragment_side_masses(Side.END)
+
+        # Collect the masses of the single nucleosides
+        self._collect_singleton_masses()
+
+        # Roughly estimate the differences as a first step with all fragments marked as start and then as end
+        # Note that we do not consider fragments is_start_end now,
+        # since the difference may be quite large and explained by lots of combinations
+        # Note that there may be faulty mass fragments which will lead to bad (not truly existent) differences here!
+        self._collect_diffs(Side.START)
+        self._collect_diffs(Side.END)
+        self._collect_diff_explanations()
+
+        # TODO:
+        # also consider that the observations are not complete and that we probably don't see all the letters as diffs or singletons.
+        # Hence, maybe do the following: solve first with the reduced alphabet, and if the optimization does not yield a sufficiently
+        # good result, then try again with an extended alphabet.
+        masses = (  # self.unique_masses
+            self._reduce_alphabet()
+        )
+
+        nucleosides = masses.get_column(
+            "nucleoside"
+        ).to_list()  # TODO: Handle the case of multiple nucleosides with the same mass when using "aggregate" grouping in the masses table
+        nucleoside_masses = dict(masses.iter_rows())
+
+        return nucleosides, nucleoside_masses
+
     def _collect_fragment_side_masses(
         self, side: Side, restrict_is_start_end: bool = False
     ):
@@ -1010,325 +660,6 @@ class Predictor:
             ]
 
         self.fragment_masses[side] = side_fragments + start_end_fragments
-
-    def _align_list_explanations(self,list_explanations_start, list_explanations_end):
-        """
-        Aligns the list_explanation_start and list_explanation_end to get the final skeleton sequence!
-        """
-        
-        def _calculate_intersection(list1, list2):
-        
-            intersection = []
-            list1_copy = deepcopy(list1)
-            list2_copy = deepcopy(list2)
-
-            for l1 in list1:
-                for l2 in list2:
-                    if l1 == l2:
-                        if l1 in list1_copy and l2 in list2_copy:
-                            intersection.append(l1)
-                            list1_copy.remove(l1)
-                            list2_copy.remove(l2)
-                            break
-                        break
-
-            return intersection
-        
-        def _align_individual_lists(list_explanation_start, list_explanation_end):
-        
-            skeleton_list_explanation = []
-            skeleton_seq = []                                   
-            seq_idx = 0                                                                                  
-            list1_idx = 0
-            list2_idx = 0
-
-            start_inner_list = list_explanation_start[list1_idx]
-            end_inner_list = list_explanation_end[list2_idx]
-
-            while start_inner_list and end_inner_list:
-
-                if list1_idx < len(list_explanation_start):
-                    start_inner_list = list_explanation_start[list1_idx]
-
-                if list2_idx < len(list_explanation_end):
-                    end_inner_list = list_explanation_end[list2_idx]                                                 
-                                                                                                
-                while end_inner_list:
-                    while start_inner_list:
-                        
-                        # print(f"list1: {list_explanation_start[list1_idx]}")
-                        # print(f"list2: {list_explanation_end[list2_idx]}")
-
-                        #Calculate intersection of the two lists:
-                        nuc = _calculate_intersection(start_inner_list, end_inner_list)
-                        # print(f"nuc: {nuc}")
-
-                        #TODO: Treat the special case where nuc is empty
-                        if not nuc:
-                            return [], []
-                        
-                        #Special case where nuc is a list of n times the same nuclotide, e.g: ["A", "A", "A"]
-                        if len(nuc) > 1 and len(set(nuc)) == 1:
-                            for n in nuc:
-                                skeleton_list_explanation.append(list(n))  
-                        else:
-                            skeleton_list_explanation.append(list(nuc))
-
-                        for n in nuc:
-                            skeleton_seq.append(set(nuc))
-                            seq_idx += 1
-
-                        for n in nuc:
-                            if n in start_inner_list:
-                                start_inner_list.remove(n)
-                            if n in end_inner_list:
-                                end_inner_list.remove(n)
-
-                        if not end_inner_list:
-                            list2_idx += 1
-                            if list2_idx < len(list_explanation_end):
-                                end_inner_list = list_explanation_end[list2_idx]
-                            else:
-                                end_inner_list = []
-
-                    list1_idx += 1
-                    if list1_idx < len(list_explanation_start):
-                        start_inner_list = list_explanation_start[list1_idx]
-                    else:
-                        start_inner_list = []
-
-                list2_idx += 1
-                if list2_idx < len(list_explanation_end):
-                    end_inner_list = list_explanation_end[list2_idx]
-                else:
-                    end_inner_list = []
-
-            # print(f"Skeleton_list_explanation: {skeleton_list_explanation}")
-            # print(f"Skeleton_Seq: {skeleton_seq}")
-
-            return skeleton_seq, skeleton_list_explanation
-        
-        start_seq_index = []
-        end_seq_index = []
-        skeleton_seq = []
-        skeleton_list_explanation = []
-        
-        for idx_1, seq_1 in enumerate(list_explanations_start):
-                for idx_2, seq_2 in enumerate(list_explanations_end):
-                    for subseq_1 in seq_1:
-                        for subseq_2 in seq_2:
-                            
-                            skeleton_seq_temp, skeleton_list_explanation_temp = _align_individual_lists(deepcopy(subseq_1), deepcopy(subseq_2)[::-1])
-
-                            if skeleton_seq_temp and skeleton_list_explanation_temp:
-                                print(f"Index_1: {idx_1}", f"Index_2: {idx_2}")
-                                # print(f"Skeleton_seq_aligned_explanation: {skeleton_seq_temp}")
-                                print(f"Skeleton_list_explanation: {skeleton_list_explanation_temp}")
-
-                                skeleton_seq.append(skeleton_seq_temp)
-                                skeleton_list_explanation.append(skeleton_list_explanation_temp)
-                                start_seq_index.append(idx_1)
-                                end_seq_index.append(idx_2)
-        
-        return skeleton_seq, skeleton_list_explanation, start_seq_index, end_seq_index
-
-
-    def _align_skeletons_multi_seq(
-        self,
-        skeleton_seq_start,
-        skeleton_seq_end,
-        score_seq_start=None,
-        score_seq_end=None,
-        nucleosides={"A", "U", "C", "G"},
-    ) -> Tuple[List[List[Set[str]]], List[float], List[int], List[int]]:
-        # While building the ladder it may happen that things are unambiguous from one side, but not from the other!
-        # In that case, we should consider the unambiguous side as the correct one! If the intersection is empty, then we can consider the union of the two!
-
-        # Align the skeletons of the start and end fragments to get the final skeleton sequence!
-        # Wherever there is no ambiguity, that nucleotide is preferrentially considered!
-
-        skeleton_seq = []
-        skeleton_seq_score = []
-        start_seq_index = []
-        end_seq_index = []
-
-        skeleton_seq_imperfect = []
-        skeleton_seq_score_imperfect = []
-        start_seq_index_imperfect = []
-        end_seq_index_imperfect = []
-
-        for idx_1, seq_1 in enumerate(skeleton_seq_start):
-            for idx_2, seq_2 in enumerate(skeleton_seq_end):
-                temp_seq = [set() for _ in range(self.seq_len)]
-                perfect_match = True
-                temp_score = 0.0
-
-                for i in range(self.seq_len):
-                    temp_seq[i] = seq_1[i].intersection(seq_2[i])
-                    if temp_seq[i]:
-                        if score_seq_start is not None and score_seq_end is not None:
-                            # temp_score += float(len(temp_seq[i]))/(
-                            #     score_seq_start[idx_1] + score_seq_end[idx_2]
-                            # )*float(min(i,abs(i-self.seq_len)))/self.seq_len
-                            temp_score += float(len(nucleosides) - len(temp_seq[i])) * (
-                                score_seq_start[idx_1] + score_seq_end[idx_2]
-                            )
-                        else:
-                            # temp_score += float(len(temp_seq[i]))*float(min(i,abs(i-self.seq_len)))/self.seq_len
-                            temp_score += float(len(nucleosides) - len(temp_seq[i]))
-                    else:
-                        if score_seq_start is not None and score_seq_end is not None:
-                            # temp_score += float(len(nucleosides))/(
-                            #     score_seq_start[idx_1] + score_seq_end[idx_2]
-                            temp_score += (
-                                float(len(nucleosides))
-                                * (score_seq_start[idx_1] + score_seq_end[idx_2])
-                            )  # Penalize this by the number of nucelosides being considered!
-                        else:
-                            temp_score += float(
-                                len(nucleosides)
-                            )  # Penalize this by the number of nucelosides being considered!
-
-                        if len(seq_1[i]) < len(seq_2[i]):
-                            temp_seq[i] = seq_1[i]
-                        elif len(seq_1[i]) > len(seq_2[i]):
-                            temp_seq[i] = seq_2[i]
-                        else:
-                            if i < self.seq_len / 2:
-                                temp_seq[i] = seq_1[i]
-                            else:
-                                temp_seq[i] = seq_2[i]
-
-                        perfect_match = False
-
-                if perfect_match and temp_seq not in skeleton_seq:
-                    print("Perfect match seq = ", temp_seq, "with score = ", temp_score)
-                    skeleton_seq.append(temp_seq)
-                    skeleton_seq_score.append(temp_score)
-                    start_seq_index.append(idx_1)
-                    end_seq_index.append(idx_2)
-
-                if not perfect_match and temp_seq not in skeleton_seq:
-                    skeleton_seq_imperfect.append(temp_seq)
-                    skeleton_seq_score_imperfect.append(temp_score)
-                    start_seq_index_imperfect.append(idx_1)
-                    end_seq_index_imperfect.append(idx_2)
-
-        if skeleton_seq:
-            sorted_skeleton_seq = [
-                seq
-                for _, seq in sorted(
-                    zip(skeleton_seq_score, skeleton_seq), reverse=True
-                )
-            ]
-            sorted_start_seq_index = [
-                index
-                for _, index in sorted(
-                    zip(skeleton_seq_score, start_seq_index), reverse=True
-                )
-            ]
-            sorted_end_seq_index = [
-                index
-                for _, index in sorted(
-                    zip(skeleton_seq_score, end_seq_index), reverse=True
-                )
-            ]
-            sorted_skeleton_seq_score = sorted(skeleton_seq_score, reverse=True)
-
-        elif skeleton_seq_imperfect:
-            print("No perfect match found, using imperfect matches!")
-
-            sorted_skeleton_seq = [
-                seq
-                for _, seq in sorted(
-                    zip(skeleton_seq_score_imperfect, skeleton_seq_imperfect),
-                    reverse=True,
-                )
-            ]
-            sorted_start_seq_index = [
-                index
-                for _, index in sorted(
-                    zip(skeleton_seq_score_imperfect, start_seq_index_imperfect),
-                    reverse=True,
-                )
-            ]
-            sorted_end_seq_index = [
-                index
-                for _, index in sorted(
-                    zip(skeleton_seq_score_imperfect, end_seq_index_imperfect),
-                    reverse=True,
-                )
-            ]
-            sorted_skeleton_seq_score = sorted(
-                skeleton_seq_score_imperfect, reverse=True
-            )
-
-        return (
-            sorted_skeleton_seq,
-            sorted_skeleton_seq_score,
-            sorted_start_seq_index,
-            sorted_end_seq_index,
-        )
-
-    def _align_skeletons(
-        self,
-        skeleton_seq_start,
-        skeleton_seq_end,
-        align_depth=None,
-        trust_range=None,
-        trust_smaller_set=False,
-    ) -> List[Set[str]]:
-        # While building the ladder it may happen that things are unambiguous from one side, but not from the other!
-        # In that case, we should consider the unambiguous side as the correct one! If the intersection is empty, then we can consider the union of the two!
-
-        # Align the skeletons of the start and end fragments to get the final skeleton sequence!
-        # Wherever there is no ambiguity, that nucleotide is preferrentially considered!
-
-        skeleton_seq = [set() for _ in range(self.seq_len)]
-
-        if align_depth is None:
-            if trust_range is None:
-                for i in range(self.seq_len):
-                    skeleton_seq[i] = skeleton_seq_start[i].intersection(
-                        skeleton_seq_end[i]
-                    )
-                    if not skeleton_seq[
-                        i
-                    ]:  # TODO: If the intersection is empty, then we can also choose to trust the left sequence in the left part and the right sequence in the right part!
-                        if not trust_smaller_set:
-                            skeleton_seq[i] = skeleton_seq_start[i].union(
-                                skeleton_seq_end[i]
-                            )
-                        else:
-                            if len(skeleton_seq_start[i]) < len(skeleton_seq_end[i]):
-                                skeleton_seq[i] = skeleton_seq_start[i]
-                            else:
-                                skeleton_seq[i] = skeleton_seq_end[i]
-            else:
-                trust_range = int(self.seq_len / 2)  # TODO: update this algo smartly!
-                for i in range(trust_range):
-                    skeleton_seq[i] = skeleton_seq_start[i]
-                for i in range(trust_range, self.seq_len):
-                    skeleton_seq[i] = skeleton_seq_end[i]
-        else:
-            for i in range(align_depth):
-                skeleton_seq[i] = skeleton_seq_start[i].intersection(
-                    skeleton_seq_end[i]
-                )
-                if not skeleton_seq[i]:
-                    skeleton_seq[i] = skeleton_seq_start[i].union(skeleton_seq_end[i])
-            # for i in range(align_depth, self.seq_len):
-            for i in range(-align_depth, 0):
-                skeleton_seq[i] = skeleton_seq_start[i].intersection(
-                    skeleton_seq_end[i]
-                )
-                if not skeleton_seq[i]:
-                    skeleton_seq[i] = skeleton_seq_start[i].union(skeleton_seq_end[i])
-
-        # TODO: Its more complicated, since if two positions are ambigious, they are not indepenedent.
-        # If one nucleotide is selected this way, then the same nucleotide cannot be selected in the other position!
-
-        return skeleton_seq
 
     def _collect_diffs(self, side: Side) -> None:
         masses = self.fragment_masses[side]
@@ -1585,17 +916,3 @@ class Predictor:
                     invalid_fragments.append(candidate_fragments[fragment_index])
 
         return skeleton_seq, valid_terminal_fragments, invalid_fragments
-
-
-class Explanation:
-    def __init__(self, *nucleosides):
-        self.nucleosides = tuple(sorted(nucleosides))
-
-    def __iter__(self):
-        yield from self.nucleosides
-
-    def __len__(self):
-        return len(self.nucleosides)
-
-    def __repr__(self):
-        return f"{{{",".join(self.nucleosides)}}}"

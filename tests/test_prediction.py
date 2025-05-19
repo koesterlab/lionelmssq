@@ -27,6 +27,7 @@ from lionelmssq.masses import (
 
 # _TESTCASES = importlib.resources.files("tests") / "testcases"
 _TESTCASES = importlib.resources.files("tests") / "testcases_april"
+# _TESTCASES = importlib.resources.files("tests") / "testcases_modified" / "20mers"
 
 
 @pytest.mark.parametrize(
@@ -95,7 +96,9 @@ def test_testcase(testcase):
         #     matching_threshold,
         # )
 
-        singleton_mass_filtering_limit = 1.1*(max(unique_masses["monoisotopic_mass"])) + max(label_mass_3T,label_mass_5T)
+        singleton_mass_filtering_limit = 1.1 * (
+            max(unique_masses["monoisotopic_mass"])
+        ) + max(label_mass_3T, label_mass_5T)
 
         fragments_singletons = determine_terminal_fragments(
             fragments.filter(pl.col("observed_mass") < singleton_mass_filtering_limit),
@@ -109,18 +112,16 @@ def test_testcase(testcase):
 
         print("Fragments singletons = ", fragments_singletons)
 
-        nucleosides,_ = Predictor(
-        fragments_singletons,
-        unique_masses=unique_masses,
-        explanation_masses=explanation_masses,
-        matching_threshold=matching_threshold,
-        mass_tag_start=label_mass_5T,
-        mass_tag_end=label_mass_3T,
-        ).calculate_diffs_and_nucleosides()
+        nucleosides, _ = Predictor(
+            fragments_singletons,
+            unique_masses=unique_masses,
+            explanation_masses=explanation_masses,
+            matching_threshold=matching_threshold,
+            mass_tag_start=label_mass_5T,
+            mass_tag_end=label_mass_3T,
+        )._calculate_diffs_and_nucleosides()
 
-        unique_masses = UNIQUE_MASSES.filter(
-            pl.col("nucleoside").is_in(nucleosides)
-        )
+        unique_masses = UNIQUE_MASSES.filter(pl.col("nucleoside").is_in(nucleosides))
 
         explanation_masses = unique_masses.with_columns(
             (pl.col("monoisotopic_mass") / TOLERANCE)
@@ -147,6 +148,11 @@ def test_testcase(testcase):
 
         fragment_masses_read = pl.read_csv(base_path / "fragments.tsv", separator="\t")
 
+        # filter fragement_masses_read so that there are no duplicates of the same neutral mass
+        fragment_masses_read = fragment_masses_read.group_by(
+            "neutral_mass", maintain_order=True
+        ).first()
+
         # # TODO: Discuss why it doesn't work with the estimated error!
         # matching_threshold, _, _ = estimate_MS_error_MATCHING_THRESHOLD(
         #     fragment_masses_read, unique_masses=unique_masses, simulation=simulation
@@ -160,10 +166,14 @@ def test_testcase(testcase):
         )
         matching_threshold = MATCHING_THRESHOLD
 
-        singleton_mass_filtering_limit = 1.1*(max(unique_masses["monoisotopic_mass"])) + max(label_mass_3T,label_mass_5T)
+        singleton_mass_filtering_limit = 1.1 * (
+            max(unique_masses["monoisotopic_mass"])
+        ) + max(label_mass_3T, label_mass_5T)
 
         fragments_singletons = determine_terminal_fragments(
-            fragment_masses_read.filter(pl.col("neutral_mass") < singleton_mass_filtering_limit),
+            fragment_masses_read.filter(
+                pl.col("neutral_mass") < singleton_mass_filtering_limit
+            ),
             label_mass_3T=label_mass_3T,
             label_mass_5T=label_mass_5T,
             explanation_masses=explanation_masses,
@@ -173,14 +183,16 @@ def test_testcase(testcase):
 
         print("Fragments singletons = ", fragments_singletons)
 
-        nucleosides,_ = Predictor(
-        fragments_singletons,
-        unique_masses=unique_masses,
-        explanation_masses=explanation_masses,
-        matching_threshold=matching_threshold,
-        mass_tag_start=label_mass_5T,
-        mass_tag_end=label_mass_3T,
-        ).calculate_diffs_and_nucleosides()
+        nucleosides, _ = Predictor(
+            fragments_singletons,
+            unique_masses=unique_masses,
+            explanation_masses=explanation_masses,
+            matching_threshold=matching_threshold,
+            mass_tag_start=label_mass_5T,
+            mass_tag_end=label_mass_3T,
+        )._calculate_diffs_and_nucleosides()
+
+        print("Nucleosides considered = ", nucleosides)
 
         unique_masses = UNIQUE_MASSES.filter(
             pl.col("nucleoside").is_in(nucleosides)
@@ -281,5 +293,6 @@ def test_testcase(testcase):
 
 
 # test_testcase("30mers/test_03")
-test_testcase("25mers/test_02")
+test_testcase("25mers/test_01_centroid")
 # test_testcase("test_11")
+# test_testcase("test_01")

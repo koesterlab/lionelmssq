@@ -111,7 +111,7 @@ def test_testcase(testcase):
                 # pl.col("nucleoside").is_in(["A", "U", "G", "C", "0G"])
                 # pl.col("nucleoside").is_in(["A", "U", "G", "C", "9A"])
                 # pl.col("nucleoside").is_in(["A", "U", "G", "C", "0A","0U","9A"])
-                pl.col("nucleoside").is_in(["A", "U", "G", "C", "0A","0U"])
+                pl.col("nucleoside").is_in(["A", "U", "G", "C", "0A", "0U"])
             )
             .group_by("monoisotopic_mass", maintain_order=True)
             .first()
@@ -219,4 +219,4 @@ def test_testcase(testcase):
                 )
 
 
-test_testcase("test_03")
+test_testcase("test_01")
