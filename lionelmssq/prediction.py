@@ -531,25 +531,6 @@ class Predictor:
         # Note that we do not consider fragments is_start_end now,
         # since the difference may be quite large and explained by lots of combinations
         # Note that there may be faulty mass fragments which will lead to bad (not truly existent) differences here!
-        # Collect the fragments for the start and end side which also include the start_end fragments (entire sequences)
-        self.fragments_side[Side.START] = self.fragments.filter(
-            pl.col("is_start") | pl.col("is_start_end")
-        )
-        self.fragments_side[Side.END] = self.fragments.filter(
-            pl.col("is_end") | pl.col("is_start_end")
-        )
-
-        # Collect the masses of these fragments (subtract the appropriate tag masses)
-        self._collect_fragment_side_masses(Side.START)
-        self._collect_fragment_side_masses(Side.END)
-
-        # Collect the masses of the single nucleosides
-        self._collect_singleton_masses()
-
-        # Roughly estimate the differences as a first step with all fragments marked as start and then as end
-        # Note that we do not consider fragments is_start_end now,
-        # since the difference may be quite large and explained by lots of combinations
-        # Note that there may be faulty mass fragments which will lead to bad (not truly existent) differences here!
         self._collect_diffs(Side.START)
         self._collect_diffs(Side.END)
         self._collect_diff_explanations()
