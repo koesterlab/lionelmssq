@@ -48,9 +48,9 @@ class Predictor:
     def __init__(
         self,
         fragments: pl.DataFrame,
-        seq_len: int,
-        solver: str,
-        threads: int,
+        seq_len: int = 10,
+        solver: str = "cbc",
+        threads: int = 1,
         unique_masses: pl.DataFrame = UNIQUE_MASSES,
         explanation_masses: pl.DataFrame = EXPLANATION_MASSES,
         matching_threshold: float = MATCHING_THRESHOLD,
@@ -507,10 +507,8 @@ class Predictor:
             invalid_start_fragments,
             invalid_end_fragments,
         )
-
-    def predict(self) -> Prediction:
-        # TODO: get rid of the requirement to pass the length of the sequence
-        # and instead infer it from the fragments
+    
+    def calculate_diffs_and_nucleosides(self):
 
         # Collect the fragments for the start and end side which also include the start_end fragments (entire sequences)
         self.fragments_side[Side.START] = self.fragments.filter(
@@ -547,6 +545,14 @@ class Predictor:
             "nucleoside"
         ).to_list()  # TODO: Handle the case of multiple nucleosides with the same mass when using "aggregate" grouping in the masses table
         nucleoside_masses = dict(masses.iter_rows())
+
+        return nucleosides, nucleoside_masses
+
+    def predict(self) -> Prediction:
+        # TODO: get rid of the requirement to pass the length of the sequence
+        # and instead infer it from the fragments
+        
+        nucleosides, nucleoside_masses = self.calculate_diffs_and_nucleosides()
 
         # Now we build the skeleton sequence from both sides and align them to get the final skeleton sequence!
         (
@@ -1401,10 +1407,6 @@ class Predictor:
             for expl in expls
             for nuc in expl
         }
-        reduced = self.unique_masses.filter(
-            pl.col("nucleoside").is_in(observed_nucleosides)
-        )
-        print("Nucleosides considered for fitting after alphabet reduction:", reduced)
         reduced = self.unique_masses.filter(
             pl.col("nucleoside").is_in(observed_nucleosides)
         )

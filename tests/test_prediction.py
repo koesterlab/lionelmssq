@@ -76,10 +76,7 @@ def test_testcase(testcase):
         with pl.Config(tbl_rows=30):
             print(fragments)
 
-        # unique_masses = UNIQUE_MASSES
-        unique_masses = UNIQUE_MASSES.filter(
-            pl.col("nucleoside").is_in(["A", "U", "G", "C"])
-        )
+        unique_masses = UNIQUE_MASSES
 
         explanation_masses = unique_masses.with_columns(
             (pl.col("monoisotopic_mass") / TOLERANCE)
@@ -98,12 +95,44 @@ def test_testcase(testcase):
         #     matching_threshold,
         # )
 
+        singleton_mass_filtering_limit = 1.1*(max(unique_masses["monoisotopic_mass"])) + max(label_mass_3T,label_mass_5T)
+
+        fragments_singletons = determine_terminal_fragments(
+            fragments.filter(pl.col("observed_mass") < singleton_mass_filtering_limit),
+            label_mass_3T=label_mass_3T,
+            label_mass_5T=label_mass_5T,
+            mass_column_name="observed_mass",
+            explanation_masses=explanation_masses,
+            matching_threshold=matching_threshold,
+            intensity_cutoff=intensity_cutoff,
+        )
+
+        print("Fragments singletons = ", fragments_singletons)
+
+        nucleosides,_ = Predictor(
+        fragments_singletons,
+        unique_masses=unique_masses,
+        explanation_masses=explanation_masses,
+        matching_threshold=matching_threshold,
+        mass_tag_start=label_mass_5T,
+        mass_tag_end=label_mass_3T,
+        ).calculate_diffs_and_nucleosides()
+
+        unique_masses = UNIQUE_MASSES.filter(
+            pl.col("nucleoside").is_in(nucleosides)
+        )
+
+        explanation_masses = unique_masses.with_columns(
+            (pl.col("monoisotopic_mass") / TOLERANCE)
+            .round(0)
+            .cast(pl.Int64)
+            .alias("tolerated_integer_masses")
+        )
+
     else:
         simulation = False
 
-        unique_masses = UNIQUE_MASSES.filter(
-            pl.col("nucleoside").is_in(["A", "U", "G", "C"])
-        ).with_columns(
+        unique_masses = UNIQUE_MASSES.with_columns(
             (pl.col("monoisotopic_mass") + 61.95577).alias(
                 "monoisotopic_mass"
             )  # Added the appropriate backbone mass!
@@ -130,6 +159,43 @@ def test_testcase(testcase):
             matching_threshold,
         )
         matching_threshold = MATCHING_THRESHOLD
+
+        singleton_mass_filtering_limit = 1.1*(max(unique_masses["monoisotopic_mass"])) + max(label_mass_3T,label_mass_5T)
+
+        fragments_singletons = determine_terminal_fragments(
+            fragment_masses_read.filter(pl.col("neutral_mass") < singleton_mass_filtering_limit),
+            label_mass_3T=label_mass_3T,
+            label_mass_5T=label_mass_5T,
+            explanation_masses=explanation_masses,
+            matching_threshold=matching_threshold,
+            intensity_cutoff=intensity_cutoff,
+        )
+
+        print("Fragments singletons = ", fragments_singletons)
+
+        nucleosides,_ = Predictor(
+        fragments_singletons,
+        unique_masses=unique_masses,
+        explanation_masses=explanation_masses,
+        matching_threshold=matching_threshold,
+        mass_tag_start=label_mass_5T,
+        mass_tag_end=label_mass_3T,
+        ).calculate_diffs_and_nucleosides()
+
+        unique_masses = UNIQUE_MASSES.filter(
+            pl.col("nucleoside").is_in(nucleosides)
+        ).with_columns(
+            (pl.col("monoisotopic_mass") + 61.95577).alias(
+                "monoisotopic_mass"
+            )  # Added the appropriate backbone mass!
+        )
+
+        explanation_masses = unique_masses.with_columns(
+            (pl.col("monoisotopic_mass") / TOLERANCE)
+            .round(0)
+            .cast(pl.Int64)
+            .alias("tolerated_integer_masses")
+        )
 
         terminal_marked_path = base_path / "fragments_terminal_marked.tsv"
         if not terminal_marked_path.exists():
