@@ -16,6 +16,8 @@ import polars as pl
 from loguru import logger
 from networkx import DiGraph, dag_longest_path
 from math import e
+from copy import deepcopy
+
 
 LP_relaxation_threshold = 0.9
 
@@ -315,7 +317,28 @@ class Predictor:
 
             return skeleton_seq
         
-        def _generate_list_explanations(longest_path=longest_paths[0][1]):
+        # def _generate_list_explanations(longest_path=longest_paths[0][1]):
+        #     skeleton_seq = []
+        #     for node in range(len(longest_path) - 1):
+        #         if (
+        #             len(
+        #                 G.edges[longest_path[node], longest_path[node + 1]][
+        #                     "explanation"
+        #                 ]
+        #             )
+        #             > 0
+        #         ):
+        #             seq = G.edges[longest_path[node], longest_path[node + 1]][
+        #                         "explanation"
+        #                     ]
+        #             list_seq = [[str(s) for s in subseq] for subseq in seq]
+
+        #             skeleton_seq.extend(
+        #                     list_seq
+        #                 )
+        #     return skeleton_seq
+
+        def _generate_list_explanations_all_combinations(longest_path=longest_paths[0][1]):
             skeleton_seq = []
             for node in range(len(longest_path) - 1):
                 if (
@@ -329,11 +352,23 @@ class Predictor:
                     seq = G.edges[longest_path[node], longest_path[node + 1]][
                                 "explanation"
                             ]
+                    
                     list_seq = [[str(s) for s in subseq] for subseq in seq]
 
-                    skeleton_seq.extend(
-                            list_seq
-                        )
+                    len_list_seq = len(list_seq)
+
+                    if not skeleton_seq:
+                        for subseq in list_seq:
+                            skeleton_seq.extend([[subseq]])
+                    else:
+                        original_skeleton_seq = deepcopy(skeleton_seq)
+                        for skeleton in skeleton_seq:
+                            skeleton.extend([list_seq[0]])
+
+                        if len(list_seq) > 1:
+                            for skeleton in original_skeleton_seq:
+                                skeleton_seq.extend(skeleton + [list_seq[i]] for i in range(1, len_list_seq))
+
             return skeleton_seq
 
         # Calculate the longest paths and the skeleton sequence
@@ -346,25 +381,33 @@ class Predictor:
         list_explanations = []
         for path in longest_paths:
             seq = _generate_sequence_from_path(path[1])
-            # seq = _generate_list_explanations(path[1])
             if len(seq) == self.seq_len:
                 new_longest_paths.append(path)
                 skeleton_seq.append(seq)
                 sequence_score.append(path[0])
                 valid_terminal_fragments.append(_assign_valid_nodes(path[1]))
-                list_explanations.append(
-                    _generate_list_explanations(path[1])
-                )
-                if side == Side.END:
-                    print("Seq = ", seq[::-1])
-                    print("List_explnations = ", _generate_list_explanations(path[1])[::-1])
-                else:
-                    print("Seq = ", seq)
-                    print("List_explnations = ", _generate_list_explanations(path[1]))
                 print("Path = ", path[1])
                 print("Mass = ", [G.nodes[node]["mass"] for node in path[1]])
                 print("Score = ", path[0])
+
+            list_explanations_single = _generate_list_explanations_all_combinations(path[1])
+            for exp in list_explanations_single:
+                if sum(len(sublist) for sublist in exp) != self.seq_len:
+                    list_explanations_single.remove(exp)
+            
+            list_explanations.append(
+                list_explanations_single
+            )
+            if side == Side.END:
+                print("Seq = ", seq[::-1])
+                print("List_explnations = ", list_explanations_single[:][::-1])
+            else:
+                print("Seq = ", seq)
+                print("List_explnations = ", list_explanations_single)
+
         longest_paths = new_longest_paths
+
+        #TODO: Also contrain the length of the list_explanations to only consider sequences of the same length!
 
         # Add the 'same' mass fragments back to the longest paths and include them in the valid terminal fragments!
         new_longest_paths = []
@@ -430,12 +473,6 @@ class Predictor:
             print(f"Skeleton sequence graph {side} = ", skeleton_seq[i])
 
         return G, valid_terminal_fragments, skeleton_seq, invalid_nodes, sequence_score, list_explanations
-        self.unique_masses = unique_masses
-        self.explanation_masses = explanation_masses
-        self.matching_threshold = matching_threshold
-        self.mass_tags = {Side.START: mass_tag_start, Side.END: mass_tag_end}
-        self.fragments_side = dict()
-        self.fragment_masses = dict()
 
     def build_skeleton(
         self,
@@ -542,7 +579,7 @@ class Predictor:
             Side.START,
             # use_ms_intensity_as_weight=True,
             use_ms_intensity_as_weight=False,
-            num_top_paths=100,
+            num_top_paths=25,
             peanlize_explanation_length_params={"zero_len_weight": 0.0, "base": e},
         )
 
@@ -555,28 +592,28 @@ class Predictor:
                 Side.END,
                 # use_ms_intensity_as_weight=True,
                 use_ms_intensity_as_weight=False,
-                num_top_paths=100,
+                num_top_paths=25,
                 peanlize_explanation_length_params={"zero_len_weight": 0.0, "base": e},
             )
         )
 
-        seq_set, score, start_seq_index, end_seq_index = (
-            self._align_skeletons_multi_seq(
-                skeleton_seq_start=skeleton_seq_start,
-                skeleton_seq_end=skeleton_seq_end,
-                # score_seq_start=seq_score_start,
-                score_seq_start=None,
-                # score_seq_end=seq_score_end,
-                score_seq_end=None,
-                nucleosides=nucleosides,
-            )
-        )
+        # seq_set, score, start_seq_index, end_seq_index = (
+        #     self._align_skeletons_multi_seq(
+        #         skeleton_seq_start=skeleton_seq_start,
+        #         skeleton_seq_end=skeleton_seq_end,
+        #         # score_seq_start=seq_score_start,
+        #         score_seq_start=None,
+        #         # score_seq_end=seq_score_end,
+        #         score_seq_end=None,
+        #         nucleosides=nucleosides,
+        #     )
+        # )
 
-        # Print the indices of seq_set corresponding to the top score
-        top_score = max(score)
-        top_score_indices = [idx for idx, sc in enumerate(score) if sc == top_score]
-        print("Top sequences = ", [seq_set[i] for i in top_score_indices])
-        print("Top sequences scores = ", score)
+        # # Print the indices of seq_set corresponding to the top score
+        # top_score = max(score)
+        # top_score_indices = [idx for idx, sc in enumerate(score) if sc == top_score]
+        # print("Top sequences = ", [seq_set[i] for i in top_score_indices])
+        # print("Top sequences scores = ", score)
 
         # if True:
         #     skeleton_seq_start = skeleton_seq_start[0]
@@ -589,6 +626,10 @@ class Predictor:
         #     invalid_end_fragments = invalid_end_fragments[0]
 
         seq_set,list_set,start_seq_index,end_seq_index = self._align_list_explanations(list_explanations_start, list_explanations_end)
+
+        #TODO: Write a function to remove the 'duplicates' from the seq_set!
+        # They are not all literally duplicates, but effectively will be duplicates!
+        # Some may actually be literally duplicates!
 
         chosen_seq_index = 0
 
@@ -991,7 +1032,6 @@ class Predictor:
         def _calculate_intersection(list1, list2):
         
             intersection = []
-            from copy import deepcopy
             list1_copy = deepcopy(list1)
             list2_copy = deepcopy(list2)
 
@@ -1088,16 +1128,20 @@ class Predictor:
         
         for idx_1, seq_1 in enumerate(list_explanations_start):
                 for idx_2, seq_2 in enumerate(list_explanations_end):
-                    skeleton_seq_temp, skeleton_list_explanation_temp = _align_individual_lists(seq_1, seq_2)
+                    for subseq_1 in seq_1:
+                        for subseq_2 in seq_2:
+                            
+                            skeleton_seq_temp, skeleton_list_explanation_temp = _align_individual_lists(deepcopy(subseq_1), deepcopy(subseq_2)[::-1])
 
-                    if skeleton_seq_temp and skeleton_list_explanation_temp:
-                        print(f"Skeleton_seq: {skeleton_seq_temp}")
-                        print(f"Skeleton_list_explanation: {skeleton_list_explanation_temp}")
+                            if skeleton_seq_temp and skeleton_list_explanation_temp:
+                                print(f"Index_1: {idx_1}", f"Index_2: {idx_2}")
+                                # print(f"Skeleton_seq_aligned_explanation: {skeleton_seq_temp}")
+                                print(f"Skeleton_list_explanation: {skeleton_list_explanation_temp}")
 
-                        skeleton_seq.append(skeleton_seq_temp)
-                        skeleton_list_explanation.append(skeleton_list_explanation_temp)
-                        start_seq_index.append(idx_1)
-                        end_seq_index.append(idx_2)
+                                skeleton_seq.append(skeleton_seq_temp)
+                                skeleton_list_explanation.append(skeleton_list_explanation_temp)
+                                start_seq_index.append(idx_1)
+                                end_seq_index.append(idx_2)
         
         return skeleton_seq, skeleton_list_explanation, start_seq_index, end_seq_index
 

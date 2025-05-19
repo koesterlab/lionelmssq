@@ -25,8 +25,8 @@ from lionelmssq.masses import (
     MATCHING_THRESHOLD,
 )
 
-_TESTCASES = importlib.resources.files("tests") / "testcases"
-# _TESTCASES = importlib.resources.files("tests") / "testcases_april"
+# _TESTCASES = importlib.resources.files("tests") / "testcases"
+_TESTCASES = importlib.resources.files("tests") / "testcases_april"
 
 
 @pytest.mark.parametrize(
@@ -153,8 +153,10 @@ def test_testcase(testcase):
 
     # len_seq = len(true_seq)
     lengths_seq, _, _ = determine_sequence_length(terminally_marked_fragments=fragments)
+    print("Lengths of the sequences = ", lengths_seq)
     len_seq = lengths_seq[0]
     print("Length of the sequence = ", len_seq)
+    # len_seq = 30
 
     prediction = Predictor(
         fragments,
@@ -212,5 +214,6 @@ def test_testcase(testcase):
                 )
 
 
-# test_testcase("25mers/test_01")
-test_testcase("test_05_2")
+# test_testcase("30mers/test_03")
+test_testcase("25mers/test_02")
+# test_testcase("test_11")
