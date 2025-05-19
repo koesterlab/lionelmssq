@@ -224,17 +224,12 @@ def test_testcase(testcase):
             )
         else:
             fragments = pl.read_csv(terminal_marked_path, separator="\t")
-        with pl.Config(tbl_rows=30):
-            print(fragments)
-
-    # fragment_masses = pl.Series(fragments.select(pl.col("observed_mass"))).to_list()
 
     # len_seq = len(true_seq)
     lengths_seq, _, _ = determine_sequence_length(terminally_marked_fragments=fragments)
     print("Lengths of the sequences = ", lengths_seq)
     len_seq = lengths_seq[0]
     print("Length of the sequence = ", len_seq)
-    # len_seq = 30
 
     prediction = Predictor(
         fragments,
@@ -247,6 +242,7 @@ def test_testcase(testcase):
         matching_threshold=matching_threshold,
         mass_tag_start=label_mass_5T,
         mass_tag_end=label_mass_3T,
+        print_mass_table=True,
     ).predict()
 
     fragment_masses = pl.Series(

@@ -194,7 +194,7 @@ def align_skeletons_multi_seq(
                     perfect_match = False
 
             if perfect_match and temp_seq not in skeleton_seq:
-                print("Perfect match seq = ", temp_seq, "with score = ", temp_score)
+                # print("Perfect match seq = ", temp_seq, "with score = ", temp_score)
                 skeleton_seq.append(temp_seq)
                 skeleton_seq_score.append(temp_score)
                 start_seq_index.append(idx_1)

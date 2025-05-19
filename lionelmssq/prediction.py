@@ -61,6 +61,7 @@ class Predictor:
         matching_threshold: float = MATCHING_THRESHOLD,
         mass_tag_start: float = 0.0,
         mass_tag_end: float = 0.0,
+        print_mass_table: bool = False,
     ):
         self.fragments = (
             fragments.with_row_index(name="orig_index")
@@ -71,21 +72,22 @@ class Predictor:
         # Sort the fragments in the order of single nucleosides, start fragments, end fragments,
         # start fragments AND end fragments, internal fragments and then by mass for each category!
 
-        with pl.Config() as cfg:
-            cfg.set_tbl_rows(-1)
-            print(
-                self.fragments.select(
-                    pl.col("observed_mass"),
-                    pl.col("is_start"),
-                    pl.col("is_end"),
-                    pl.col("single_nucleoside"),
-                    pl.col("is_start_end"),
-                    pl.col("is_internal"),
-                    # pl.col("mass_explanations"),
-                    pl.col("index"),
-                    pl.col("orig_index"),
+        if print_mass_table:
+            with pl.Config() as cfg:
+                cfg.set_tbl_rows(-1)
+                print(
+                    self.fragments.select(
+                        pl.col("observed_mass"),
+                        pl.col("is_start"),
+                        pl.col("is_end"),
+                        pl.col("single_nucleoside"),
+                        pl.col("is_start_end"),
+                        pl.col("is_internal"),
+                        # pl.col("mass_explanations"),
+                        pl.col("index"),
+                        pl.col("orig_index"),
+                    )
                 )
-            )
 
         self.seq_len = seq_len
         self.solver = solver
@@ -102,7 +104,6 @@ class Predictor:
         self.fragment_masses = dict()
 
         # Defining functions on the classes defined in other files:
-        # self.graph_skeleton = construct_graph_skeleton
         self._graph_skeleton = lambda *args, **kwargs: construct_graph_skeleton(
             self, *args, **kwargs
         )
@@ -138,10 +139,6 @@ class Predictor:
             peanlize_explanation_length_params={"zero_len_weight": 0.0, "base": e},
         )
 
-        # We now create reduced self.fragments_side and their masses
-        # which keeps the ordereing of accepted start and end candidates while rejecting
-        # the invalid ones, but keeping the ones with internal marking as internal candidates!
-
         (
             _,
             end_fragments,
@@ -157,34 +154,6 @@ class Predictor:
             peanlize_explanation_length_params={"zero_len_weight": 0.0, "base": e},
         )
 
-        # seq_set, score, start_seq_index, end_seq_index = (
-        #     self._align_skeletons_multi_seq(
-        #         skeleton_seq_start=skeleton_seq_start,
-        #         skeleton_seq_end=skeleton_seq_end,
-        #         # score_seq_start=seq_score_start,
-        #         score_seq_start=None,
-        #         # score_seq_end=seq_score_end,
-        #         score_seq_end=None,
-        #         nucleosides=nucleosides,
-        #     )
-        # )
-
-        # # Print the indices of seq_set corresponding to the top score
-        # top_score = max(score)
-        # top_score_indices = [idx for idx, sc in enumerate(score) if sc == top_score]
-        # print("Top sequences = ", [seq_set[i] for i in top_score_indices])
-        # print("Top sequences scores = ", score)
-
-        # if True:
-        #     skeleton_seq_start = skeleton_seq_start[0]
-        #     skeleton_seq_end = skeleton_seq_end[0]
-        #     seq_score_start = seq_score_start[0]
-        #     seq_score_end = seq_score_end[0]
-        #     start_fragments = start_fragments[0]
-        #     end_fragments = end_fragments[0]
-        #     invalid_start_fragments = invalid_start_fragments[0]
-        #     invalid_end_fragments = invalid_end_fragments[0]
-
         seq_set, list_set, start_seq_index, end_seq_index = (
             self._align_list_explanations(
                 list_explanations_start, list_explanations_end
@@ -195,28 +164,45 @@ class Predictor:
         # They are not all literally duplicates, but effectively will be duplicates!
         # Some may actually be literally duplicates!
 
-        chosen_seq_index = 0
+        if not seq_set:
+            logger.warning(
+                "No perfect start-end list alignment found, resorting to best possible sequence alignment ranked using scores."
+            )
+            seq_set, score, start_seq_index, end_seq_index = (
+                self._align_skeletons_multi_seq(
+                    skeleton_seq_start=skeleton_seq_start,
+                    skeleton_seq_end=skeleton_seq_end,
+                    score_seq_start=seq_score_start,
+                    score_seq_end=seq_score_end,
+                    nucleosides=nucleosides,
+                )
+            )
 
-        if True:
-            skeleton_seq = seq_set[chosen_seq_index]
-            start_fragments = start_fragments[start_seq_index[chosen_seq_index]]
-            end_fragments = end_fragments[end_seq_index[chosen_seq_index]]
-            invalid_start_fragments = invalid_start_fragments[
-                start_seq_index[chosen_seq_index]
-            ]
-            invalid_end_fragments = invalid_end_fragments[
-                end_seq_index[chosen_seq_index]
-            ]
-            invalid_start_fragments = invalid_start_fragments[
-                start_seq_index[chosen_seq_index]
-            ]
-            invalid_end_fragments = invalid_end_fragments[
-                end_seq_index[chosen_seq_index]
-            ]
-            # skeleton_seq_start = skeleton_seq_start[start_seq_index[0]]
-            # skeleton_seq_end = skeleton_seq_end[end_seq_index[0]]
+            # Print the indices of seq_set corresponding to the top score
+            top_score = max(score)
+            top_score_indices = [idx for idx, sc in enumerate(score) if sc == top_score]
+            print("Top sequences = ", [seq_set[i] for i in top_score_indices])
+            print("Top sequences scores = ", score)
 
-            print("Multi-Graph aligned_skeleton_seq selected = ", skeleton_seq)
+            chosen_seq_index = top_score_indices[0]
+        else:
+            chosen_seq_index = 0
+
+        #Choose a skeleton sequence from the seq_set for further optimization 
+        # since the optimizer can only handle a single sequence in terms of sets at the time!
+        skeleton_seq = seq_set[chosen_seq_index]
+        start_fragments = start_fragments[start_seq_index[chosen_seq_index]]
+        end_fragments = end_fragments[end_seq_index[chosen_seq_index]]
+        invalid_start_fragments = invalid_start_fragments[
+            start_seq_index[chosen_seq_index]
+        ]
+        invalid_end_fragments = invalid_end_fragments[
+            end_seq_index[chosen_seq_index]
+        ]
+
+        print("Multi-Graph aligned_skeleton_seq selected = ", skeleton_seq)
+        if list_set:
+            print("Multi-Graph aligned_skeleton_LIST selected = ", list_set)
 
         # Remove the start and end fragments which are the same, this is not expected!
         # Consider them only with start fragments!
@@ -225,26 +211,9 @@ class Predictor:
                 if start.index == end.index:
                     end_fragments.remove(end)
 
-        # This is the old _align_skeletons function when the algorithm only output a single sequence!
-        # skeleton_seq = self._align_skeletons(
-        #     skeleton_seq_start,
-        #     skeleton_seq_end,
-        #     align_depth=None,
-        #     trust_range=None,
-        #     trust_smaller_set=True,
-        # )
-        # print("Graph aligned_skeleton_seq = ", skeleton_seq)
-
-        # #This is the old code for building the skeleton sequence
-        # (
-        #     skeleton_seq,
-        #     start_fragments,
-        #     end_fragments,
-        #     invalid_start_fragments,
-        #     invalid_end_fragments,
-        # ) = self._build_skeleton()
-
-        # print("Ladder skeleton seq = ", skeleton_seq)
+        # We now create reduced self.fragments_side and their masses
+        # which keeps the ordereing of accepted start and end candidates while rejecting
+        # the invalid ones, but keeping the ones with internal marking as internal candidates!
 
         # TODO: If the tags are considered in the LP at the end, then most of the following code will become obsolete!
         self.fragments_side[Side.START] = self.fragments_side[Side.START].filter(
@@ -275,15 +244,14 @@ class Predictor:
 
         # Create a data frame for the internal fragments:
         self.fragments_internal = (
-            self.fragments.filter(pl.col("is_internal"))
-            .filter(
+            self.fragments.filter(pl.col("is_internal")).filter(
                 ~pl.col("index").is_in(
                     [i.index for i in start_fragments]
                     + [i.index for i in end_fragments]
                 )
             )
-            .filter(pl.col("intensity") > 50000)
-        )  # TODO: REMOVE THIS INTENSITY FILTER!!
+            # .filter(pl.col("intensity") > 50000)
+        )  # TODO: REMOVE THIS INTENSITY FILTER!! OR ADD AS NEEDED!
 
         # TODO: One can recheck the explanations for the internal fragments, if they match with the ladder sequence. Remove the ones that do not!! Easily implemenented!
 
@@ -562,13 +530,9 @@ class Predictor:
             )
         )
 
-        print("Skeleton sequence start = ", skeleton_seq_start)
-
         skeleton_seq_end, end_fragments, invalid_end_fragments = self._predict_skeleton(
             Side.END,
         )
-        print("Skeleton sequence end = ", skeleton_seq_end)
-
         skeleton_seq = self._align_skeletons(skeleton_seq_start, skeleton_seq_end)
 
         print("Skeleton sequence = ", skeleton_seq)

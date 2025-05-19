@@ -326,15 +326,15 @@ def construct_graph_skeleton(
             skeleton_seq[i] = skeleton_seq[i][::-1]
             list_explanations[i] = list_explanations[i][::-1]
 
-        print(
-            "Index = ",
-            i,
-            "Score = ",
-            sequence_score[i],
-            "len = ",
-            len(skeleton_seq[i]),
-        )
-        print(f"Skeleton sequence graph {side} = ", skeleton_seq[i])
+        # print(
+        #     "Index = ",
+        #     i,
+        #     "Score = ",
+        #     sequence_score[i],
+        #     "len = ",
+        #     len(skeleton_seq[i]),
+        # )
+        # print(f"Skeleton sequence graph {side} = ", skeleton_seq[i])
 
     return (
         G,
