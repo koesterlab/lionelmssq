@@ -9,6 +9,7 @@ from lionelmssq.utils import (
     determine_terminal_fragments,
     estimate_MS_error_MATCHING_THRESHOLD,
     determine_sequence_length,
+    predetermine_possible_nucleotides,
 )
 import polars as pl
 import yaml
@@ -154,45 +155,51 @@ def test_testcase(testcase):
         ).first()
 
         # # TODO: Discuss why it doesn't work with the estimated error!
-        # matching_threshold, _, _ = estimate_MS_error_MATCHING_THRESHOLD(
-        #     fragment_masses_read, unique_masses=unique_masses, simulation=simulation
-        # )
-        _, matching_threshold, _ = estimate_MS_error_MATCHING_THRESHOLD(
+        matching_threshold, _, _ = estimate_MS_error_MATCHING_THRESHOLD(
             fragment_masses_read, unique_masses=unique_masses, simulation=simulation
         )
+        # _, matching_threshold, _ = estimate_MS_error_MATCHING_THRESHOLD(
+        #     fragment_masses_read, unique_masses=unique_masses, simulation=simulation
+        # )
         print(
             "Matching threshold (rel errror) estimated from singleton masses = ",
             matching_threshold,
         )
         matching_threshold = MATCHING_THRESHOLD
 
-        singleton_mass_filtering_limit = 1.1 * (
-            max(unique_masses["monoisotopic_mass"])
-        ) + max(label_mass_3T, label_mass_5T)
-
-        fragments_singletons = determine_terminal_fragments(
-            fragment_masses_read.filter(
-                pl.col("neutral_mass") < singleton_mass_filtering_limit
-            ),
-            label_mass_3T=label_mass_3T,
-            label_mass_5T=label_mass_5T,
+        nucleosides = predetermine_possible_nucleotides(
+            fragment_masses_read,
             explanation_masses=explanation_masses,
             matching_threshold=matching_threshold,
             intensity_cutoff=intensity_cutoff,
         )
 
-        print("Fragments singletons = ", fragments_singletons)
+        print("Predetermined nucleosides from singletons: ", nucleosides)
 
-        nucleosides, _ = Predictor(
-            fragments_singletons,
-            unique_masses=unique_masses,
-            explanation_masses=explanation_masses,
-            matching_threshold=matching_threshold,
-            mass_tag_start=label_mass_5T,
-            mass_tag_end=label_mass_3T,
-        )._calculate_diffs_and_nucleosides()
+        # fragments_singletons = determine_terminal_fragments(
+        #     fragment_masses_read.filter(
+        #         pl.col("neutral_mass") < singleton_mass_filtering_limit
+        #     ),
+        #     label_mass_3T=label_mass_3T,
+        #     label_mass_5T=label_mass_5T,
+        #     explanation_masses=explanation_masses,
+        #     matching_threshold=matching_threshold,
+        #     intensity_cutoff=intensity_cutoff,
+        # )
 
-        print("Nucleosides considered = ", nucleosides)
+        # print("Fragments singletons = ", fragments_singletons)
+
+        # nucleosides, _ = Predictor(
+        #     fragments_singletons,
+        #     unique_masses=unique_masses,
+        #     explanation_masses=explanation_masses,
+        #     matching_threshold=matching_threshold,
+        #     mass_tag_start=label_mass_5T,
+        #     mass_tag_end=label_mass_3T,
+        #     print_mass_table=True,
+        # )._calculate_diffs_and_nucleosides()
+
+        # print("Nucleosides considered = ", nucleosides)
 
         unique_masses = UNIQUE_MASSES.filter(
             pl.col("nucleoside").is_in(nucleosides)

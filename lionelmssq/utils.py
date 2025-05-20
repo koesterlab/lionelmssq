@@ -4,6 +4,7 @@ import polars as pl
 from lionelmssq.masses import EXPLANATION_MASSES, UNIQUE_MASSES, MATCHING_THRESHOLD
 from lionelmssq.masses import TOLERANCE
 from lionelmssq.masses import ROUND_DECIMAL
+from lionelmssq.prediction import Predictor
 
 
 def counts_subset(explanation, ms1_explanations):
@@ -72,7 +73,7 @@ def determine_terminal_fragments(
             if element.count("3Tag") == 1 and element.count("5Tag") == 1
         }
         # print(ms1_explained_mass.explanations)
-        if not ms1_mass:
+        if not ms1_explained_mass.explanations:
             print("MS1 mass is not explained by the nucleosides!")
             ms1_mass = None
 
@@ -232,9 +233,6 @@ def determine_terminal_fragments(
         )
         .with_columns(pl.Series(mass_explanations).alias("mass_explanations"))
         .filter(~pl.Series(skip_mass))
-        # .filter(
-        #    pl.col("neutral_mass") > 305.04129
-        # )
         .sort(pl.col("observed_mass"))
         .filter(pl.col("intensity") > intensity_cutoff)
         .filter(pl.col("neutral_mass") < mass_cutoff)
@@ -244,6 +242,43 @@ def determine_terminal_fragments(
         fragment_masses.write_csv(output_file_path, separator="\t")
 
     return fragment_masses
+
+
+def predetermine_possible_nucleotides(
+    fragments,
+    singleton_mass_filtering_limit=1.1
+    * (
+        max(UNIQUE_MASSES.select(pl.col("monoisotopic_mass")).to_series().to_list())
+        + 61.95577
+    ),
+    matching_threshold=2e-5,
+    explanation_masses=EXPLANATION_MASSES,
+    intensity_cutoff=0.5e6,
+):
+    singleton_masses = (
+        fragments.filter(pl.col("neutral_mass") < singleton_mass_filtering_limit).filter(pl.col("intensity") > intensity_cutoff)
+        .select(pl.col("neutral_mass"))
+        .to_series()
+        .to_list()
+    )
+
+    explanations = {}
+
+    for mass in singleton_masses:
+        expl = explain_mass(
+            mass, explanation_masses, matching_threshold=matching_threshold
+        ).explanations
+        explanations[mass] = expl
+
+    observed_nucleosides = {
+        nuc for expls in explanations.values() for expl in expls for nuc in expl if len(expl) == 1
+    }
+
+    reduced = explanation_masses.filter(pl.col("nucleoside").is_in(observed_nucleosides))
+
+    nucleosides = reduced.get_column("nucleoside").to_list()
+
+    return nucleosides
 
 
 def estimate_MS_error_MATCHING_THRESHOLD(

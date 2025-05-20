@@ -52,7 +52,7 @@ class Prediction:
 class Predictor:
     def __init__(
         self,
-        fragments: pl.DataFrame,
+        fragments: pl.DataFrame = None,
         seq_len: int = 10,
         solver: str = "cbc",
         threads: int = 1,
@@ -63,11 +63,12 @@ class Predictor:
         mass_tag_end: float = 0.0,
         print_mass_table: bool = False,
     ):
-        self.fragments = (
-            fragments.with_row_index(name="orig_index")
-            .sort("observed_mass")
-            .with_row_index(name="index")
-        )
+        if fragments is not None:
+            self.fragments = (
+                fragments.with_row_index(name="orig_index")
+                .sort("observed_mass")
+                .with_row_index(name="index")
+            )
 
         # Sort the fragments in the order of single nucleosides, start fragments, end fragments,
         # start fragments AND end fragments, internal fragments and then by mass for each category!
@@ -188,7 +189,7 @@ class Predictor:
         else:
             chosen_seq_index = 0
 
-        #Choose a skeleton sequence from the seq_set for further optimization 
+        # Choose a skeleton sequence from the seq_set for further optimization
         # since the optimizer can only handle a single sequence in terms of sets at the time!
         skeleton_seq = seq_set[chosen_seq_index]
         start_fragments = start_fragments[start_seq_index[chosen_seq_index]]
@@ -196,9 +197,7 @@ class Predictor:
         invalid_start_fragments = invalid_start_fragments[
             start_seq_index[chosen_seq_index]
         ]
-        invalid_end_fragments = invalid_end_fragments[
-            end_seq_index[chosen_seq_index]
-        ]
+        invalid_end_fragments = invalid_end_fragments[end_seq_index[chosen_seq_index]]
 
         print("Multi-Graph aligned_skeleton_seq selected = ", skeleton_seq)
         if list_set:
@@ -693,7 +692,6 @@ class Predictor:
             self.explanations[diff] = self._calculate_diff_dp(
                 diff, self.matching_threshold, self.explanation_masses
             )
-        # TODO: Can make it simpler here by rejecting diff which cannot be explained instead of doing it in the _predict_skeleton function!
 
     def _reduce_alphabet(self) -> pl.DataFrame:
         observed_nucleosides = {

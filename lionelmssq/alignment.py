@@ -2,7 +2,9 @@ from copy import deepcopy
 from typing import List, Set, Tuple
 
 
-def align_list_explanations(self, list_explanations_start, list_explanations_end):
+def align_list_explanations(
+    self, list_explanations_start, list_explanations_end
+) -> Tuple[List[List[Set[str]]], List[List[List[float]]], List[int], List[int]]:
     """
     Aligns the list_explanation_start and list_explanation_end to get the final skeleton sequence!
     """
@@ -288,9 +290,7 @@ def align_skeletons(
                 skeleton_seq[i] = skeleton_seq_start[i].intersection(
                     skeleton_seq_end[i]
                 )
-                if not skeleton_seq[
-                    i
-                ]:
+                if not skeleton_seq[i]:
                     if not trust_smaller_set:
                         skeleton_seq[i] = skeleton_seq_start[i].union(
                             skeleton_seq_end[i]
