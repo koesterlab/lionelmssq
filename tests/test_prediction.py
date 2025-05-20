@@ -27,8 +27,8 @@ from lionelmssq.masses import (
 )
 
 # _TESTCASES = importlib.resources.files("tests") / "testcases"
-_TESTCASES = importlib.resources.files("tests") / "testcases_april"
-# _TESTCASES = importlib.resources.files("tests") / "testcases_modified" / "20mers"
+# _TESTCASES = importlib.resources.files("tests") / "testcases_april"
+_TESTCASES = importlib.resources.files("tests") / "testcases_modified" / "20mers"
 
 
 @pytest.mark.parametrize(
@@ -199,8 +199,6 @@ def test_testcase(testcase):
         #     print_mass_table=True,
         # )._calculate_diffs_and_nucleosides()
 
-        # print("Nucleosides considered = ", nucleosides)
-
         unique_masses = UNIQUE_MASSES.filter(
             pl.col("nucleoside").is_in(nucleosides)
         ).with_columns(
@@ -237,6 +235,8 @@ def test_testcase(testcase):
     print("Lengths of the sequences = ", lengths_seq)
     len_seq = lengths_seq[0]
     print("Length of the sequence = ", len_seq)
+
+    len_seq = len(true_seq) #TODO
 
     prediction = Predictor(
         fragments,
@@ -296,6 +296,6 @@ def test_testcase(testcase):
 
 
 # test_testcase("30mers/test_03")
-test_testcase("25mers/test_01_centroid")
+# test_testcase("25mers/test_01_centroid")
 # test_testcase("test_11")
-# test_testcase("test_01")
+test_testcase("test_02")

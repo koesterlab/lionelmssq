@@ -254,7 +254,24 @@ def construct_graph_skeleton(
     list_explanations = []
     for path in longest_paths:
         seq = _generate_sequence_from_path(path[1])
-        if len(seq) == self.seq_len:
+        # if len(seq) == self.seq_len: #TODO: CHECK
+        #     new_longest_paths.append(path)
+        #     skeleton_seq.append(seq)
+        #     sequence_score.append(path[0])
+        #     valid_terminal_fragments.append(_assign_valid_nodes(path[1]))
+        #     print("Path = ", path[1])
+        #     print("Mass = ", [G.nodes[node]["mass"] for node in path[1]])
+        #     print("Score = ", path[0])
+
+        list_explanations_single = _generate_list_explanations_all_combinations(path[1])
+        for exp in list_explanations_single: 
+            if sum(len(sublist) for sublist in exp) != self.seq_len:
+                list_explanations_single.remove(exp)
+                
+        # list_explanations.append(list_explanations_single)
+
+        #TODO: CHECK
+        if list_explanations_single:
             new_longest_paths.append(path)
             skeleton_seq.append(seq)
             sequence_score.append(path[0])
@@ -262,13 +279,8 @@ def construct_graph_skeleton(
             print("Path = ", path[1])
             print("Mass = ", [G.nodes[node]["mass"] for node in path[1]])
             print("Score = ", path[0])
+            list_explanations.append(list_explanations_single)
 
-        list_explanations_single = _generate_list_explanations_all_combinations(path[1])
-        for exp in list_explanations_single:
-            if sum(len(sublist) for sublist in exp) != self.seq_len:
-                list_explanations_single.remove(exp)
-
-        list_explanations.append(list_explanations_single)
         if side == Side.END:
             print("Seq = ", seq[::-1])
             print("List_explnations = ", list_explanations_single[:][::-1])
@@ -277,8 +289,6 @@ def construct_graph_skeleton(
             print("List_explnations = ", list_explanations_single)
 
     longest_paths = new_longest_paths
-
-    # TODO: Also contrain the length of the list_explanations to only consider sequences of the same length!
 
     # Add the 'same' mass fragments back to the longest paths and include them in the valid terminal fragments!
     new_longest_paths = []

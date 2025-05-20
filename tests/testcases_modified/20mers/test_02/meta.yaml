@@ -2,6 +2,6 @@ identity: 20mer_RNA_02_mAmU
 intensity_cutoff: 10000
 label_mass_3T: 437.138562
 label_mass_5T: 475.163104
-predicted_sequence: CCA0AGUGCU0UA0UAAAUUGCC
+predicted_sequence: CCA0AGUGCU0U0UUCGUG0AA0AC
 sequence_mass: 7334.17593
 true_sequence: CCA0AGUGCUAA0UAAAUUGCC
