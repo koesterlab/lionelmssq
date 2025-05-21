@@ -1,29 +1,25 @@
 # import importlib.resources
 # import os
 import pytest
+import polars as pl
 # import yaml
 
 from lionelmssq.mass_explanation import explain_mass, explain_mass_with_dp
+from lionelmssq.masses import (START_OPTIONS, END_OPTIONS,
+                               PHOSPHATE_LINK_MASS, MASSES)
 
-TEST_MASSES_WITH_BACKBONE = [
-    267.09675 + 61.95577,  # A
-    267.09675 * 2 + 61.95577 * 2,  # AA
-    283.09167 * 2 + 61.95577 * 2,  # GG
-    243.08552 * 2 + 61.95577 * 2,  # CC
-    244.06954 * 2 + 61.95577 * 2,  # UU
-    1037.34348 + 61.95577 * 4,  # AUGC
-    1563.52067 + 61.95577 * 6,  # CCUAGG
-]
+def get_breakage_weight(breakage: str) -> float:
+    start, end = breakage.split('_')[:2]
+    return START_OPTIONS[start] + END_OPTIONS[end]
 
-TEST_MASSES = [
-    267.09675,  # A
-    267.09675 * 2,  # AA
-    283.09167 * 2,  # GG
-    243.08552 * 2,  # CC
-    244.06954 * 2,  # UU
-    1037.34348,  # AUGC
-    1563.52067,  # CCUAGG
-]
+def get_seq_weight(seq: tuple) -> float:
+    seq_df = pl.DataFrame(data=seq, schema=["name"])
+    seq_df = seq_df.with_columns(pl.col('name').map_elements(lambda x:
+                                                             MASSES.filter(
+                                                                 pl.col("nucleoside")==x).get_column("monoisotopic_mass").to_list()[0], return_dtype=pl.Float64).alias("mass"))
+
+    return round(len(seq) * PHOSPHATE_LINK_MASS + seq_df.select("mass").sum().item(), 5)
+
 
 TEST_SEQ = [
     {"c/y_c/y": ("A")},
@@ -35,7 +31,10 @@ TEST_SEQ = [
     {"c/y_c/y": ("C", "C", "U", "A", "G", "G")},
 ]
 
-MASS_SEQ_DICT = dict(zip(TEST_MASSES_WITH_BACKBONE, TEST_SEQ))
+MASS_SEQ_DICT = dict(zip(
+    [get_breakage_weight(list(seq.keys())[0]) +
+     get_seq_weight(seq[list(seq.keys())[0]]) for seq in TEST_SEQ],
+    TEST_SEQ))
 THRESHOLDS = [10]
 
 @pytest.mark.parametrize("testcase", MASS_SEQ_DICT.items())
