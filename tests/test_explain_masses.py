@@ -10,7 +10,8 @@ from lionelmssq.masses import (START_OPTIONS, END_OPTIONS,
 
 def get_breakage_weight(breakage: str) -> float:
     start, end = breakage.split('_')[:2]
-    return START_OPTIONS[start] + END_OPTIONS[end]
+    return (START_OPTIONS.filter(pl.col("name")==start).select("weight").item() +
+            END_OPTIONS.filter(pl.col("name")==end).select("weight").item())
 
 def get_seq_weight(seq: tuple) -> float:
     seq_df = pl.DataFrame(data=seq, schema=["name"])

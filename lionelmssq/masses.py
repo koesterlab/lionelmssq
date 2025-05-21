@@ -38,7 +38,8 @@ UNIQUE_MASSES = (
 
 # For mass explanation for ladder building, to convert the masses to an integer value for the DP algorithm!
 
-TOLERANCE = 1e-5  # For perfect matching, the TOLERANCE should be the precision (digits after decimal) to which the masses of nucleosides and sequences are reported, i.e. 1e-(ROUND_DECIMAL)
+TOLERANCE = 1e-3  # For perfect matching, the TOLERANCE should be the
+# precision (digits after decimal) to which the masses of nucleosides and sequences are reported, i.e. 1e-(ROUND_DECIMAL)
 
 TABLE_PATH = (
     f"dp_table/{'reduced' if REDUCE_TABLE else 'full'}_table."
@@ -62,26 +63,22 @@ print(TABLE_PATH)
 PHOSPHATE_LINK_MASS = 61.95577  # P(30.97389) + 2*O(2*15.99491) + H(1.00783)
 
 # Additional weights for different breakage options
-START_OPTIONS = {
-    "START": 537.11887,  # current START tag
-    "a/w": 79.96633,  # additional P+3O+H
-    "b/x": 63.97142,  # additional P+2O+H
-    "c/y": 0,  # neutral state (for standard unit)
-    "d/z": -15.99491,  # lost O
-}
-
-END_OPTIONS = {
-    "END": 373.16714,  # current END tag
-    "d/z": 15.99491,  # additional O
-    "c/y": 0,  # neutral state (for standard unit)
-    "c/y-cyclization": -18.01056,  # lost O+2H
-    "b/x": -63.97142,  # lost P+2O+H
-    "a/w": -79.96633,  # lost P+3O+H
-}
+START_OPTIONS = pl.read_csv(
+    importlib.resources.files(__package__)/"assets"/"5_prime_end_breakage.tsv",
+    separator="\t",
+)
+END_OPTIONS = pl.read_csv(
+    importlib.resources.files(__package__)/"assets"/"3_prime_end_breakage.tsv",
+    separator="\t",
+)
 
 BREAKAGES = {}
-for start, end in list(product(START_OPTIONS, END_OPTIONS)):
-    val = START_OPTIONS[start] + END_OPTIONS[end]
+for start, end in list(product(
+        START_OPTIONS.select("name").to_series().to_list(),
+        END_OPTIONS.select("name").to_series().to_list())):
+    val = (
+        START_OPTIONS.filter(pl.col("name")==start).select("weight").item() +
+        END_OPTIONS.filter(pl.col("name")==end).select("weight").item())
     if val not in BREAKAGES:
         BREAKAGES[val] = []
     BREAKAGES[val] += [f"{start}_{end}"]
