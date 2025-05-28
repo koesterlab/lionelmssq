@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from typing import Set, Tuple
-from itertools import product
+from itertools import product, combinations_with_replacement, chain
 
 # from lionelmssq.masses import MASSES
 import polars as pl
@@ -54,6 +54,16 @@ match COMPRESSION_RATE:
 class MassExplanations:
     breakage: str
     explanations: Set[Tuple[str]]
+
+MASS_NAMES = {mass:
+    pl.DataFrame({"tolerated_integer_masses": mass}).join(
+        EXPLANATION_MASSES,
+        on="tolerated_integer_masses",
+        how="left",
+    ).get_column("nucleoside").to_list()
+              for
+                                 mass in EXPLANATION_MASSES.get_column(
+    "tolerated_integer_masses").to_list()}
 
 
 def set_up_bit_table():
@@ -286,49 +296,27 @@ def explain_mass_with_dp(
         for breakage in BREAKAGES[breakage_weight]:
             solution_tolerated_integer_masses[breakage] = solutions
 
+    # Convert the tolerated_integer_masses to the respective nucleoside names
     explanations = []
     for breakage in solution_tolerated_integer_masses.keys():
-        # Convert the tolerated_integer_masses to the respective nucleoside names
-        solutions = set()
-
-        # Store the nucleoside names (as tuples of strings (alphabets)) for the given tolerated_integer_masses in the set solution_names
+        # Store the nucleoside names (as tuples) for the given tolerated_integer_masses in the set solution_names
+        solution_names = set()
         for combo in solution_tolerated_integer_masses[breakage]:
-            combo_df = pl.DataFrame({"tolerated_integer_masses": combo})
+            solution_names.update(
+                [tuple(chain.from_iterable(entry))
+                 for entry in list(product(*[
+                    list(combinations_with_replacement(
+                        MASS_NAMES[mass], combo.count(mass)))
+                        for mass in [
+                            combo[idx] for idx in range(len(combo))
+                            if idx == 0 or combo[idx-1] != combo[idx]
+                        ]
+                ]))]
+            )
 
-            # Determines the type of data in the column nucleosides
-            if isinstance(
-                EXPLANATION_MASSES.select(pl.col("nucleoside")).dtypes[0], pl.List
-            ):
-                # When using "agg function" in the group_by (masses.py), we can get all the nucleosides with the same mass, then the following needs to be used:
-                solutions.update(
-                    product(
-                        *combo_df.join(
-                            EXPLANATION_MASSES,
-                            on="tolerated_integer_masses",
-                            how="left",
-                        )
-                        .get_column("nucleoside")
-                        .to_list()
-                    )
-                )
-
-            elif isinstance(
-                EXPLANATION_MASSES.select(pl.col("nucleoside")).dtypes[0], pl.String
-            ):
-                # When using the "first" function in the group_by (masses.py), we can only get the first nucleoside with the given mass, then the following needs to be used:
-                solutions.add(
-                    tuple(
-                        combo_df.join(
-                            EXPLANATION_MASSES,
-                            on="tolerated_integer_masses",
-                            how="left",
-                        )
-                        .get_column("nucleoside")
-                        .to_list()
-                    )
-                )
         # Add desired Dataclass object to list
-        explanations.append(MassExplanations(breakage=breakage, explanations=solutions))
+        explanations.append(MassExplanations(breakage=breakage,
+                                             explanations=solution_names))
 
     # Return list of explanations
     return explanations
@@ -363,7 +351,7 @@ def explain_mass(mass: float, threshold=MATCHING_THRESHOLD) -> list[MassExplanat
             return memo[(remaining, start)]
 
         # Base case: if abs(target) is less than threshold, return a list with one empty combination
-        if abs(remaining) <= matching_threshold:
+        if abs(remaining) <= threshold:
             return [[]]
 
         # Base case: if target is zero, return a list with one empty combination
@@ -398,49 +386,27 @@ def explain_mass(mass: float, threshold=MATCHING_THRESHOLD) -> list[MassExplanat
         for breakage in BREAKAGES[breakage_weight]:
             solution_tolerated_integer_masses[breakage] = solutions
 
+    # Convert the tolerated_integer_masses to the respective nucleoside names
     explanations = []
     for breakage in solution_tolerated_integer_masses.keys():
-        # Convert the tolerated_integer_masses to the respective nucleoside names
-        solutions = set()
-
-        # Store the nucleoside names (as tuples of strings (alphabets)) for the given tolerated_integer_masses in the set solution_names
+        # Store the nucleoside names (as tuples) for the given tolerated_integer_masses in the set solution_names
+        solution_names = set()
         for combo in solution_tolerated_integer_masses[breakage]:
-            combo_df = pl.DataFrame({"tolerated_integer_masses": combo})
+            solution_names.update(
+                [tuple(chain.from_iterable(entry))
+                 for entry in list(product(*[
+                    list(combinations_with_replacement(
+                        MASS_NAMES[mass], combo.count(mass)))
+                        for mass in [
+                            combo[idx] for idx in range(len(combo))
+                            if idx == 0 or combo[idx-1] != combo[idx]
+                        ]
+                ]))]
+            )
 
-            # Determines the type of data in the column nucleosides
-            if isinstance(
-                EXPLANATION_MASSES.select(pl.col("nucleoside")).dtypes[0], pl.List
-            ):
-                # When using "agg function" in the group_by (masses.py), we can get all the nucleosides with the same mass, then the following needs to be used:
-                solutions.update(
-                    product(
-                        *combo_df.join(
-                            EXPLANATION_MASSES,
-                            on="tolerated_integer_masses",
-                            how="left",
-                        )
-                        .get_column("nucleoside")
-                        .to_list()
-                    )
-                )
-
-            elif isinstance(
-                EXPLANATION_MASSES.select(pl.col("nucleoside")).dtypes[0], pl.String
-            ):
-                # When using the "first" function in the group_by (masses.py), we can only get the first nucleoside with the given mass, then the following needs to be used:
-                solutions.add(
-                    tuple(
-                        combo_df.join(
-                            EXPLANATION_MASSES,
-                            on="tolerated_integer_masses",
-                            how="left",
-                        )
-                        .get_column("nucleoside")
-                        .to_list()
-                    )
-                )
         # Add desired Dataclass object to list
-        explanations.append(MassExplanations(breakage=breakage, explanations=solutions))
+        explanations.append(MassExplanations(breakage=breakage,
+                                             explanations=solution_names))
 
     # Return list of explanations
     return explanations
