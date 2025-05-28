@@ -274,7 +274,7 @@ def explain_mass_with_dp(
         solutions = []
         for value in range(
             target - breakage_weight - threshold,
-            target - breakage_weight + threshold,
+            target - breakage_weight + threshold + 1,
         ):
             solutions += (
                 backtrack_with_memo(value, len(tolerated_integer_masses) - 1)
@@ -346,6 +346,9 @@ def explain_mass(mass: float, threshold=MATCHING_THRESHOLD) -> list[MassExplanat
     # Convert the targets and tolerated_integer_masses to integers for easy operations
     target = int(round(mass / TOLERANCE, 0))
 
+    # Ensure unique entries after tolerance correction
+    tolerated_integer_masses = list(set(tolerated_integer_masses))
+
     # Sort the tolerated_integer_masses, makes life easier
     tolerated_integer_masses.sort()
 
@@ -360,7 +363,7 @@ def explain_mass(mass: float, threshold=MATCHING_THRESHOLD) -> list[MassExplanat
             return memo[(remaining, start)]
 
         # Base case: if abs(target) is less than threshold, return a list with one empty combination
-        if abs(remaining) < threshold:
+        if abs(remaining) <= matching_threshold:
             return [[]]
 
         # Base case: if target is zero, return a list with one empty combination

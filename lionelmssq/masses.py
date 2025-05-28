@@ -86,7 +86,7 @@ for start, end in list(product(
 # BREAKAGES = {0: ["c/y_c/y"]}
 BREAKAGES = {int(val / TOLERANCE): BREAKAGES[val] for val in BREAKAGES.keys()}
 
-MATCHING_THRESHOLD = 10  # This dictates a matching threshold such that we consider -MATCHING_THRESHOLD < (sum(masses) - target_mass) < MATCHING_THRESHOLD to be matched!
+MATCHING_THRESHOLD = 10  # This dictates a matching threshold such that we consider -MATCHING_THRESHOLD <= (sum(masses) - target_mass) <= MATCHING_THRESHOLD to be matched!
 # If TOLERANCE < num_of_decimals in reported masses, then MATCHING_THRESHOLD should at least be greater or equal than the number of nucleotides expected for a target mass!
 
 EXPLANATION_MASSES = UNIQUE_MASSES.with_columns(
