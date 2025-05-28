@@ -55,15 +55,18 @@ class MassExplanations:
     breakage: str
     explanations: Set[Tuple[str]]
 
-MASS_NAMES = {mass:
-    pl.DataFrame({"tolerated_integer_masses": mass}).join(
+
+MASS_NAMES = {
+    mass: pl.DataFrame({"tolerated_integer_masses": mass})
+    .join(
         EXPLANATION_MASSES,
         on="tolerated_integer_masses",
         how="left",
-    ).get_column("nucleoside").to_list()
-              for
-                                 mass in EXPLANATION_MASSES.get_column(
-    "tolerated_integer_masses").to_list()}
+    )
+    .get_column("nucleoside")
+    .to_list()
+    for mass in EXPLANATION_MASSES.get_column("tolerated_integer_masses").to_list()
+}
 
 
 def set_up_bit_table():
@@ -162,8 +165,11 @@ def set_up_mass_table():
 
 
 def explain_mass_with_dp(
-        mass: float, with_memo: bool, compression_rate=COMPRESSION_RATE,
-        threshold=MATCHING_THRESHOLD) -> list[MassExplanations]:
+    mass: float,
+    with_memo: bool,
+    compression_rate=COMPRESSION_RATE,
+    threshold=MATCHING_THRESHOLD,
+) -> list[MassExplanations]:
     """
     Return all possible combinations of nucleosides that could sum up to the given mass.
     """
@@ -189,14 +195,13 @@ def explain_mass_with_dp(
     # Compute and save bit-representation DP table if not existing
     if not pathlib.Path(f"{TABLE_PATH}.{compression_rate}_per_cell.npy").is_file():
         print("Table not found")
-        dp_table = set_up_mass_table() if compression_rate == 1 else (
-            set_up_bit_table())
+        dp_table = (
+            set_up_mass_table() if compression_rate == 1 else (set_up_bit_table())
+        )
         np.save(f"{TABLE_PATH}.{compression_rate}_per_cell", dp_table)
 
     # Read DP table
-    dp_table = np.load(
-        f"{TABLE_PATH}.{compression_rate}_per_cell.npy"
-    )
+    dp_table = np.load(f"{TABLE_PATH}.{compression_rate}_per_cell.npy")
 
     memo = {}
 
@@ -217,8 +222,8 @@ def explain_mass_with_dp(
 
         current_value = (
             dp_table[current_idx, total_mass]
-            if compression_rate == 1 else
-            dp_table[current_idx, total_mass // compression_rate]
+            if compression_rate == 1
+            else dp_table[current_idx, total_mass // compression_rate]
             >> 2 * (compression_rate - 1 - total_mass % compression_rate)
         )
 
@@ -258,8 +263,8 @@ def explain_mass_with_dp(
 
         current_value = (
             dp_table[current_idx, total_mass]
-            if compression_rate == 1 else
-            dp_table[current_idx, total_mass // compression_rate]
+            if compression_rate == 1
+            else dp_table[current_idx, total_mass // compression_rate]
             >> 2 * (compression_rate - 1 - total_mass % compression_rate)
         )
 
@@ -306,30 +311,41 @@ def explain_mass_with_dp(
         solution_names = set()
         for combo in solution_tolerated_integer_masses[breakage]:
             solution_names.update(
-                [tuple(chain.from_iterable(entry))
-                 for entry in list(product(*[
-                    list(combinations_with_replacement(
-                        MASS_NAMES[mass], combo.count(mass)))
-                        for mass in [
-                            combo[idx] for idx in range(len(combo))
-                            if idx == 0 or combo[idx-1] != combo[idx]
-                        ]
-                ]))]
+                [
+                    tuple(chain.from_iterable(entry))
+                    for entry in list(
+                        product(
+                            *[
+                                list(
+                                    combinations_with_replacement(
+                                        MASS_NAMES[mass], combo.count(mass)
+                                    )
+                                )
+                                for mass in [
+                                    combo[idx]
+                                    for idx in range(len(combo))
+                                    if idx == 0 or combo[idx - 1] != combo[idx]
+                                ]
+                            ]
+                        )
+                    )
+                ]
             )
 
         # Add desired Dataclass object to list
-        explanations.append(MassExplanations(breakage=breakage,
-                                             explanations=solution_names))
+        explanations.append(
+            MassExplanations(breakage=breakage, explanations=solution_names)
+        )
 
     # Return list of explanations
     return explanations
 
 
 def explain_mass(
-        mass: float,
-        explanation_masses=EXPLANATION_MASSES,
-        matching_threshold=MATCHING_THRESHOLD,
-    ) -> MassExplanations:
+    mass: float,
+    explanation_masses=EXPLANATION_MASSES,
+    matching_threshold=MATCHING_THRESHOLD,
+) -> MassExplanations:
     """
     Returns all the possible combinations of nucleosides that could sum up to the given mass.
     """
@@ -403,20 +419,31 @@ def explain_mass(
         solution_names = set()
         for combo in solution_tolerated_integer_masses[breakage]:
             solution_names.update(
-                [tuple(chain.from_iterable(entry))
-                 for entry in list(product(*[
-                    list(combinations_with_replacement(
-                        MASS_NAMES[mass], combo.count(mass)))
-                        for mass in [
-                            combo[idx] for idx in range(len(combo))
-                            if idx == 0 or combo[idx-1] != combo[idx]
-                        ]
-                ]))]
+                [
+                    tuple(chain.from_iterable(entry))
+                    for entry in list(
+                        product(
+                            *[
+                                list(
+                                    combinations_with_replacement(
+                                        MASS_NAMES[mass], combo.count(mass)
+                                    )
+                                )
+                                for mass in [
+                                    combo[idx]
+                                    for idx in range(len(combo))
+                                    if idx == 0 or combo[idx - 1] != combo[idx]
+                                ]
+                            ]
+                        )
+                    )
+                ]
             )
 
         # Add desired Dataclass object to list
-        explanations.append(MassExplanations(breakage=breakage,
-                                             explanations=solution_names))
+        explanations.append(
+            MassExplanations(breakage=breakage, explanations=solution_names)
+        )
 
     # Return list of explanations
     return explanations
