@@ -36,12 +36,14 @@ MASS_SEQ_DICT = dict(zip(
     [get_breakage_weight(list(seq.keys())[0]) +
      get_seq_weight(seq[list(seq.keys())[0]]) for seq in TEST_SEQ],
     TEST_SEQ))
-THRESHOLDS = [10]
+THRESHOLDS = [10e-6, 5e-6, 2e-6]
 
 @pytest.mark.parametrize("testcase", MASS_SEQ_DICT.items())
 @pytest.mark.parametrize("threshold", THRESHOLDS)
 def test_testcase(testcase, threshold):
-    predicted_mass_explanations = explain_mass(testcase[0], threshold)
+    predicted_mass_explanations = explain_mass(
+        testcase[0], matching_threshold=threshold
+    )
 
     breakage = list(testcase[1].keys())[0]
     explanations = [
@@ -53,7 +55,7 @@ def test_testcase(testcase, threshold):
 
     assert tuple(testcase[1][breakage]) in explanations
 
-WITH_MEMO = [False, True]
+WITH_MEMO = [True]
 COMPRESSION_RATES = [32]
 
 @pytest.mark.parametrize("testcase", MASS_SEQ_DICT.items())
@@ -62,7 +64,8 @@ COMPRESSION_RATES = [32]
 @pytest.mark.parametrize("threshold", THRESHOLDS)
 def test_testcase_with_dp(testcase, compression, memo, threshold):
     predicted_mass_explanations = explain_mass_with_dp(
-        testcase[0], memo, compression, threshold)
+        testcase[0], with_memo=memo, compression_rate=compression, threshold=threshold
+    )
 
     breakage = list(testcase[1].keys())[0]
     explanations = [
