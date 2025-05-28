@@ -86,8 +86,11 @@ for start, end in list(product(
 # BREAKAGES = {0: ["c/y_c/y"]}
 BREAKAGES = {int(val / TOLERANCE): BREAKAGES[val] for val in BREAKAGES.keys()}
 
-MATCHING_THRESHOLD = 10  # This dictates a matching threshold such that we consider -MATCHING_THRESHOLD <= (sum(masses) - target_mass) <= MATCHING_THRESHOLD to be matched!
-# If TOLERANCE < num_of_decimals in reported masses, then MATCHING_THRESHOLD should at least be greater or equal than the number of nucleotides expected for a target mass!
+# This dictates a relative matching threshold such that we consider abs(sum(masses)/target_mass - 1) < MATCHING_THRESHOLD to be matched!
+MATCHING_THRESHOLD = 20e-6
+# We choose 20 ppm as the default error from the MS.
+# The error is on the higher side than would be for a good calibrated machine (6ppm),
+# but in the absence of an experimental measurement of this error, this (very) conservative value works well!
 
 EXPLANATION_MASSES = UNIQUE_MASSES.with_columns(
     ((pl.col("monoisotopic_mass") + PHOSPHATE_LINK_MASS) / TOLERANCE)

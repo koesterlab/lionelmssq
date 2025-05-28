@@ -174,6 +174,9 @@ def explain_mass_with_dp(
     # Convert the targets and tolerated_integer_masses to integers for easy operations
     target = int(round(mass / TOLERANCE, 0))
 
+    # Set matching threshold based on target mass
+    threshold = int(np.ceil(threshold * target))
+
     # Add a default weight for easier initialization
     tolerated_integer_masses += [0]
 
@@ -322,7 +325,8 @@ def explain_mass_with_dp(
     return explanations
 
 
-def explain_mass(mass: float, threshold=MATCHING_THRESHOLD) -> list[MassExplanations]:
+def explain_mass(mass: float, threshold=MATCHING_THRESHOLD) -> list[
+    MassExplanations]:
     """
     Returns all the possible combinations of nucleosides that could sum up to the given mass.
     """
@@ -333,6 +337,9 @@ def explain_mass(mass: float, threshold=MATCHING_THRESHOLD) -> list[MassExplanat
 
     # Convert the targets and tolerated_integer_masses to integers for easy operations
     target = int(round(mass / TOLERANCE, 0))
+
+    # Set matching threshold based on target mass
+    threshold = int(np.ceil(threshold * target))
 
     # Ensure unique entries after tolerance correction
     tolerated_integer_masses = list(set(tolerated_integer_masses))
