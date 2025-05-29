@@ -113,11 +113,10 @@ def align_list_explanations(
                     )
 
                     if skeleton_seq_temp and skeleton_list_explanation_temp:
-                        print(f"Index_1: {idx_1}", f"Index_2: {idx_2}")
-                        # print(f"Skeleton_seq_aligned_explanation: {skeleton_seq_temp}")
-                        print(
-                            f"Skeleton_list_explanation: {skeleton_list_explanation_temp}"
-                        )
+                        # print(f"Index_1: {idx_1}", f"Index_2: {idx_2}")
+                        # print(
+                            # f"Skeleton_list_explanation: {skeleton_list_explanation_temp}"
+                        # )
 
                         skeleton_seq.append(skeleton_seq_temp)
                         skeleton_list_explanation.append(skeleton_list_explanation_temp)
@@ -160,6 +159,7 @@ def align_skeletons_multi_seq(
             perfect_match = True
             temp_score = 0.0
 
+            # print("seq_1 = ", seq_1)
             for i in range(self.seq_len):
                 temp_seq[i] = seq_1[i].intersection(seq_2[i])
                 if temp_seq[i]:

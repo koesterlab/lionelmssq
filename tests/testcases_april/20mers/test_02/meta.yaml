@@ -2,6 +2,6 @@ identity: 20mer_RNA_10
 intensity_cutoff: 10000
 label_mass_3T: 437.138562
 label_mass_5T: 475.163104
-predicted_sequence: UCCGUUUCACACCGGCCCUC
+predicted_sequence: UCCGUUUCAACCGCGCCCUC
 sequence_mass: 7186.08849
 true_sequence: UCCGUUUCACACGCGCCCUC

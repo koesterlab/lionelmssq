@@ -27,8 +27,8 @@ from lionelmssq.masses import (
 )
 
 # _TESTCASES = importlib.resources.files("tests") / "testcases"
-# _TESTCASES = importlib.resources.files("tests") / "testcases_april"
-_TESTCASES = importlib.resources.files("tests") / "testcases_modified" / "20mers"
+_TESTCASES = importlib.resources.files("tests") / "testcases_april"
+# _TESTCASES = importlib.resources.files("tests") / "testcases_modified"
 
 
 @pytest.mark.parametrize(
@@ -155,12 +155,12 @@ def test_testcase(testcase):
         ).first()
 
         # # TODO: Discuss why it doesn't work with the estimated error!
-        matching_threshold, _, _ = estimate_MS_error_MATCHING_THRESHOLD(
-            fragment_masses_read, unique_masses=unique_masses, simulation=simulation
-        )
-        # _, matching_threshold, _ = estimate_MS_error_MATCHING_THRESHOLD(
+        # matching_threshold, _, _ = estimate_MS_error_MATCHING_THRESHOLD(
         #     fragment_masses_read, unique_masses=unique_masses, simulation=simulation
         # )
+        _, matching_threshold, _ = estimate_MS_error_MATCHING_THRESHOLD(
+            fragment_masses_read, unique_masses=unique_masses, simulation=simulation
+        )
         print(
             "Matching threshold (rel errror) estimated from singleton masses = ",
             matching_threshold,
@@ -173,6 +173,11 @@ def test_testcase(testcase):
             matching_threshold=matching_threshold,
             intensity_cutoff=intensity_cutoff,
         )
+
+        # nucleosides = ["A", "U", "G", "C", "0C"]
+        # nucleosides = ["A", "U", "G", "C", "0G"]
+        # nucleosides = ["A", "U", "G", "C", "9A"]
+        nucleosides = ["A", "U", "G", "C"]
 
         print("Predetermined nucleosides from singletons: ", nucleosides)
 
@@ -268,7 +273,7 @@ def test_testcase(testcase):
             prediction,
             true_seq,
         ).save(base_path / "plot.html")
-        # The above is temporary, until the preeiction for the entire intact sequence is fixed!)
+        # The above is temporary, until the prediction for the entire intact sequence is fixed!)
     else:
         plot_prediction(prediction, true_seq).save(base_path / "plot.html")
 
@@ -294,8 +299,12 @@ def test_testcase(testcase):
                     <= matching_threshold
                 )
 
-
+# test_testcase("30mers/test_01_2")
 # test_testcase("30mers/test_03")
 # test_testcase("25mers/test_01_centroid")
+test_testcase("25mers/test_01")
 # test_testcase("test_11")
-test_testcase("test_02")
+# test_testcase("test_02")
+# test_testcase("test_11")
+# test_testcase("test_04")
+# test_testcase("10mers/test_04")

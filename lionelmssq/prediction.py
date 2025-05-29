@@ -139,7 +139,8 @@ class Predictor:
             Side.START,
             # use_ms_intensity_as_weight=True,
             use_ms_intensity_as_weight=False,
-            num_top_paths=10000,
+            # num_top_paths=1000,
+            num_top_paths=100,
             peanlize_explanation_length_params={"zero_len_weight": 0.0, "base": e},
         )
 
@@ -156,7 +157,8 @@ class Predictor:
             Side.END,
             # use_ms_intensity_as_weight=True,
             use_ms_intensity_as_weight=False,
-            num_top_paths=10000,
+            # num_top_paths=1000,
+            num_top_paths=100,
             peanlize_explanation_length_params={"zero_len_weight": 0.0, "base": e},
         )
 
@@ -196,7 +198,7 @@ class Predictor:
             chosen_seq_index = 0
 
         # print("Start sequence indices = ", start_seq_index[chosen_seq_index])
-        print("start_seq_index = ", start_seq_index)
+        # print("start_seq_index = ", start_seq_index)
 
         # Choose a skeleton sequence from the seq_set for further optimization
         # since the optimizer can only handle a single sequence in terms of sets at the time!
@@ -208,9 +210,15 @@ class Predictor:
         ]
         invalid_end_fragments = invalid_end_fragments[end_seq_index[chosen_seq_index]]
 
-        print("Multi-Graph aligned_skeleton_seq selected = ", skeleton_seq)
+        # print("Multi-Graph aligned_skeleton_seq selected = ", skeleton_seq)
         if list_set:
-            print("Multi-Graph aligned_skeleton_LIST selected = ", list_set)
+            print("Top 10 Multi-Graph aligned_skeleton_LIST selected = ", list_set[:100])
+        else:
+            print("Multi-Graph aligned_skeleton_seq selected = ", skeleton_seq)
+
+        # print("Multi-Graph aligned_skeleton_seq selected = ", skeleton_seq[chosen_seq_index])
+        # if list_set:
+        #     print("Multi-Graph aligned_skeleton_LIST selected = ", list_set[chosen_seq_index])
 
         # Remove the start and end fragments which are the same, this is not expected!
         # Consider them only with start fragments!

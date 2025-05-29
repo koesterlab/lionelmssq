@@ -99,7 +99,9 @@ def construct_graph_skeleton(
 
                 len_explanations = min(
                     len(mass_explanations[i]) for i in range(len(mass_explanations))
-                )
+                ) 
+                #TODO: Check out the use of this min, for multiple explanations with differernt lengths, 
+                #this will be problematic!
 
                 pos += len_explanations
 
@@ -267,7 +269,7 @@ def construct_graph_skeleton(
         for exp in list_explanations_single: 
             if sum(len(sublist) for sublist in exp) != self.seq_len:
                 list_explanations_single.remove(exp)
-                
+
         # list_explanations.append(list_explanations_single)
 
         #TODO: CHECK
@@ -281,12 +283,12 @@ def construct_graph_skeleton(
             print("Score = ", path[0])
             list_explanations.append(list_explanations_single)
 
-        if side == Side.END:
-            print("Seq = ", seq[::-1])
-            print("List_explnations = ", list_explanations_single[:][::-1])
-        else:
-            print("Seq = ", seq)
-            print("List_explnations = ", list_explanations_single)
+            if side == Side.END:
+                print("Seq = ", seq[::-1])
+                print("List_explnations = ", list_explanations_single[:][::-1])
+            else:
+                print("Seq = ", seq)
+                print("List_explnations = ", list_explanations_single)
 
     longest_paths = new_longest_paths
 
@@ -495,5 +497,7 @@ def dag_top_n_longest_paths_with_start_end(
     # Extract the top N longest paths that end at the specified end_node
     all_paths = dp[end_node]
     all_paths.sort(reverse=True, key=lambda x: x[0])  # Sort by path length (descending)
+
+    print("All paths = ", all_paths)
 
     return all_paths[:N]
