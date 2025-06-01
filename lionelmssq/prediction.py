@@ -192,7 +192,7 @@ class Predictor:
                 )
             )
 
-            #TODO: Check the function execution here if the start and end lengths don't match!
+            # TODO: Check the function execution here if the start and end lengths don't match!
 
             # Print the indices of seq_set corresponding to the top score
             top_score = max(score)
@@ -275,7 +275,7 @@ class Predictor:
             # .filter(pl.col("intensity") > 50000)
         )  # TODO: REMOVE THIS INTENSITY FILTER!! OR ADD AS NEEDED!
 
-        # TODO: One can recheck the explanations for the internal fragments, if they match with the ladder sequence. 
+        # TODO: One can recheck the explanations for the internal fragments, if they match with the ladder sequence.
         # Remove the ones that do not!! Easily implemenented!
 
         print("Number of internal fragments = ", len(self.fragments_internal))

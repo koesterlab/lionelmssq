@@ -422,9 +422,9 @@ def determine_sequence_length(
                         sequence_explanations,
                         len_sequence_explanations,
                         entropy_sequence_explanations,
-                        frequency_sequence_explanations
+                        frequency_sequence_explanations,
                     ),
-                    key=lambda x: (x[2], x[3], x[1]), # Sort by entropy, then by length
+                    key=lambda x: (x[2], x[3], x[1]),  # Sort by entropy, then by length
                     reverse=True,  # Sort by entropy
                 )
 
@@ -440,9 +440,13 @@ def determine_sequence_length(
                         sequence_explanations,
                         len_sequence_explanations,
                         frequency_sequence_explanations,
-                        entropy_sequence_explanations
+                        entropy_sequence_explanations,
                     ),
-                    key=lambda x: (x[2], x[3], x[1]),  # Sort by frequency, then by entropy and then by length
+                    key=lambda x: (
+                        x[2],
+                        x[3],
+                        x[1],
+                    ),  # Sort by frequency, then by entropy and then by length
                     reverse=True,  # Sort by frequency and length
                 )
 

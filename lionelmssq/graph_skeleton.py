@@ -105,12 +105,12 @@ def construct_graph_skeleton(
                     # TODO: Check out the use of this min, for multiple explanations with differernt lengths,
                     # this will be problematic!
                 else:
-                    #The following takes average:
+                    # The following takes average:
                     # len_explanations = sum(
                     #     len(mass_explanations[i]) for i in range(len(mass_explanations))
                     # ) // len(mass_explanations)
 
-                    #The following take the max:
+                    # The following take the max:
                     # This is reasonable, since we the natural bases generally have a smaller mass
                     # Thus, the len_explanation will be longer when using those!
 
@@ -140,7 +140,7 @@ def construct_graph_skeleton(
                         # + e
                         # ** (
                         #     -pos
-                        # )  
+                        # )
                         # Get rid of the extra normalization by seq_len, not stricly needed
                         # but it may amplify the effect of the pos penalization too much!
                     )  # Score the sequences with shorter explanations higher when they are at the beginning of the sequence!
