@@ -1,7 +1,0 @@
-identity: 30mer_RNA_05_deconvolved_2
-intensity_cutoff: 10000
-label_mass_3T: 437.138562
-label_mass_5T: 475.163104
-predicted_sequence: 
-sequence_mass: 10533.561045
-true_sequence: ACUCUACAGGACCGCGUGGCCCUUUAGCAG
