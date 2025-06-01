@@ -118,14 +118,18 @@ class Predictor:
             lambda *args, **kwargs: align_skeletons_multi_seq(self, *args, **kwargs)
         )
 
-    def predict(self) -> Prediction:
+    def predict(
+        self, num_top_paths=100, consider_variable_sequence_lengths=True
+    ) -> Prediction:
         # TODO: get rid of the requirement to pass the length of the sequence
         # and instead infer it from the fragments
 
         nucleosides, nucleoside_masses = self._calculate_diffs_and_nucleosides()
 
-        #TODO: Check this, thus reduces the possible nucelotide space:
-        self.explanation_masses = self.explanation_masses.filter(pl.col("nucleoside").is_in(nucleosides))
+        # TODO: Check this, thus reduces the possible nucelotide space:
+        self.explanation_masses = self.explanation_masses.filter(
+            pl.col("nucleoside").is_in(nucleosides)
+        )
 
         # Now we build the skeleton sequence from both sides and align them to get the final skeleton sequence!
         (
@@ -139,9 +143,9 @@ class Predictor:
             Side.START,
             # use_ms_intensity_as_weight=True,
             use_ms_intensity_as_weight=False,
-            # num_top_paths=1000,
-            num_top_paths=100,
+            num_top_paths=num_top_paths,
             peanlize_explanation_length_params={"zero_len_weight": 0.0, "base": e},
+            consider_variable_sequence_lengths=consider_variable_sequence_lengths,
         )
 
         print("Fitting end fragments now")
@@ -157,10 +161,12 @@ class Predictor:
             Side.END,
             # use_ms_intensity_as_weight=True,
             use_ms_intensity_as_weight=False,
-            # num_top_paths=1000,
-            num_top_paths=100,
+            num_top_paths=num_top_paths,
             peanlize_explanation_length_params={"zero_len_weight": 0.0, "base": e},
+            consider_variable_sequence_lengths=consider_variable_sequence_lengths,
         )
+
+        print("Aligning sequences now")
 
         seq_set, list_set, start_seq_index, end_seq_index = (
             self._align_list_explanations(
@@ -186,19 +192,18 @@ class Predictor:
                 )
             )
 
+            #TODO: Check the function execution here if the start and end lengths don't match!
+
             # Print the indices of seq_set corresponding to the top score
             top_score = max(score)
             top_score_indices = [idx for idx, sc in enumerate(score) if sc == top_score]
             print("Top sequences = ", [seq_set[i] for i in top_score_indices])
             print("Top sequences scores = ", top_score)
-            print("Other_sequences = ", seq_set)           
+            print("Other_sequences = ", seq_set)
 
             chosen_seq_index = top_score_indices[0]
         else:
             chosen_seq_index = 0
-
-        # print("Start sequence indices = ", start_seq_index[chosen_seq_index])
-        # print("start_seq_index = ", start_seq_index)
 
         # Choose a skeleton sequence from the seq_set for further optimization
         # since the optimizer can only handle a single sequence in terms of sets at the time!
@@ -210,15 +215,16 @@ class Predictor:
         ]
         invalid_end_fragments = invalid_end_fragments[end_seq_index[chosen_seq_index]]
 
+        # Update sequence length with the chosen list explanation:
+        self.seq_len = len(list(chain.from_iterable(skeleton_seq)))
+
         # print("Multi-Graph aligned_skeleton_seq selected = ", skeleton_seq)
         if list_set:
-            print("Top 10 Multi-Graph aligned_skeleton_LIST selected = ", list_set[:100])
+            print("Top 100 Multi-Graph aligned_skeleton_LIST selected:")
+            for item in list_set[:100]:
+                print(item, " with length = ", len(list(chain.from_iterable(item))))
         else:
             print("Multi-Graph aligned_skeleton_seq selected = ", skeleton_seq)
-
-        # print("Multi-Graph aligned_skeleton_seq selected = ", skeleton_seq[chosen_seq_index])
-        # if list_set:
-        #     print("Multi-Graph aligned_skeleton_LIST selected = ", list_set[chosen_seq_index])
 
         # Remove the start and end fragments which are the same, this is not expected!
         # Consider them only with start fragments!
@@ -269,7 +275,8 @@ class Predictor:
             # .filter(pl.col("intensity") > 50000)
         )  # TODO: REMOVE THIS INTENSITY FILTER!! OR ADD AS NEEDED!
 
-        # TODO: One can recheck the explanations for the internal fragments, if they match with the ladder sequence. Remove the ones that do not!! Easily implemenented!
+        # TODO: One can recheck the explanations for the internal fragments, if they match with the ladder sequence. 
+        # Remove the ones that do not!! Easily implemenented!
 
         print("Number of internal fragments = ", len(self.fragments_internal))
 

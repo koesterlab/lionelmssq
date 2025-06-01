@@ -1,5 +1,6 @@
 from copy import deepcopy
 from typing import List, Set, Tuple
+from itertools import chain
 
 
 def align_list_explanations(
@@ -106,6 +107,12 @@ def align_list_explanations(
         for idx_2, seq_2 in enumerate(list_explanations_end):
             for subseq_1 in seq_1:
                 for subseq_2 in seq_2:
+                    # Do not try to align sequences if there lengths don't match!
+                    if len(list(chain.from_iterable(subseq_1))) != len(
+                        list(chain.from_iterable(subseq_2))
+                    ):
+                        continue
+
                     skeleton_seq_temp, skeleton_list_explanation_temp = (
                         _align_individual_lists(
                             deepcopy(subseq_1), deepcopy(subseq_2)[::-1]
@@ -115,7 +122,7 @@ def align_list_explanations(
                     if skeleton_seq_temp and skeleton_list_explanation_temp:
                         # print(f"Index_1: {idx_1}", f"Index_2: {idx_2}")
                         # print(
-                            # f"Skeleton_list_explanation: {skeleton_list_explanation_temp}"
+                        # f"Skeleton_list_explanation: {skeleton_list_explanation_temp}"
                         # )
 
                         skeleton_seq.append(skeleton_seq_temp)

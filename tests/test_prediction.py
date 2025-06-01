@@ -221,7 +221,6 @@ def test_testcase(testcase):
 
         terminal_marked_path = base_path / "fragments_terminal_marked.tsv"
         if not terminal_marked_path.exists():
-            # raise FileNotFoundError(f"File {terminal_marked_path} does not exist.")
             fragments = determine_terminal_fragments(
                 fragment_masses_read,
                 output_file_path=base_path / "fragments_terminal_marked.tsv",
@@ -235,27 +234,30 @@ def test_testcase(testcase):
         else:
             fragments = pl.read_csv(terminal_marked_path, separator="\t")
 
-    # len_seq = len(true_seq)
-    lengths_seq, _, _ = determine_sequence_length(terminally_marked_fragments=fragments)
-    print("Lengths of the sequences = ", lengths_seq)
-    len_seq = lengths_seq[0]
-    print("Length of the sequence = ", len_seq)
+    lengths_seq, _, _ = determine_sequence_length(
+        terminally_marked_fragments=fragments, strategy="frequency"
+    )
+    print("Possible MS1 mass explaining sequence lengths = ", lengths_seq)
 
-    len_seq = len(true_seq) #TODO
+    len_seq = lengths_seq[0]
+    print("Initial guess for sequence length = ", len_seq)
+
+    # len_seq = len(true_seq) #Get rid of this once the multiple length part is fixed!
 
     prediction = Predictor(
         fragments,
         len_seq,
         # os.environ.get("SOLVER", "cbc"),
-        os.environ.get("SOLVER", "gurobi"),  # "solver": "gurobi" or "cbc"
+        os.environ.get("SOLVER", "gurobi"),
         threads=16,
         unique_masses=unique_masses,
         explanation_masses=explanation_masses,
         matching_threshold=matching_threshold,
         mass_tag_start=label_mass_5T,
         mass_tag_end=label_mass_3T,
-        print_mass_table=True,
-    ).predict()
+        print_mass_table=False,
+    ).predict(num_top_paths=1000, consider_variable_sequence_lengths=True)
+    # ).predict(num_top_paths=1000, consider_variable_sequence_lengths=False)
 
     fragment_masses = pl.Series(
         prediction.fragments.select(pl.col("observed_mass"))
@@ -299,12 +301,9 @@ def test_testcase(testcase):
                     <= matching_threshold
                 )
 
-# test_testcase("30mers/test_01_2")
+
+test_testcase("30mers/test_01_2")
 # test_testcase("30mers/test_03")
 # test_testcase("25mers/test_01_centroid")
-test_testcase("25mers/test_01")
-# test_testcase("test_11")
-# test_testcase("test_02")
-# test_testcase("test_11")
-# test_testcase("test_04")
-# test_testcase("10mers/test_04")
+# test_testcase("25mers/test_01")
+# test_testcase("20mers/test_02_2")

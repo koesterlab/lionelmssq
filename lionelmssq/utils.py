@@ -1,5 +1,6 @@
 from lionelmssq.mass_explanation import explain_mass
 import polars as pl
+from collections import Counter
 
 from lionelmssq.masses import EXPLANATION_MASSES, UNIQUE_MASSES, MATCHING_THRESHOLD
 from lionelmssq.masses import TOLERANCE
@@ -256,7 +257,8 @@ def predetermine_possible_nucleotides(
     intensity_cutoff=0.5e6,
 ):
     singleton_masses = (
-        fragments.filter(pl.col("neutral_mass") < singleton_mass_filtering_limit).filter(pl.col("intensity") > intensity_cutoff)
+        fragments.filter(pl.col("neutral_mass") < singleton_mass_filtering_limit)
+        .filter(pl.col("intensity") > intensity_cutoff)
         .select(pl.col("neutral_mass"))
         .to_series()
         .to_list()
@@ -271,10 +273,16 @@ def predetermine_possible_nucleotides(
         explanations[mass] = expl
 
     observed_nucleosides = {
-        nuc for expls in explanations.values() for expl in expls for nuc in expl if len(expl) == 1
+        nuc
+        for expls in explanations.values()
+        for expl in expls
+        for nuc in expl
+        if len(expl) == 1
     }
 
-    reduced = explanation_masses.filter(pl.col("nucleoside").is_in(observed_nucleosides))
+    reduced = explanation_masses.filter(
+        pl.col("nucleoside").is_in(observed_nucleosides)
+    )
 
     nucleosides = reduced.get_column("nucleoside").to_list()
 
@@ -346,6 +354,7 @@ def estimate_MS_error_MATCHING_THRESHOLD(
 
 def determine_sequence_length(
     terminally_marked_fragments=None,
+    strategy="entropy",  # "entropy" or "frequency"
     ms1_mass=None,
     label_mass_3T=0.0,
     label_mass_5T=0.0,
@@ -398,19 +407,47 @@ def determine_sequence_length(
                 for explanations in sequence_explanations
             ]
 
-            # Order sequence_explanations and their lengths according to entropy
-            ordered_data = sorted(
-                zip(
-                    sequence_explanations,
-                    len_sequence_explanations,
-                    entropy_sequence_explanations,
-                ),
-                key=lambda x: x[2],
-                reverse=True,  # Sort by entropy
-            )
+            length_frequency_dict = Counter(len_sequence_explanations)
 
-            ordered_sequence_explanations = [data[0] for data in ordered_data]
-            ordered_lengths = [data[1] for data in ordered_data]
-            ordered_entropies = [data[2] for data in ordered_data]
+            frequency_sequence_explanations = [
+                length_frequency_dict[len_explanation]
+                for len_explanation in len_sequence_explanations
+            ]
 
-            return ordered_lengths, ordered_entropies, ordered_sequence_explanations
+            if strategy == "entropy":
+                # Order sequence_explanations and their lengths according to entropy and then according to frequency and then according to length
+
+                ordered_data = sorted(
+                    zip(
+                        sequence_explanations,
+                        len_sequence_explanations,
+                        entropy_sequence_explanations,
+                        frequency_sequence_explanations
+                    ),
+                    key=lambda x: (x[2], x[3], x[1]), # Sort by entropy, then by length
+                    reverse=True,  # Sort by entropy
+                )
+
+                ordered_sequence_explanations = [data[0] for data in ordered_data]
+                ordered_lengths = [data[1] for data in ordered_data]
+                ordered_strategy = [data[2] for data in ordered_data]
+
+            elif strategy == "frequency":
+                # Order sequence_explanations and their lengths according to frequency
+
+                ordered_data = sorted(
+                    zip(
+                        sequence_explanations,
+                        len_sequence_explanations,
+                        frequency_sequence_explanations,
+                        entropy_sequence_explanations
+                    ),
+                    key=lambda x: (x[2], x[3], x[1]),  # Sort by frequency, then by entropy and then by length
+                    reverse=True,  # Sort by frequency and length
+                )
+
+                ordered_sequence_explanations = [data[0] for data in ordered_data]
+                ordered_lengths = [data[1] for data in ordered_data]
+                ordered_strategy = [data[2] for data in ordered_data]
+
+            return ordered_lengths, ordered_strategy, ordered_sequence_explanations

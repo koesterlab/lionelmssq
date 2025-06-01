@@ -14,6 +14,7 @@ def construct_graph_skeleton(
     use_ms_intensity_as_weight=False,
     peanlize_explanation_length_params={"zero_len_weight": 0.0, "base": e},
     node_horizon=None,
+    consider_variable_sequence_lengths=True,
 ):
     # Note that the penalization of explanation length can be removed by setting the base = 1
 
@@ -97,11 +98,29 @@ def construct_graph_skeleton(
                 #         else:
                 #             len_explanations = 0
 
-                len_explanations = min(
-                    len(mass_explanations[i]) for i in range(len(mass_explanations))
-                ) 
-                #TODO: Check out the use of this min, for multiple explanations with differernt lengths, 
-                #this will be problematic!
+                if not consider_variable_sequence_lengths:
+                    len_explanations = min(
+                        len(mass_explanations[i]) for i in range(len(mass_explanations))
+                    )
+                    # TODO: Check out the use of this min, for multiple explanations with differernt lengths,
+                    # this will be problematic!
+                else:
+                    #The following takes average:
+                    # len_explanations = sum(
+                    #     len(mass_explanations[i]) for i in range(len(mass_explanations))
+                    # ) // len(mass_explanations)
+
+                    #The following take the max:
+                    # This is reasonable, since we the natural bases generally have a smaller mass
+                    # Thus, the len_explanation will be longer when using those!
+
+                    len_explanations = min(
+                        len(mass_explanations[i]) for i in range(len(mass_explanations))
+                    )
+
+                    # len_explanations = max(
+                    #     len(mass_explanations[i]) for i in range(len(mass_explanations))
+                    # )
 
                 pos += len_explanations
 
@@ -118,13 +137,21 @@ def construct_graph_skeleton(
                             ** (-len_explanations)
                         )
                         + e ** (-pos / self.seq_len)
+                        # + e
+                        # ** (
+                        #     -pos
+                        # )  
+                        # Get rid of the extra normalization by seq_len, not stricly needed
+                        # but it may amplify the effect of the pos penalization too much!
                     )  # Score the sequences with shorter explanations higher when they are at the beginning of the sequence!
                     * intensity[latter_node_idx]
                     / total_intensity,
                     explanation=mass_explanations,
                 )
+                # TODO: Idea: use Multidigraph to add multiple edges with different explanations!
+
                 # NOTE: If the offset is 0, it ignores the different fragments of the 'same' mass from the longest path
-                # But we add them later!
+                # But we do add them later!
                 # To include them use a value of about 0.001 as the "zero_len_weight"!
 
     # longest_paths = dag_top_n_longest_paths(G, N=num_top_paths, weight="weight")
@@ -266,13 +293,17 @@ def construct_graph_skeleton(
         #     print("Score = ", path[0])
 
         list_explanations_single = _generate_list_explanations_all_combinations(path[1])
-        for exp in list_explanations_single: 
-            if sum(len(sublist) for sublist in exp) != self.seq_len:
-                list_explanations_single.remove(exp)
+
+        print("length = ", self.seq_len)
+
+        # Reject the explanations which are not of the same length as self.seq_len
+        if not consider_variable_sequence_lengths:
+            for exp in list_explanations_single:
+                if sum(len(sublist) for sublist in exp) != self.seq_len:
+                    list_explanations_single.remove(exp)
 
         # list_explanations.append(list_explanations_single)
 
-        #TODO: CHECK
         if list_explanations_single:
             new_longest_paths.append(path)
             skeleton_seq.append(seq)
@@ -497,7 +528,5 @@ def dag_top_n_longest_paths_with_start_end(
     # Extract the top N longest paths that end at the specified end_node
     all_paths = dp[end_node]
     all_paths.sort(reverse=True, key=lambda x: x[0])  # Sort by path length (descending)
-
-    print("All paths = ", all_paths)
 
     return all_paths[:N]
