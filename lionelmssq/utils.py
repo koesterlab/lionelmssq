@@ -63,9 +63,15 @@ def determine_terminal_fragments(
     singleton_mass = []
 
     if ms1_mass:
-        ms1_explained_mass = explain_mass(
-            ms1_mass, explanation_masses, matching_threshold=matching_threshold
-        )
+        ms1_explained_mass = [
+            entry
+            for entry in explain_mass(
+                ms1_mass,
+                explanation_masses=explanation_masses,
+                matching_threshold=matching_threshold,
+            )
+            if entry.breakage == "c/y_c/y"
+        ][0]
         ms1_explained_mass.explanations = {
             element
             for element in ms1_explained_mass.explanations
@@ -77,9 +83,15 @@ def determine_terminal_fragments(
             ms1_mass = None
 
     for mass in neutral_masses:
-        explained_mass = explain_mass(
-            mass, explanation_masses, matching_threshold=matching_threshold
-        )
+        explained_mass = [
+            entry
+            for entry in explain_mass(
+                mass,
+                explanation_masses=explanation_masses,
+                matching_threshold=matching_threshold,
+            )
+            if entry.breakage == "c/y_c/y"
+        ][0]
 
         if ms1_mass:
             explained_mass.explanations = {
@@ -98,7 +110,7 @@ def determine_terminal_fragments(
                     if not ("3Tag" in explanation and "5Tag" in explanation)
                 }
         else:
-            # Remove explainations which have more than one tag of each kind in them!
+            # Remove explanations which have more than one tag of each kind in them!
             # This greatly increases the reliability of tag determination!
             explained_mass.explanations = {
                 explanation
