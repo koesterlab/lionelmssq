@@ -1,3 +1,6 @@
+#TODO: Use a parallel implementation of terminal fragment determination.
+# Each fragment can be independelty processed which saves a lot of time!
+
 from lionelmssq.mass_explanation import explain_mass
 import polars as pl
 

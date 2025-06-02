@@ -154,7 +154,9 @@ def test_testcase(testcase):
             "neutral_mass", maintain_order=True
         ).first()
 
-        # # TODO: Discuss why it doesn't work with the estimated error!
+        # # TODO: CHECK why it doesn't work with the estimated error! 
+        # The problem with phantom peaks at small m/z values for singletons!
+        
         # matching_threshold, _, _ = estimate_MS_error_MATCHING_THRESHOLD(
         #     fragment_masses_read, unique_masses=unique_masses, simulation=simulation
         # )
@@ -180,29 +182,6 @@ def test_testcase(testcase):
         nucleosides = ["A", "U", "G", "C"]
 
         print("Predetermined nucleosides from singletons: ", nucleosides)
-
-        # fragments_singletons = determine_terminal_fragments(
-        #     fragment_masses_read.filter(
-        #         pl.col("neutral_mass") < singleton_mass_filtering_limit
-        #     ),
-        #     label_mass_3T=label_mass_3T,
-        #     label_mass_5T=label_mass_5T,
-        #     explanation_masses=explanation_masses,
-        #     matching_threshold=matching_threshold,
-        #     intensity_cutoff=intensity_cutoff,
-        # )
-
-        # print("Fragments singletons = ", fragments_singletons)
-
-        # nucleosides, _ = Predictor(
-        #     fragments_singletons,
-        #     unique_masses=unique_masses,
-        #     explanation_masses=explanation_masses,
-        #     matching_threshold=matching_threshold,
-        #     mass_tag_start=label_mass_5T,
-        #     mass_tag_end=label_mass_3T,
-        #     print_mass_table=True,
-        # )._calculate_diffs_and_nucleosides()
 
         unique_masses = UNIQUE_MASSES.filter(
             pl.col("nucleoside").is_in(nucleosides)
@@ -302,7 +281,7 @@ def test_testcase(testcase):
                 )
 
 
-test_testcase("30mers/test_01_2")
+test_testcase("30mers/test_01")
 # test_testcase("30mers/test_03")
 # test_testcase("25mers/test_01_centroid")
 # test_testcase("25mers/test_01")

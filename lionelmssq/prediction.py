@@ -121,12 +121,10 @@ class Predictor:
     def predict(
         self, num_top_paths=100, consider_variable_sequence_lengths=True
     ) -> Prediction:
-        # TODO: get rid of the requirement to pass the length of the sequence
-        # and instead infer it from the fragments
 
         nucleosides, nucleoside_masses = self._calculate_diffs_and_nucleosides()
 
-        # TODO: Check this, thus reduces the possible nucelotide space:
+        #Reduces the possible nucelotide space:
         self.explanation_masses = self.explanation_masses.filter(
             pl.col("nucleoside").is_in(nucleosides)
         )
@@ -141,7 +139,6 @@ class Predictor:
             list_explanations_start,
         ) = self._graph_skeleton(
             Side.START,
-            # use_ms_intensity_as_weight=True,
             use_ms_intensity_as_weight=False,
             num_top_paths=num_top_paths,
             peanlize_explanation_length_params={"zero_len_weight": 0.0, "base": e},
@@ -159,7 +156,6 @@ class Predictor:
             list_explanations_end,
         ) = self._graph_skeleton(
             Side.END,
-            # use_ms_intensity_as_weight=True,
             use_ms_intensity_as_weight=False,
             num_top_paths=num_top_paths,
             peanlize_explanation_length_params={"zero_len_weight": 0.0, "base": e},
@@ -192,7 +188,7 @@ class Predictor:
                 )
             )
 
-            # TODO: Check the function execution here if the start and end lengths don't match!
+            # TODO: Check this function execution here if the start and end lengths don't match!
 
             # Print the indices of seq_set corresponding to the top score
             top_score = max(score)

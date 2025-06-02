@@ -7,7 +7,31 @@ def align_list_explanations(
     self, list_explanations_start, list_explanations_end
 ) -> Tuple[List[List[Set[str]]], List[List[List[float]]], List[int], List[int]]:
     """
-    Aligns the list_explanation_start and list_explanation_end to get the final skeleton sequence!
+    Aligns the list_explanation_start and list_explanation_end to get the final skeleton sequence.
+    This method performs sequence alignment between start and end explanations by finding
+    intersections between corresponding elements and building a skeleton sequence that
+    represents the aligned structure.
+    Args:
+        list_explanations_start: List of list of explanation sequences from the start position.
+                               Each sequence contains sublists of nucleotide elements.
+        list_explanations_end: List of list of explanation sequences from the end position.
+                             Each sequence contains sublists of nucleotide elements.
+    Returns:
+        Tuple containing:
+            - skeleton_seq (List[List[Set[str]]]): List of aligned skeleton sequences 
+              where each element is a set of nucleotides at that position
+            - skeleton_list_explanation (List[List[List[float]]]): List of skeleton 
+              explanations corresponding to the aligned sequences  
+            - start_seq_index (List[int]): Indices of successfully aligned sequences 
+              from list_explanations_start
+            - end_seq_index (List[int]): Indices of successfully aligned sequences 
+              from list_explanations_end
+    Notes:
+        - skeleton_seq as output format List of List[Set[str]] is useful to have the output in the correct format for optimization
+        - Only sequences of matching lengths are considered for alignment
+        - The end sequence is reversed before alignment processing
+        - If no intersection is found between sequences, they are skipped
+
     """
 
     def _calculate_intersection(list1, list2):
@@ -46,12 +70,9 @@ def align_list_explanations(
 
             while end_inner_list:
                 while start_inner_list:
-                    # print(f"list1: {list_explanation_start[list1_idx]}")
-                    # print(f"list2: {list_explanation_end[list2_idx]}")
 
                     # Calculate intersection of the two lists:
                     nuc = _calculate_intersection(start_inner_list, end_inner_list)
-                    # print(f"nuc: {nuc}")
 
                     # TODO: Treat the special case where nuc is empty
                     if not nuc:
@@ -120,10 +141,6 @@ def align_list_explanations(
                     )
 
                     if skeleton_seq_temp and skeleton_list_explanation_temp:
-                        # print(f"Index_1: {idx_1}", f"Index_2: {idx_2}")
-                        # print(
-                        # f"Skeleton_list_explanation: {skeleton_list_explanation_temp}"
-                        # )
 
                         skeleton_seq.append(skeleton_seq_temp)
                         skeleton_list_explanation.append(skeleton_list_explanation_temp)

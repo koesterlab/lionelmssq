@@ -10,14 +10,46 @@ from copy import deepcopy
 def construct_graph_skeleton(
     self,
     side,
-    num_top_paths=1,
+    num_top_paths=100,
     use_ms_intensity_as_weight=False,
     peanlize_explanation_length_params={"zero_len_weight": 0.0, "base": e},
     node_horizon=None,
     consider_variable_sequence_lengths=True,
 ):
-    # Note that the penalization of explanation length can be removed by setting the base = 1
+    """
+    Constructs a directed acyclic graph (DAG) skeleton for fragment analysis.
+    This method builds a graph representation of fragment masses and their possible
+    explanations, then finds the top-scoring paths through the graph to generate
+    skeleton sequences for the specified fragment side (START or END).
+    Args:
+        side: The fragment side to analyze (START or END from Side enum)
+        num_top_paths (int, optional): Number of top-scoring paths to return. Defaults to 100.
+        use_ms_intensity_as_weight (bool, optional): Whether to use MS intensity values 
+            as edge weights. If False, uniform weights are used. Defaults to False (emperically better).
+        peanlize_explanation_length_params (dict, optional): Parameters for penalizing 
+            explanation length in scoring. Contains 'zero_len_weight' and 'base' keys. 
+            Defaults to {"zero_len_weight": 0.0, "base": e}.
+            The penalization of explanation length can be removed by setting the base = 1
+        node_horizon (int, optional): Limits the number of subsequent nodes to consider 
+            when building edges. If None, considers all nodes. Defaults to None.
+        consider_variable_sequence_lengths (bool, optional): Whether to allow sequences 
+            of variable length or only those matching self.seq_len. Defaults to True.
+    Returns:
+        tuple: A 6-tuple containing:
+            - G (DiGraph): The constructed directed acyclic graph
+            - valid_terminal_fragments (list): List of TerminalFragment objects for valid nodes
+            - skeleton_seq (list): List of skeleton sequences from top paths
+            - invalid_nodes (list): List of fragment indices not included in top paths
+            - sequence_score (list): Scores for each skeleton sequence
+            - list_explanations (list): All possible explanation combinations for each path
+    Note:
+        The method builds a graph where nodes represent fragment masses and edges represent
+        possible mass differences with their explanations. Edge weights incorporate explanation
+        length penalties, positional scoring, and optional MS intensity values. The algorithm
+        finds the highest-scoring paths and generates corresponding skeleton sequences.
 
+    """
+    
     candidate_fragments = self.fragments_side[side].get_column("index").to_list()
 
     masses = [0.0] + self.fragment_masses[side]
@@ -82,46 +114,11 @@ def construct_graph_skeleton(
                 )
 
             if len(mass_explanations) > 0:
-                # or abs(
-                #     mass_diff
-                # ) <= self.matching_threshold * abs(
-                #     masses[prior_node_idx] + self.mass_tags[side]
-                # ):
-                # Idea: The weight should be peanlized if the length of the explanation is more,
-                # i.e. for bigger mass differences, the weight should be less!
 
-                #         if len(mass_explanations) > 0:
-                #             len_explanations = min(
-                #                 len(mass_explanations[i])
-                #                 for i in range(len(mass_explanations))
-                #             )
-                #         else:
-                #             len_explanations = 0
-
-                if not consider_variable_sequence_lengths:
-                    len_explanations = min(
+                len_explanations = min(
                         len(mass_explanations[i]) for i in range(len(mass_explanations))
                     )
-                    # TODO: Check out the use of this min, for multiple explanations with differernt lengths,
-                    # this will be problematic!
-                else:
-                    # The following takes average:
-                    # len_explanations = sum(
-                    #     len(mass_explanations[i]) for i in range(len(mass_explanations))
-                    # ) // len(mass_explanations)
-
-                    # The following take the max:
-                    # This is reasonable, since we the natural bases generally have a smaller mass
-                    # Thus, the len_explanation will be longer when using those!
-
-                    len_explanations = min(
-                        len(mass_explanations[i]) for i in range(len(mass_explanations))
-                    )
-
-                    # len_explanations = max(
-                    #     len(mass_explanations[i]) for i in range(len(mass_explanations))
-                    # )
-
+                
                 pos += len_explanations
 
                 G.add_edge(
@@ -136,14 +133,9 @@ def construct_graph_skeleton(
                             * peanlize_explanation_length_params["base"]
                             ** (-len_explanations)
                         )
-                        + e ** (-pos / self.seq_len)
-                        # + e
-                        # ** (
-                        #     -pos
-                        # )
-                        # Get rid of the extra normalization by seq_len, not stricly needed
-                        # but it may amplify the effect of the pos penalization too much!
-                    )  # Score the sequences with shorter explanations higher when they are at the beginning of the sequence!
+                        + e ** (-pos / self.seq_len) 
+                        # Score the sequences with shorter explanations higher when they are at the beginning of the sequence!
+                    )
                     * intensity[latter_node_idx]
                     / total_intensity,
                     explanation=mass_explanations,
@@ -154,7 +146,9 @@ def construct_graph_skeleton(
                 # But we do add them later!
                 # To include them use a value of about 0.001 as the "zero_len_weight"!
 
-    # longest_paths = dag_top_n_longest_paths(G, N=num_top_paths, weight="weight")
+    # longest_paths = dag_top_n_longest_paths(G, N=num_top_paths, weight="weight") #Old algo where start and ends are free!
+
+
     longest_paths = dag_top_n_longest_paths_with_start_end(
         G, N=num_top_paths, weight="weight", start_node=0, end_node=last_node_idx
     )
@@ -223,27 +217,6 @@ def construct_graph_skeleton(
 
         return skeleton_seq
 
-    # def _generate_list_explanations(longest_path=longest_paths[0][1]):
-    #     skeleton_seq = []
-    #     for node in range(len(longest_path) - 1):
-    #         if (
-    #             len(
-    #                 G.edges[longest_path[node], longest_path[node + 1]][
-    #                     "explanation"
-    #                 ]
-    #             )
-    #             > 0
-    #         ):
-    #             seq = G.edges[longest_path[node], longest_path[node + 1]][
-    #                         "explanation"
-    #                     ]
-    #             list_seq = [[str(s) for s in subseq] for subseq in seq]
-
-    #             skeleton_seq.extend(
-    #                     list_seq
-    #                 )
-    #     return skeleton_seq
-
     def _generate_list_explanations_all_combinations(longest_path=longest_paths[0][1]):
         skeleton_seq = []
         for node in range(len(longest_path) - 1):
@@ -283,14 +256,6 @@ def construct_graph_skeleton(
     list_explanations = []
     for path in longest_paths:
         seq = _generate_sequence_from_path(path[1])
-        # if len(seq) == self.seq_len: #TODO: CHECK
-        #     new_longest_paths.append(path)
-        #     skeleton_seq.append(seq)
-        #     sequence_score.append(path[0])
-        #     valid_terminal_fragments.append(_assign_valid_nodes(path[1]))
-        #     print("Path = ", path[1])
-        #     print("Mass = ", [G.nodes[node]["mass"] for node in path[1]])
-        #     print("Score = ", path[0])
 
         list_explanations_single = _generate_list_explanations_all_combinations(path[1])
 
@@ -301,8 +266,6 @@ def construct_graph_skeleton(
             for exp in list_explanations_single:
                 if sum(len(sublist) for sublist in exp) != self.seq_len:
                     list_explanations_single.remove(exp)
-
-        # list_explanations.append(list_explanations_single)
 
         if list_explanations_single:
             new_longest_paths.append(path)
