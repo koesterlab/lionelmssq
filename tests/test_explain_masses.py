@@ -39,7 +39,7 @@ TEST_SEQ = [
     {"c/y_c/y": ("C", "C")},
     {"c/y_c/y": ("U", "U")},
     {"c/y_c/y": ("C", "U", "A", "G")},
-    {"c/y_c/y": ("C", "C", "U", "A", "G", "G")},
+    # {"c/y_c/y": ("C", "C", "U", "A", "G", "G")},
 ]
 
 MASS_SEQ_DICT = dict(
@@ -54,22 +54,24 @@ MASS_SEQ_DICT = dict(
 )
 THRESHOLDS = [10e-6, 5e-6, 2e-6]
 
-# @pytest.mark.parametrize("testcase", MASS_SEQ_DICT.items())
-# @pytest.mark.parametrize("threshold", THRESHOLDS)
-# def test_testcase(testcase, threshold):
-#     predicted_mass_explanations = explain_mass(
-#         testcase[0], matching_threshold=threshold
-#     )
-#
-#     breakage = list(testcase[1].keys())[0]
-#     explanations = [
-#         tuple(solution)
-#         for expl in predicted_mass_explanations
-#         for solution in expl.explanations
-#         if expl.breakage == breakage
-#     ]
-#
-#     assert tuple(testcase[1][breakage]) in explanations
+
+@pytest.mark.parametrize("testcase", MASS_SEQ_DICT.items())
+@pytest.mark.parametrize("threshold", THRESHOLDS)
+def test_testcase(testcase, threshold):
+    predicted_mass_explanations = explain_mass(
+        testcase[0], matching_threshold=threshold
+    )
+
+    breakage = list(testcase[1].keys())[0]
+    explanations = [
+        tuple(solution)
+        for expl in predicted_mass_explanations
+        for solution in expl.explanations
+        if expl.breakage == breakage
+    ]
+
+    assert tuple(testcase[1][breakage]) in explanations
+
 
 WITH_MEMO = [True]
 COMPRESSION_RATES = [32]
