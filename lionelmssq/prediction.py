@@ -408,7 +408,10 @@ class Predictor:
 
         # interpret solution
         seq = [get_base(i) for i in range(self.seq_len)]
-        print("Predicted sequence = ", "".join(seq))
+        print(
+            "Predicted sequence = ",
+            "".join([val if val is not None else "-" for val in seq]),
+        )
 
         # Get the sequence corresponding to each of the fragments!
         fragment_seq = [
@@ -420,7 +423,7 @@ class Predictor:
             for j in valid_fragment_range
         ]
 
-        # Get teh mass corresponding to each of the fragments!
+        # Get the mass corresponding to each of the fragments!
         predicted_fragment_mass = [
             sum(
                 [
