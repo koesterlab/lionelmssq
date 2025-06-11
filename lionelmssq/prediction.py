@@ -2,16 +2,8 @@ from dataclasses import dataclass
 from itertools import chain, combinations, groupby
 from pathlib import Path
 from typing import List, Optional, Self, Set, Tuple
-from pulp import (
-    LpProblem,
-    LpMinimize,
-    LpInteger,
-    LpContinuous,
-    LpVariable,
-    lpSum,
-    getSolver,
-)
 from lionelmssq.common import Side, get_singleton_set_item, milp_is_one
+from lionelmssq.linear_program import LinearProgramInstance
 from lionelmssq.masses import UNIQUE_MASSES, EXPLANATION_MASSES, MATCHING_THRESHOLD
 from lionelmssq.mass_explanation import explain_mass
 import polars as pl
@@ -178,7 +170,7 @@ class Predictor:
         # TODO: If the tags are considered in the LP at the end, then most of the following code will become obsolete!
 
         # We now create reduced self.fragments_side and their masses
-        # which keeps the ordereing of accepted start and end candidates while rejecting
+        # which keeps the ordering of accepted start and end candidates while rejecting
         # the invalid ones, but keeping the ones with internal marking as internal candidates!
         self.fragments_side[Side.START] = self.fragments_side[Side.START].filter(
             ~pl.col("index").is_in(invalid_start_fragments)
@@ -229,13 +221,6 @@ class Predictor:
         n_fragments = len(fragment_masses)
         print("Fragments considered for fitting, n_fragments = ", n_fragments)
 
-        valid_fragment_range = list(range(n_fragments))
-
-        prob = LpProblem("RNA sequencing", LpMinimize)
-        # i = 1,...,n: positions in the sequence
-        # j = 1,...,m: fragments
-        # b = 1,...,k: (modified) bases
-
         if not start_fragments:
             logger.warning(
                 "No start fragments provided, this will likely lead to suboptimal results."
@@ -246,142 +231,11 @@ class Predictor:
                 "No end fragments provided, this will likely lead to suboptimal results."
             )
 
-        # TODO: IMP: Initiate the variables with the nucleotides (but don't fix them) that are already known from the dp!
-
-        # x: binary variables indicating fragment j presence at position i
-        x = [
-            [
-                LpVariable(f"x_{i},{j}", lowBound=0, upBound=1, cat=LpInteger)
-                for j in valid_fragment_range
-            ]
-            for i in range(self.seq_len)
-        ]
-        # y: binary variables indicating base b at position i
-        y = [
-            {
-                b: LpVariable(f"y_{i},{b}", lowBound=0, upBound=1, cat=LpInteger)
-                for b in nucleosides
-            }
-            for i in range(self.seq_len)
-        ]
-        # z: binary variables indicating product of x and y
-        z = [
-            [
-                {
-                    b: LpVariable(
-                        f"z_{i},{j},{b}", lowBound=0, upBound=1, cat=LpInteger
-                    )
-                    for b in nucleosides
-                }
-                for j in valid_fragment_range
-            ]
-            for i in range(self.seq_len)
-        ]
-        # weight_diff_abs: absolute value of weight_diff
-        predicted_mass_diff_abs = [
-            LpVariable(f"predicted_mass_diff_abs_{j}", lowBound=0, cat=LpContinuous)
-            for j in valid_fragment_range
-        ]
-        # weight_diff: difference between fragment monoisotopic mass and sum of masses of bases in fragment as estimated in the MILP
-        predicted_mass_diff = [
-            fragment_masses[j]
-            - lpSum(
-                [
-                    z[i][j][b] * nucleoside_masses[b]
-                    for i in range(self.seq_len)
-                    for b in nucleosides
-                ]
-            )
-            for j in valid_fragment_range
-        ]
-
-        # optimization function
-        prob += lpSum([predicted_mass_diff_abs[j] for j in valid_fragment_range])
-
-        # select one base per position
-        for i in range(self.seq_len):
-            prob += lpSum([y[i][b] for b in nucleosides]) == 1
-
-        # fill z with the product of binary variables x and y
-        for i in range(self.seq_len):
-            for j in valid_fragment_range:
-                for b in nucleosides:
-                    prob += z[i][j][b] <= x[i][j]
-                    prob += z[i][j][b] <= y[i][b]
-                    prob += z[i][j][b] >= x[i][j] + y[i][b] - 1
-
-        # ensure that fragment is aligned continuously
-        # (no gaps: if x[i1,j] = 1 and x[i2,j] = 1, then x[i_between,j] = 1)
-        for j in valid_fragment_range:
-            for i1, i2 in combinations(range(self.seq_len), 2):
-                # i2 and i1 are inclusive
-                assert i2 > i1
-                if i2 - i1 > 1:
-                    prob += (x[i1][j] + x[i2][j] - 1) * (i2 - i1 - 1) <= lpSum(
-                        [x[i_between][j] for i_between in range(i1 + 1, i2)]
-                    )
-
-        # ensure that start fragments are aligned at the beginning of the sequence
-        for fragment in start_fragments:
-            # j is the row index where the "index" matches fragment.index
-            # fragment.index uses the original (mass sorted) index of the read fragment files,
-            # but in self.fragments we disqualify many fragments of the original file.
-            # Hence, we need to find the correct row index in self.fragments which corresponds to the original index
-            # since in the MILP we fit all the fragments of self.fragments
-            j = (
-                self.fragments.with_row_index("row_index")
-                .filter(pl.col("index") == fragment.index)
-                .item(0, "row_index")
-            )
-            # min_end is exclusive
-            for i in range(fragment.min_end):
-                x[i][j].setInitialValue(1)
-                x[i][j].fixValue()
-            for i in range(fragment.max_end, self.seq_len):
-                x[i][j].setInitialValue(0)
-                x[i][j].fixValue()
-
-        # ensure that end fragments are aligned at the end of the sequence
-        for fragment in end_fragments:
-            # j is the row index where the "index" matches fragment.index
-            j = (
-                self.fragments.with_row_index("row_index")
-                .filter(pl.col("index") == fragment.index)
-                .item(0, "row_index")
-            )
-            # min_end is exclusive
-            for i in range(fragment.min_end + 1, 0):
-                x[i][j].setInitialValue(1)
-                x[i][j].fixValue()
-            for i in range(-self.seq_len, fragment.max_end + 1):
-                x[i][j].setInitialValue(0)
-                x[i][j].fixValue()
-
-        # Fragments that aren't either start or end are either inner or uncertain.
-        # Hence, we don't further constrain their positioning and length and let the
-        # LP decide.
-
-        # constrain weight_diff_abs to be the absolute value of weight_diff
-        for j in valid_fragment_range:
-            # if j not in invalid_start_fragments and j not in invalid_end_fragments:
-            prob += predicted_mass_diff_abs[j] >= predicted_mass_diff[j]
-            prob += predicted_mass_diff_abs[j] >= -predicted_mass_diff[j]
-
-        # use skeleton seq to fix bases
-        for i, nucs in enumerate(skeleton_seq):
-            if not nucs:
-                # nothing known, do not constrain
-                continue
-            for b in nucleosides:
-                if b not in nucs:
-                    # do not allow bases that are not observed in the skeleton
-                    y[i][b].setInitialValue(0)
-                    y[i][b].fixValue()
-            if len(nucs) == 1:
-                nuc = get_singleton_set_item(nucs)
-                # only one base is possible, already set it to 1
-                y[i][nuc].setInitialValue(1)
-                y[i][nuc].fixValue()
+        lp_instance = LinearProgramInstance(fragment_masses,
+                                            start_fragments, end_fragments,
+                                            self.seq_len, self.fragments,
+                                            nucleosides, nucleoside_masses,
+                                            skeleton_seq)
 
         match self.solver:
             case "gurobi":
@@ -389,70 +243,8 @@ class Predictor:
             case "cbc":
                 solver_name = "PULP_CBC_CMD"
 
-        solver = getSolver(solver_name, threads=self.threads)
-        # gurobi.msg = False
-        # TODO the returned value resembles the accuracy of the prediction
-        _ = prob.solve(solver)
+        seq, fragment_predictions = lp_instance.evaluate(solver_name, self.threads)
 
-        def get_base(i):
-            for b in nucleosides:
-                if milp_is_one(y[i][b]):
-                    return b
-            return None
-
-        def get_base_fragmentwise(i, j):
-            for b in nucleosides:
-                if milp_is_one(z[i][j][b]):
-                    return b
-            return None
-
-        # interpret solution
-        seq = [get_base(i) for i in range(self.seq_len)]
-        print("Predicted sequence = ", "".join(seq))
-
-        # Get the sequence corresponding to each of the fragments!
-        fragment_seq = [
-            [
-                get_base_fragmentwise(i, j)
-                for i in range(self.seq_len)
-                if get_base_fragmentwise(i, j) is not None
-            ]
-            for j in valid_fragment_range
-        ]
-
-        # Get teh mass corresponding to each of the fragments!
-        predicted_fragment_mass = [
-            sum(
-                [
-                    nucleoside_masses[get_base_fragmentwise(i, j)]
-                    for i in range(self.seq_len)
-                    if get_base_fragmentwise(i, j) is not None
-                ]
-            )
-            for j in valid_fragment_range
-        ]
-
-        fragment_predictions = pl.from_dicts(
-            [
-                {
-                    # Because of the relaxation of the LP, sometimes the value is not exactly 1
-                    "left": min(
-                        (i for i in range(self.seq_len) if milp_is_one(x[i][j])),
-                        default=0,
-                    ),
-                    "right": max(
-                        (i for i in range(self.seq_len) if milp_is_one(x[i][j])),
-                        default=-1,
-                    )
-                    + 1,  # right bound shall be exclusive, hence add 1
-                    "predicted_fragment_seq": fragment_seq[j],
-                    "predicted_fragment_mass": predicted_fragment_mass[j],
-                    "observed_mass": fragment_masses[j],
-                    "predicted_mass_diff": predicted_mass_diff[j].value(),
-                }
-                for j in valid_fragment_range
-            ]
-        )
         fragment_predictions = pl.concat(
             [fragment_predictions, self.fragments.select(pl.col("orig_index"))],
             how="horizontal",
@@ -738,7 +530,7 @@ class Predictor:
                     min_fragment_end = max_fragment_end
                 if min_fragment_end is None:
                     # still None => both are None
-                    # TODO can we stop ealy in building the ladder?
+                    # TODO can we stop early in building the ladder?
                     is_valid = False
             elif (
                 abs(diff) <= self.matching_threshold * abs(mass + self.mass_tags[side])
