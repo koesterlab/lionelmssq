@@ -8,7 +8,7 @@ from pulp import (
     getSolver,
 )
 from lionelmssq.common import get_singleton_set_item, milp_is_one
-from itertools import chain, combinations, groupby
+from itertools import combinations
 import polars as pl
 
 

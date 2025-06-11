@@ -1,8 +1,8 @@
 from dataclasses import dataclass
-from itertools import chain, combinations, groupby
+from itertools import chain, groupby
 from pathlib import Path
 from typing import List, Optional, Self, Set, Tuple
-from lionelmssq.common import Side, get_singleton_set_item, milp_is_one
+from lionelmssq.common import Side
 from lionelmssq.linear_program import LinearProgramInstance
 from lionelmssq.masses import UNIQUE_MASSES, EXPLANATION_MASSES, MATCHING_THRESHOLD
 from lionelmssq.mass_explanation import explain_mass
