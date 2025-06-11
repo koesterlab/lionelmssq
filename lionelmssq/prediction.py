@@ -217,28 +217,39 @@ class Predictor:
                 )
 
         # Filter out all internal fragments that do not fit anywhere in skeleton
-        print("Number of internal fragments before filtering: ",
-              len(self.fragments_internal))
+        print(
+            "Number of internal fragments before filtering: ",
+            len(self.fragments_internal),
+        )
         is_valid_fragment = []
         for frag_idx in self.fragments_internal.get_column("index").to_list():
-            frag_mass = self.fragments.row(frag_idx)[self.fragments.get_column_index("observed_mass")]
+            frag_mass = self.fragments.row(frag_idx)[
+                self.fragments.get_column_index("observed_mass")
+            ]
             filter_instance = LinearProgramInstance(
-                fragment_masses=[frag_mass], start_fragments=list(),
-                end_fragments=list(), seq_len=self.seq_len,
-                fragments=self.fragments, nucleosides=nucleosides,
-                nucleoside_masses=nucleoside_masses, skeleton_seq=skeleton_seq
+                fragment_masses=[frag_mass],
+                start_fragments=list(),
+                end_fragments=list(),
+                seq_len=self.seq_len,
+                fragments=self.fragments,
+                nucleosides=nucleosides,
+                nucleoside_masses=nucleoside_masses,
+                skeleton_seq=skeleton_seq,
             )
             if filter_instance.check_feasibility(
-                    solver_name=solver_name, num_threads=self.threads,
-                    threshold=frag_mass*MATCHING_THRESHOLD
+                solver_name=solver_name,
+                num_threads=self.threads,
+                threshold=frag_mass * MATCHING_THRESHOLD,
             ):
                 is_valid_fragment.append(frag_idx)
 
         self.fragments_internal = self.fragments_internal.filter(
             pl.col("index").is_in(is_valid_fragment)
         )
-        print("Number of internal fragments after filtering: ",
-              len(self.fragments_internal))
+        print(
+            "Number of internal fragments after filtering: ",
+            len(self.fragments_internal),
+        )
 
         self.fragments = (
             self.fragments_side[Side.START]
@@ -266,11 +277,16 @@ class Predictor:
                 "No end fragments provided, this will likely lead to suboptimal results."
             )
 
-        lp_instance = LinearProgramInstance(fragment_masses,
-                                            start_fragments, end_fragments,
-                                            self.seq_len, self.fragments,
-                                            nucleosides, nucleoside_masses,
-                                            skeleton_seq)
+        lp_instance = LinearProgramInstance(
+            fragment_masses,
+            start_fragments,
+            end_fragments,
+            self.seq_len,
+            self.fragments,
+            nucleosides,
+            nucleoside_masses,
+            skeleton_seq,
+        )
 
         seq, fragment_predictions = lp_instance.evaluate(solver_name, self.threads)
 

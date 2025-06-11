@@ -13,9 +13,17 @@ import polars as pl
 
 
 class LinearProgramInstance:
-    def __init__(self, fragment_masses, start_fragments, end_fragments,
-                 seq_len, fragments, nucleosides, nucleoside_masses,
-                 skeleton_seq):
+    def __init__(
+        self,
+        fragment_masses,
+        start_fragments,
+        end_fragments,
+        seq_len,
+        fragments,
+        nucleosides,
+        nucleoside_masses,
+        skeleton_seq,
+    ):
         # i = 1,...,n: positions in the sequence
         # j = 1,...,m: fragments
         # b = 1,...,k: (modified) bases
@@ -25,24 +33,24 @@ class LinearProgramInstance:
         self.nucleoside_masses = nucleoside_masses
         valid_fragment_range = list(range(len(fragment_masses)))
         # x: binary variables indicating fragment j presence at position i
-        self.x = self._set_x(valid_fragment_range, start_fragments,
-                             end_fragments, fragments)
+        self.x = self._set_x(
+            valid_fragment_range, start_fragments, end_fragments, fragments
+        )
         # y: binary variables indicating base b at position i
         self.y = self._set_y(skeleton_seq)
         # z: binary variables indicating product of x and y
         self.z = self._set_z(valid_fragment_range)
         # weight_diff: difference between fragment monoisotopic mass and sum of masses of bases in fragment as estimated in the MILP
         self.predicted_mass_diff = self._set_predicted_mass_difference(
-            valid_fragment_range)
+            valid_fragment_range
+        )
 
         self.problem = self._define_lp_problem(valid_fragment_range)
 
-    def _set_x(self, valid_fragment_range, start_fragments,
-               end_fragments, fragments):
+    def _set_x(self, valid_fragment_range, start_fragments, end_fragments, fragments):
         x = [
             [
-                LpVariable(f"x_{i},{j}", lowBound=0, upBound=1,
-                           cat=LpInteger)
+                LpVariable(f"x_{i},{j}", lowBound=0, upBound=1, cat=LpInteger)
                 for j in valid_fragment_range
             ]
             for i in range(self.seq_len)
@@ -77,10 +85,10 @@ class LinearProgramInstance:
                 .item(0, "row_index")
             )
             # min_end is exclusive
-            for i in range(fragment.min_end+1, 0):
+            for i in range(fragment.min_end + 1, 0):
                 x[i][j].setInitialValue(1)
                 x[i][j].fixValue()
-            for i in range(-self.seq_len, fragment.max_end+1):
+            for i in range(-self.seq_len, fragment.max_end + 1):
                 x[i][j].setInitialValue(0)
                 x[i][j].fixValue()
 
@@ -93,8 +101,7 @@ class LinearProgramInstance:
     def _set_y(self, skeleton_seq):
         y = [
             {
-                b: LpVariable(f"y_{i},{b}", lowBound=0, upBound=1,
-                              cat=LpInteger)
+                b: LpVariable(f"y_{i},{b}", lowBound=0, upBound=1, cat=LpInteger)
                 for b in self.nucleosides
             }
             for i in range(self.seq_len)
@@ -118,14 +125,12 @@ class LinearProgramInstance:
 
         return y
 
-
     def _set_z(self, valid_fragment_range):
         z = [
             [
                 {
                     b: LpVariable(
-                        f"z_{i},{j},{b}", lowBound=0, upBound=1,
-                        cat=LpInteger
+                        f"z_{i},{j},{b}", lowBound=0, upBound=1, cat=LpInteger
                     )
                     for b in self.nucleosides
                 }
@@ -138,7 +143,7 @@ class LinearProgramInstance:
     def _set_predicted_mass_difference(self, valid_fragment_range):
         return [
             self.fragment_masses[j]
-            -lpSum(
+            - lpSum(
                 [
                     self.z[i][j][b] * self.nucleoside_masses[b]
                     for i in range(self.seq_len)
@@ -153,14 +158,12 @@ class LinearProgramInstance:
 
         # weight_diff_abs: absolute value of weight_diff
         predicted_mass_diff_abs = [
-            LpVariable(f"predicted_mass_diff_abs_{j}", lowBound=0,
-                       cat=LpContinuous)
+            LpVariable(f"predicted_mass_diff_abs_{j}", lowBound=0, cat=LpContinuous)
             for j in valid_fragment_range
         ]
 
         # optimization function
-        problem += lpSum(
-            [predicted_mass_diff_abs[j] for j in valid_fragment_range])
+        problem += lpSum([predicted_mass_diff_abs[j] for j in valid_fragment_range])
 
         # select one base per position
         for i in range(self.seq_len):
@@ -172,7 +175,7 @@ class LinearProgramInstance:
                 for b in self.nucleosides:
                     problem += self.z[i][j][b] <= self.x[i][j]
                     problem += self.z[i][j][b] <= self.y[i][b]
-                    problem += self.z[i][j][b] >= self.x[i][j]+self.y[i][b]-1
+                    problem += self.z[i][j][b] >= self.x[i][j] + self.y[i][b] - 1
 
         # ensure that fragment is aligned continuously
         # (no gaps: if x[i1,j] = 1 and x[i2,j] = 1, then x[i_between,j] = 1)
@@ -180,20 +183,18 @@ class LinearProgramInstance:
             for i1, i2 in combinations(range(self.seq_len), 2):
                 # i2 and i1 are inclusive
                 assert i2 > i1
-                if i2-i1 > 1:
-                    problem += ((self.x[i1][j]+self.x[i2][j]-1) * (i2-i1-1) <=
-                                lpSum(
-                        [self.x[i_between][j] for i_between in range(i1+1, i2)]
-                    ))
-
+                if i2 - i1 > 1:
+                    problem += (self.x[i1][j] + self.x[i2][j] - 1) * (
+                        i2 - i1 - 1
+                    ) <= lpSum(
+                        [self.x[i_between][j] for i_between in range(i1 + 1, i2)]
+                    )
 
         # constrain weight_diff_abs to be the absolute value of weight_diff
         for j in valid_fragment_range:
             # if j not in invalid_start_fragments and j not in invalid_end_fragments:
-            problem += (predicted_mass_diff_abs[j] >=
-                        self.predicted_mass_diff[j])
-            problem += (predicted_mass_diff_abs[j] >=
-                        -self.predicted_mass_diff[j])
+            problem += predicted_mass_diff_abs[j] >= self.predicted_mass_diff[j]
+            problem += predicted_mass_diff_abs[j] >= -self.predicted_mass_diff[j]
 
         return problem
 
@@ -239,16 +240,14 @@ class LinearProgramInstance:
                 {
                     # Because of the relaxation of the LP, sometimes the value is not exactly 1
                     "left": min(
-                        (i for i in range(self.seq_len) if
-                         milp_is_one(self.x[i][j])),
+                        (i for i in range(self.seq_len) if milp_is_one(self.x[i][j])),
                         default=0,
                     ),
                     "right": max(
-                        (i for i in range(self.seq_len) if
-                         milp_is_one(self.x[i][j])),
+                        (i for i in range(self.seq_len) if milp_is_one(self.x[i][j])),
                         default=-1,
                     )
-                             +1,  # right bound shall be exclusive, hence add 1
+                    + 1,  # right bound shall be exclusive, hence add 1
                     "predicted_fragment_seq": fragment_seq[j],
                     "predicted_fragment_mass": predicted_fragment_mass[j],
                     "observed_mass": self.fragment_masses[j],
