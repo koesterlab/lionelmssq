@@ -50,6 +50,7 @@ class Predictor:
             .sort("observed_mass")
             .with_row_index(name="index")
         )
+        print(len(self.fragments))
 
         # Sort the fragments in the order of single nucleosides, start fragments, end fragments,
         # start fragments AND end fragments, internal fragments and then by mass for each category!
@@ -205,6 +206,40 @@ class Predictor:
             )
         )
 
+        match self.solver:
+            case "gurobi":
+                solver_name = "GUROBI_CMD"
+            case "cbc":
+                solver_name = "PULP_CBC_CMD"
+            case _:
+                raise NotImplementedError(
+                    f"Support for '{self.solver}' is currently not given."
+                )
+
+        # Filter out all internal fragments that do not fit anywhere in skeleton
+        print("Number of internal fragments before filtering: ",
+              len(self.fragments_internal))
+        is_valid_fragment = []
+        for frag_idx in self.fragments_internal.get_column("index").to_list():
+            frag_mass = self.fragments.row(frag_idx)[self.fragments.get_column_index("observed_mass")]
+            filter_instance = LinearProgramInstance(
+                fragment_masses=[frag_mass], start_fragments=list(),
+                end_fragments=list(), seq_len=self.seq_len,
+                fragments=self.fragments, nucleosides=nucleosides,
+                nucleoside_masses=nucleoside_masses, skeleton_seq=skeleton_seq
+            )
+            if filter_instance.check_feasibility(
+                    solver_name=solver_name, num_threads=self.threads,
+                    threshold=frag_mass*MATCHING_THRESHOLD
+            ):
+                is_valid_fragment.append(frag_idx)
+
+        self.fragments_internal = self.fragments_internal.filter(
+            pl.col("index").is_in(is_valid_fragment)
+        )
+        print("Number of internal fragments after filtering: ",
+              len(self.fragments_internal))
+
         self.fragments = (
             self.fragments_side[Side.START]
             .vstack(self.fragments_side[Side.END])
@@ -217,7 +252,7 @@ class Predictor:
             + [i for i in self.fragments_internal.get_column("observed_mass").to_list()]
         )
 
-        fragment_masses = self.fragments.get_column("observed_mass").to_list()
+        # fragment_masses = self.fragments.get_column("observed_mass").to_list()
         n_fragments = len(fragment_masses)
         print("Fragments considered for fitting, n_fragments = ", n_fragments)
 
@@ -236,12 +271,6 @@ class Predictor:
                                             self.seq_len, self.fragments,
                                             nucleosides, nucleoside_masses,
                                             skeleton_seq)
-
-        match self.solver:
-            case "gurobi":
-                solver_name = "GUROBI_CMD"
-            case "cbc":
-                solver_name = "PULP_CBC_CMD"
 
         seq, fragment_predictions = lp_instance.evaluate(solver_name, self.threads)
 

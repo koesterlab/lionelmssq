@@ -197,8 +197,13 @@ class LinearProgramInstance:
 
         return problem
 
+    def check_feasibility(self, solver_name, num_threads, threshold):
+        solver = getSolver(solver_name, threads=num_threads, msg=False)
+        _ = self.problem.solve(solver)
+        return self.problem.objective.value() <= threshold
+
     def evaluate(self, solver_name, num_threads):
-        solver = getSolver(solver_name, threads=num_threads)
+        solver = getSolver(solver_name, threads=num_threads, msg=False)
         # gurobi.msg = False
         # TODO the returned value resembles the accuracy of the prediction
         _ = self.problem.solve(solver)
