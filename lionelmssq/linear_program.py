@@ -15,26 +15,21 @@ import polars as pl
 class LinearProgramInstance:
     def __init__(
         self,
-        fragment_masses,
-        start_fragments,
-        end_fragments,
-        seq_len,
         fragments,
         nucleosides,
-        nucleoside_masses,
         skeleton_seq,
     ):
         # i = 1,...,n: positions in the sequence
         # j = 1,...,m: fragments
         # b = 1,...,k: (modified) bases
-        self.fragment_masses = fragment_masses
-        self.seq_len = seq_len
-        self.nucleosides = nucleosides
-        self.nucleoside_masses = nucleoside_masses
-        valid_fragment_range = list(range(len(fragment_masses)))
+        self.fragment_masses = fragments.get_column("observed_mass").to_list()
+        self.seq_len = len(skeleton_seq)
+        self.nucleoside_names = nucleosides.get_column("nucleoside").to_list()
+        self.nucleoside_masses = dict(nucleosides.iter_rows())
+        valid_fragment_range = list(range(len(self.fragment_masses)))
         # x: binary variables indicating fragment j presence at position i
         self.x = self._set_x(
-            valid_fragment_range, start_fragments, end_fragments, fragments
+            valid_fragment_range, fragments
         )
         # y: binary variables indicating base b at position i
         self.y = self._set_y(skeleton_seq)
@@ -47,7 +42,7 @@ class LinearProgramInstance:
 
         self.problem = self._define_lp_problem(valid_fragment_range)
 
-    def _set_x(self, valid_fragment_range, start_fragments, end_fragments, fragments):
+    def _set_x(self, valid_fragment_range, fragments):
         x = [
             [
                 LpVariable(f"x_{i},{j}", lowBound=0, upBound=1, cat=LpInteger)
@@ -55,42 +50,82 @@ class LinearProgramInstance:
             ]
             for i in range(self.seq_len)
         ]
+        idx_index = fragments.get_column_index("index")
+        idx_min_end = fragments.get_column_index("min_end")
+        idx_max_end = fragments.get_column_index("max_end")
 
         # ensure that start fragments are aligned at the beginning of the sequence
-        for fragment in start_fragments:
-            # j is the row index where the "index" matches fragment.index
-            # fragment.index uses the original (mass sorted) index of the read fragment files,
-            # but in self.fragments we disqualify many fragments of the original file.
-            # Hence, we need to find the correct row index in self.fragments which corresponds to the original index
-            # since in the MILP we fit all the fragments of self.fragments
-            j = (
-                fragments.with_row_index("row_index")
-                .filter(pl.col("index") == fragment.index)
-                .item(0, "row_index")
-            )
-            # min_end is exclusive
-            for i in range(fragment.min_end):
-                x[i][j].setInitialValue(1)
-                x[i][j].fixValue()
-            for i in range(fragment.max_end, self.seq_len):
-                x[i][j].setInitialValue(0)
-                x[i][j].fixValue()
+        if len(fragments.filter(pl.col("true_start"))) > 0:
+            for fragment in fragments.filter(pl.col("true_start")).rows():
+                # j is the row index where the "index" matches fragment.index
+                # fragment.index uses the original (mass sorted) index of the read fragment files,
+                # but in self.fragments we disqualify many fragments of the original file.
+                # Hence, we need to find the correct row index in self.fragments which corresponds to the original index
+                # since in the MILP we fit all the fragments of self.fragments
+                j = (
+                    fragments.with_row_index("row_index")
+                    .filter(pl.col("index") == fragment[idx_index])
+                    .item(0, "row_index")
+                )
+                # min_end is exclusive
+                for i in range(fragment[idx_min_end]):
+                    x[i][j].setInitialValue(1)
+                    x[i][j].fixValue()
+                for i in range(fragment[idx_max_end], self.seq_len):
+                    x[i][j].setInitialValue(0)
+                    x[i][j].fixValue()
 
         # ensure that end fragments are aligned at the end of the sequence
-        for fragment in end_fragments:
-            # j is the row index where the "index" matches fragment.index
-            j = (
-                fragments.with_row_index("row_index")
-                .filter(pl.col("index") == fragment.index)
-                .item(0, "row_index")
-            )
-            # min_end is exclusive
-            for i in range(fragment.min_end + 1, 0):
-                x[i][j].setInitialValue(1)
-                x[i][j].fixValue()
-            for i in range(-self.seq_len, fragment.max_end + 1):
-                x[i][j].setInitialValue(0)
-                x[i][j].fixValue()
+        if len(fragments.filter(pl.col("true_end"))) > 0:
+            for fragment in fragments.filter(pl.col("true_end")).rows():
+                j = (
+                    fragments.with_row_index("row_index")
+                    .filter(pl.col("index") == fragment[idx_index])
+                    .item(0, "row_index")
+                )
+                # min_end is exclusive
+                for i in range(fragment[idx_min_end]+1, 0):
+                    x[i][j].setInitialValue(1)
+                    x[i][j].fixValue()
+                for i in range(-self.seq_len, fragment[idx_max_end]+1):
+                    x[i][j].setInitialValue(0)
+                    x[i][j].fixValue()
+
+        # # ensure that start fragments are aligned at the beginning of the sequence
+        # for fragment in start_fragments:
+        #     # j is the row index where the "index" matches fragment.index
+        #     # fragment.index uses the original (mass sorted) index of the read fragment files,
+        #     # but in self.fragments we disqualify many fragments of the original file.
+        #     # Hence, we need to find the correct row index in self.fragments which corresponds to the original index
+        #     # since in the MILP we fit all the fragments of self.fragments
+        #     j = (
+        #         fragments.with_row_index("row_index")
+        #         .filter(pl.col("index") == fragment.index)
+        #         .item(0, "row_index")
+        #     )
+        #     # min_end is exclusive
+        #     for i in range(fragment.min_end):
+        #         x[i][j].setInitialValue(1)
+        #         x[i][j].fixValue()
+        #     for i in range(fragment.max_end, self.seq_len):
+        #         x[i][j].setInitialValue(0)
+        #         x[i][j].fixValue()
+        #
+        # # ensure that end fragments are aligned at the end of the sequence
+        # for fragment in end_fragments:
+        #     # j is the row index where the "index" matches fragment.index
+        #     j = (
+        #         fragments.with_row_index("row_index")
+        #         .filter(pl.col("index") == fragment.index)
+        #         .item(0, "row_index")
+        #     )
+        #     # min_end is exclusive
+        #     for i in range(fragment.min_end + 1, 0):
+        #         x[i][j].setInitialValue(1)
+        #         x[i][j].fixValue()
+        #     for i in range(-self.seq_len, fragment.max_end + 1):
+        #         x[i][j].setInitialValue(0)
+        #         x[i][j].fixValue()
 
         # Fragments that aren't either start or end are either inner or uncertain.
         # Hence, we don't further constrain their positioning and length and let the
@@ -102,7 +137,7 @@ class LinearProgramInstance:
         y = [
             {
                 b: LpVariable(f"y_{i},{b}", lowBound=0, upBound=1, cat=LpInteger)
-                for b in self.nucleosides
+                for b in self.nucleoside_names
             }
             for i in range(self.seq_len)
         ]
@@ -112,7 +147,7 @@ class LinearProgramInstance:
             if not nucs:
                 # nothing known, do not constrain
                 continue
-            for b in self.nucleosides:
+            for b in self.nucleoside_names:
                 if b not in nucs:
                     # do not allow bases that are not observed in the skeleton
                     y[i][b].setInitialValue(0)
@@ -132,7 +167,7 @@ class LinearProgramInstance:
                     b: LpVariable(
                         f"z_{i},{j},{b}", lowBound=0, upBound=1, cat=LpInteger
                     )
-                    for b in self.nucleosides
+                    for b in self.nucleoside_names
                 }
                 for j in valid_fragment_range
             ]
@@ -147,7 +182,7 @@ class LinearProgramInstance:
                 [
                     self.z[i][j][b] * self.nucleoside_masses[b]
                     for i in range(self.seq_len)
-                    for b in self.nucleosides
+                    for b in self.nucleoside_names
                 ]
             )
             for j in valid_fragment_range
@@ -167,12 +202,13 @@ class LinearProgramInstance:
 
         # select one base per position
         for i in range(self.seq_len):
-            problem += lpSum([self.y[i][b] for b in self.nucleosides]) == 1
+            problem += (lpSum([self.y[i][b] for b in self.nucleoside_names])
+                        == 1)
 
         # fill z with the product of binary variables x and y
         for i in range(self.seq_len):
             for j in valid_fragment_range:
-                for b in self.nucleosides:
+                for b in self.nucleoside_names:
                     problem += self.z[i][j][b] <= self.x[i][j]
                     problem += self.z[i][j][b] <= self.y[i][b]
                     problem += self.z[i][j][b] >= self.x[i][j] + self.y[i][b] - 1
@@ -260,13 +296,13 @@ class LinearProgramInstance:
         return seq, fragment_predictions
 
     def _get_base(self, i):
-        for b in self.nucleosides:
+        for b in self.nucleoside_names:
             if milp_is_one(self.y[i][b]):
                 return b
         return None
 
     def _get_base_fragmentwise(self, i, j):
-        for b in self.nucleosides:
+        for b in self.nucleoside_names:
             if milp_is_one(self.z[i][j][b]):
                 return b
         return None

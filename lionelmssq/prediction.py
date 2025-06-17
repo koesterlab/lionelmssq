@@ -154,11 +154,6 @@ class Predictor:
             self._reduce_alphabet()
         )
 
-        nucleosides = masses.get_column(
-            "nucleoside"
-        ).to_list()  # TODO: Handle the case of multiple nucleosides with the same mass when using "aggregate" grouping in the masses table
-        nucleoside_masses = dict(masses.iter_rows())
-
         # Now we build the skeleton sequence from both sides and align them to get the final skeleton sequence!
         (
             skeleton_seq,
@@ -188,24 +183,86 @@ class Predictor:
         self._collect_fragment_side_masses(Side.START, restrict_is_start_end=True)
         self._collect_fragment_side_masses(Side.END, restrict_is_start_end=True)
 
+        def select_ends(fragments, idx):
+            selected_fragments = [
+                frag for frag in fragments
+                if frag.index == idx
+            ]
+            if len(selected_fragments) == 0:
+                return 0, -1
+            return selected_fragments[0].min_end, selected_fragments[0].max_end
+
+        # Add new information from skeleton building to dataframe
+        self.fragments = self.fragments.with_columns(
+            (pl.col("index").is_in([frag.index for frag in start_fragments])).alias("true_start"),
+            (pl.col("index").is_in([frag.index for frag in end_fragments])).alias("true_end"),
+            (pl.col("is_internal") & ~pl.col("index").is_in(
+                [frag.index for frag in start_fragments+end_fragments]
+            )).alias("true_internal"),
+            (pl.col("index").map_elements(
+                lambda x: select_ends(start_fragments+end_fragments, x)[0],
+                return_dtype=int
+            )).alias("min_end"),
+            (pl.col("index").map_elements(
+                lambda x: select_ends(start_fragments+end_fragments, x)[1],
+                return_dtype=int
+            )).alias("max_end"),
+        )
+
         # Rewriting the observed_mass column for the start and the end fragment_sides
         # with the tag(s) subtracted masses for latter processing!
-        self.fragments_side[Side.START].replace_column(
-            self.fragments_side[Side.START].get_column_index("observed_mass"),
-            pl.Series("observed_mass", self.fragment_masses[Side.START]),
+        self.fragments = pl.concat(
+            [self.fragments.filter(pl.col("true_start")).replace_column(
+                self.fragments.get_column_index("observed_mass"),
+                pl.Series("observed_mass", self.fragment_masses[Side.START])),
+            self.fragments.filter(~pl.col("true_start"))
+            ]
         )
-        self.fragments_side[Side.END].replace_column(
-            self.fragments_side[Side.END].get_column_index("observed_mass"),
-            pl.Series("observed_mass", self.fragment_masses[Side.END]),
+        # TODO: Remove usage of self.fragment_side and other unnecessary
+        #  class variables completely
+        self.fragments = pl.concat(
+            [self.fragments.filter(pl.col("true_end")).replace_column(
+                self.fragments.get_column_index("observed_mass"),
+                pl.Series("observed_mass", self.fragment_masses[Side.END])),
+            self.fragments.filter(~pl.col("true_end"))
+            ]
         )
 
-        # Create a data frame for the internal fragments:
-        self.fragments_internal = self.fragments.filter(pl.col("is_internal")).filter(
-            ~pl.col("index").is_in(
-                [i.index for i in start_fragments] + [i.index for i in end_fragments]
-            )
-        )
+        # self.fragments_side[Side.START].replace_column(
+        #     self.fragments_side[Side.START].get_column_index("observed_mass"),
+        #     pl.Series("observed_mass", self.fragment_masses[Side.START]),
+        # )
+        # self.fragments_side[Side.END].replace_column(
+        #     self.fragments_side[Side.END].get_column_index("observed_mass"),
+        #     pl.Series("observed_mass", self.fragment_masses[Side.END]),
+        # )
 
+        # print(self.fragments.filter(pl.col("true_start")).select([
+        #     "index", "observed_mass", "true_start"]))
+        # print(self.fragment_masses[Side.START])
+        # print(pl.DataFrame({
+        # "observed_mass": self.fragment_masses[Side.START],
+        # "index": self.fragments.filter(pl.col(
+        #     "true_start")).get_column("index").to_list()}))
+        # print("test")
+        # print(self.fragments.filter(pl.col("true_start")).replace_column(
+        #     self.fragments.get_column_index("observed_mass"),
+        #     pl.Series("observed_mass", self.fragment_masses[Side.START])
+        # ).select(["index", "observed_mass"]))
+
+        # self.fragments.update(
+        #     pl.DataFrame({
+        #         "observed_mass": self.fragment_masses[Side.START],
+        #         "select_index": self.fragments.filter(pl.col(
+        #             "true_start")).get_column("index").to_list()
+        #     }),
+        #     left_on=["index"], right_on=["select_index"], how="full"
+        # )
+        # print(self.fragments.filter(pl.col("true_start")).select([
+        #     "index", "observed_mass", "true_start"]))
+        # print(self.fragments.columns)
+
+        # TODO: Move solver selection in function called in init
         match self.solver:
             case "gurobi":
                 solver_name = "GUROBI_CMD"
@@ -219,53 +276,43 @@ class Predictor:
         # Filter out all internal fragments that do not fit anywhere in skeleton
         print(
             "Number of internal fragments before filtering: ",
-            len(self.fragments_internal),
+            len(self.fragments.filter(pl.col("true_internal"))),
         )
+
         is_valid_fragment = []
-        for frag_idx in self.fragments_internal.get_column("index").to_list():
-            frag_mass = self.fragments.row(frag_idx)[
-                self.fragments.get_column_index("observed_mass")
-            ]
+        for frag in self.fragments.filter(pl.col("true_internal")).rows():
             filter_instance = LinearProgramInstance(
-                fragment_masses=[frag_mass],
-                start_fragments=list(),
-                end_fragments=list(),
-                seq_len=self.seq_len,
-                fragments=self.fragments,
-                nucleosides=nucleosides,
-                nucleoside_masses=nucleoside_masses,
+                fragments=self.fragments.filter(
+                    pl.col("index") == frag[self.fragments.get_column_index("index")]),
+                nucleosides=masses,
                 skeleton_seq=skeleton_seq,
             )
             if filter_instance.check_feasibility(
                 solver_name=solver_name,
                 num_threads=self.threads,
-                threshold=frag_mass * MATCHING_THRESHOLD,
+                threshold=MATCHING_THRESHOLD * frag[self.fragments.get_column_index("observed_mass")],
             ):
-                is_valid_fragment.append(frag_idx)
+                is_valid_fragment.append(frag[self.fragments.get_column_index("index")])
 
-        self.fragments_internal = self.fragments_internal.filter(
-            pl.col("index").is_in(is_valid_fragment)
+        self.fragments = self.fragments.with_columns(
+            true_internal=pl.when(pl.col("index").is_in(is_valid_fragment))
+            .then(pl.col("true_internal"))
+            .otherwise(False)
         )
+
         print(
             "Number of internal fragments after filtering: ",
-            len(self.fragments_internal),
+            len(self.fragments.filter(pl.col("true_internal"))),
         )
 
         self.fragments = (
-            self.fragments_side[Side.START]
-            .vstack(self.fragments_side[Side.END])
-            .vstack(self.fragments_internal)
+            self.fragments.filter(pl.col("true_start"))
+            .vstack(self.fragments.filter(pl.col("true_end")))
+            .vstack(self.fragments.filter(pl.col("true_internal")))
         )
 
-        fragment_masses = (
-            self.fragment_masses[Side.START]
-            + self.fragment_masses[Side.END]
-            + [i for i in self.fragments_internal.get_column("observed_mass").to_list()]
-        )
-
-        # fragment_masses = self.fragments.get_column("observed_mass").to_list()
-        n_fragments = len(fragment_masses)
-        print("Fragments considered for fitting, n_fragments = ", n_fragments)
+        print("Fragments considered for fitting, n_fragments = ",
+              len(self.fragments.get_column("observed_mass").to_list()))
 
         if not start_fragments:
             logger.warning(
@@ -278,14 +325,8 @@ class Predictor:
             )
 
         lp_instance = LinearProgramInstance(
-            fragment_masses,
-            start_fragments,
-            end_fragments,
-            self.seq_len,
-            self.fragments,
-            nucleosides,
-            nucleoside_masses,
-            skeleton_seq,
+            fragments=self.fragments, nucleosides=masses,
+            skeleton_seq=skeleton_seq,
         )
 
         seq, fragment_predictions = lp_instance.evaluate(solver_name, self.threads)
