@@ -28,9 +28,7 @@ class LinearProgramInstance:
         self.nucleoside_masses = dict(nucleosides.iter_rows())
         valid_fragment_range = list(range(len(self.fragment_masses)))
         # x: binary variables indicating fragment j presence at position i
-        self.x = self._set_x(
-            valid_fragment_range, fragments
-        )
+        self.x = self._set_x(valid_fragment_range, fragments)
         # y: binary variables indicating base b at position i
         self.y = self._set_y(skeleton_seq)
         # z: binary variables indicating product of x and y
@@ -84,10 +82,10 @@ class LinearProgramInstance:
                     .item(0, "row_index")
                 )
                 # min_end is exclusive
-                for i in range(fragment[idx_min_end]+1, 0):
+                for i in range(fragment[idx_min_end] + 1, 0):
                     x[i][j].setInitialValue(1)
                     x[i][j].fixValue()
-                for i in range(-self.seq_len, fragment[idx_max_end]+1):
+                for i in range(-self.seq_len, fragment[idx_max_end] + 1):
                     x[i][j].setInitialValue(0)
                     x[i][j].fixValue()
 
@@ -166,8 +164,7 @@ class LinearProgramInstance:
 
         # select one base per position
         for i in range(self.seq_len):
-            problem += (lpSum([self.y[i][b] for b in self.nucleoside_names])
-                        == 1)
+            problem += lpSum([self.y[i][b] for b in self.nucleoside_names]) == 1
 
         # fill z with the product of binary variables x and y
         for i in range(self.seq_len):
