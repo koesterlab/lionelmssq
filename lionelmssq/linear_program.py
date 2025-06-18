@@ -91,42 +91,6 @@ class LinearProgramInstance:
                     x[i][j].setInitialValue(0)
                     x[i][j].fixValue()
 
-        # # ensure that start fragments are aligned at the beginning of the sequence
-        # for fragment in start_fragments:
-        #     # j is the row index where the "index" matches fragment.index
-        #     # fragment.index uses the original (mass sorted) index of the read fragment files,
-        #     # but in self.fragments we disqualify many fragments of the original file.
-        #     # Hence, we need to find the correct row index in self.fragments which corresponds to the original index
-        #     # since in the MILP we fit all the fragments of self.fragments
-        #     j = (
-        #         fragments.with_row_index("row_index")
-        #         .filter(pl.col("index") == fragment.index)
-        #         .item(0, "row_index")
-        #     )
-        #     # min_end is exclusive
-        #     for i in range(fragment.min_end):
-        #         x[i][j].setInitialValue(1)
-        #         x[i][j].fixValue()
-        #     for i in range(fragment.max_end, self.seq_len):
-        #         x[i][j].setInitialValue(0)
-        #         x[i][j].fixValue()
-        #
-        # # ensure that end fragments are aligned at the end of the sequence
-        # for fragment in end_fragments:
-        #     # j is the row index where the "index" matches fragment.index
-        #     j = (
-        #         fragments.with_row_index("row_index")
-        #         .filter(pl.col("index") == fragment.index)
-        #         .item(0, "row_index")
-        #     )
-        #     # min_end is exclusive
-        #     for i in range(fragment.min_end + 1, 0):
-        #         x[i][j].setInitialValue(1)
-        #         x[i][j].fixValue()
-        #     for i in range(-self.seq_len, fragment.max_end + 1):
-        #         x[i][j].setInitialValue(0)
-        #         x[i][j].fixValue()
-
         # Fragments that aren't either start or end are either inner or uncertain.
         # Hence, we don't further constrain their positioning and length and let the
         # LP decide.

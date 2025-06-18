@@ -121,7 +121,7 @@ class Predictor:
 
     def predict(self) -> Prediction:
         # TODO: get rid of the requirement to pass the length of the sequence
-        # and instead infer it from the fragments
+        #  and instead infer it from the fragments
 
         # Collect the fragments for the start and end side which also include the start_end fragments (entire sequences)
         self.fragments_side[Side.START] = self.fragments.filter(
@@ -209,8 +209,8 @@ class Predictor:
             )).alias("max_end"),
         )
 
-        # Rewriting the observed_mass column for the start and the end fragment_sides
-        # with the tag(s) subtracted masses for latter processing!
+        # Rewriting the observed_mass column for the start and the end
+        # fragments with the tag(s) subtracted masses for latter processing!
         self.fragments = pl.concat(
             [self.fragments.filter(pl.col("true_start")).replace_column(
                 self.fragments.get_column_index("observed_mass"),
@@ -228,40 +228,6 @@ class Predictor:
             ]
         )
 
-        # self.fragments_side[Side.START].replace_column(
-        #     self.fragments_side[Side.START].get_column_index("observed_mass"),
-        #     pl.Series("observed_mass", self.fragment_masses[Side.START]),
-        # )
-        # self.fragments_side[Side.END].replace_column(
-        #     self.fragments_side[Side.END].get_column_index("observed_mass"),
-        #     pl.Series("observed_mass", self.fragment_masses[Side.END]),
-        # )
-
-        # print(self.fragments.filter(pl.col("true_start")).select([
-        #     "index", "observed_mass", "true_start"]))
-        # print(self.fragment_masses[Side.START])
-        # print(pl.DataFrame({
-        # "observed_mass": self.fragment_masses[Side.START],
-        # "index": self.fragments.filter(pl.col(
-        #     "true_start")).get_column("index").to_list()}))
-        # print("test")
-        # print(self.fragments.filter(pl.col("true_start")).replace_column(
-        #     self.fragments.get_column_index("observed_mass"),
-        #     pl.Series("observed_mass", self.fragment_masses[Side.START])
-        # ).select(["index", "observed_mass"]))
-
-        # self.fragments.update(
-        #     pl.DataFrame({
-        #         "observed_mass": self.fragment_masses[Side.START],
-        #         "select_index": self.fragments.filter(pl.col(
-        #             "true_start")).get_column("index").to_list()
-        #     }),
-        #     left_on=["index"], right_on=["select_index"], how="full"
-        # )
-        # print(self.fragments.filter(pl.col("true_start")).select([
-        #     "index", "observed_mass", "true_start"]))
-        # print(self.fragments.columns)
-
         # TODO: Move solver selection in function called in init
         match self.solver:
             case "gurobi":
@@ -273,12 +239,12 @@ class Predictor:
                     f"Support for '{self.solver}' is currently not given."
                 )
 
-        # Filter out all internal fragments that do not fit anywhere in skeleton
         print(
             "Number of internal fragments before filtering: ",
             len(self.fragments.filter(pl.col("true_internal"))),
         )
 
+        # Filter out all internal fragments that do not fit anywhere in skeleton
         is_valid_fragment = []
         for frag in self.fragments.filter(pl.col("true_internal")).rows():
             filter_instance = LinearProgramInstance(
@@ -293,7 +259,6 @@ class Predictor:
                 threshold=MATCHING_THRESHOLD * frag[self.fragments.get_column_index("observed_mass")],
             ):
                 is_valid_fragment.append(frag[self.fragments.get_column_index("index")])
-
         self.fragments = self.fragments.with_columns(
             true_internal=pl.when(pl.col("index").is_in(is_valid_fragment))
             .then(pl.col("true_internal"))
