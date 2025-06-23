@@ -119,7 +119,7 @@ class Predictor:
             invalid_end_fragments,
         )
 
-    def predict(self) -> Prediction:
+    def predict(self, modification_rate: float = 0.5) -> Prediction:
         # TODO: get rid of the requirement to pass the length of the sequence
         #  and instead infer it from the fragments
 
@@ -265,6 +265,7 @@ class Predictor:
                 ),
                 nucleosides=masses,
                 skeleton_seq=skeleton_seq,
+                modification_rate=modification_rate,
             )
             if filter_instance.check_feasibility(
                 solver_name=solver_name,
@@ -309,6 +310,7 @@ class Predictor:
             fragments=self.fragments,
             nucleosides=masses,
             skeleton_seq=skeleton_seq,
+            modification_rate=modification_rate,
         )
 
         seq, fragment_predictions = lp_instance.evaluate(solver_name, self.threads)
