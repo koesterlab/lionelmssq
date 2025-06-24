@@ -69,23 +69,10 @@ MASS_NAMES = {
 }
 
 
-def set_up_bit_table():
+def set_up_bit_table(integer_masses):
     """
     Calculate complete bit-representation mass table with dynamic programming.
     """
-    integer_masses = pl.Series(
-        EXPLANATION_MASSES.select(pl.col("tolerated_integer_masses"))
-    ).to_list()
-
-    # Add a default weight for easier initialization
-    integer_masses += [0]
-
-    # Ensure unique entries after tolerance correction
-    integer_masses = list(set(integer_masses))
-
-    # Sort the tolerated_integer_masses for better overview
-    integer_masses.sort()
-
     # Initialize bit-representation numpy table
     max_col = int(np.ceil((MAX_MASS + 1) / COMPRESSION_RATE))
     dp_table = np.zeros((len(integer_masses), max_col), dtype=settings["type"])
@@ -124,23 +111,10 @@ def set_up_bit_table():
     return dp_table
 
 
-def set_up_mass_table():
+def set_up_mass_table(integer_masses):
     """
     Calculate complete mass table with dynamic programming.
     """
-    integer_masses = pl.Series(
-        EXPLANATION_MASSES.select(pl.col("tolerated_integer_masses"))
-    ).to_list()
-
-    # Add a default weight for easier initialization
-    integer_masses += [0]
-
-    # Ensure unique entries after tolerance correction
-    integer_masses = list(set(integer_masses))
-
-    # Sort the tolerated_integer_masses for better overview
-    integer_masses.sort()
-
     # Initialize numpy table
     dp_table = np.zeros((len(integer_masses), MAX_MASS + 1), dtype=np.uint8)
     dp_table[0, 0] = 3.0
@@ -164,6 +138,33 @@ def set_up_mass_table():
     return dp_table
 
 
+def load_dp_table(compression_rate):
+    """
+    Load dynamic-programming table if it exists and compute it otherwise.
+    """
+    # Get list of integer masses
+    integer_masses = EXPLANATION_MASSES.get_column("tolerated_integer_masses").to_list()
+
+    # Add a default weight for easier initialization
+    integer_masses += [0]
+
+    # Ensure unique and sorted entries after tolerance correction
+    integer_masses = sorted(set(integer_masses))
+
+    # Compute and save bit-representation DP table if not existing
+    if not pathlib.Path(f"{TABLE_PATH}.{compression_rate}_per_cell.npy").is_file():
+        print("Table not found")
+        dp_table = (
+            set_up_mass_table(integer_masses)
+            if compression_rate == 1
+            else (set_up_bit_table(integer_masses))
+        )
+        np.save(f"{TABLE_PATH}.{compression_rate}_per_cell", dp_table)
+
+    # Read DP table
+    return np.load(f"{TABLE_PATH}.{compression_rate}_per_cell.npy"), integer_masses
+
+
 def explain_mass_with_dp(
     mass: float,
     with_memo: bool,
@@ -173,35 +174,14 @@ def explain_mass_with_dp(
     """
     Return all possible combinations of nucleosides that could sum up to the given mass.
     """
-    tolerated_integer_masses = pl.Series(
-        EXPLANATION_MASSES.select(pl.col("tolerated_integer_masses"))
-    ).to_list()
-
-    # Convert the targets and tolerated_integer_masses to integers for easy operations
+    # Convert the target to an integer for easy operations
     target = int(round(mass / TOLERANCE, 0))
 
     # Set matching threshold based on target mass
     threshold = int(np.ceil(threshold * target))
 
-    # Add a default weight for easier initialization
-    tolerated_integer_masses += [0]
-
-    # Ensure unique entries after tolerance correction
-    tolerated_integer_masses = list(set(tolerated_integer_masses))
-
-    # Sort the tolerated_integer_masses, makes life easier
-    tolerated_integer_masses.sort()
-
-    # Compute and save bit-representation DP table if not existing
-    if not pathlib.Path(f"{TABLE_PATH}.{compression_rate}_per_cell.npy").is_file():
-        print("Table not found")
-        dp_table = (
-            set_up_mass_table() if compression_rate == 1 else (set_up_bit_table())
-        )
-        np.save(f"{TABLE_PATH}.{compression_rate}_per_cell", dp_table)
-
-    # Read DP table
-    dp_table = np.load(f"{TABLE_PATH}.{compression_rate}_per_cell.npy")
+    # Load DP table
+    dp_table, tolerated_integer_masses = load_dp_table(compression_rate)
 
     memo = {}
 
@@ -352,21 +332,18 @@ def explain_mass(
     Returns all the possible combinations of nucleosides that could sum up to the given mass.
     """
 
-    tolerated_integer_masses = pl.Series(
-        explanation_masses.select(pl.col("tolerated_integer_masses"))
+    tolerated_integer_masses = explanation_masses.get_column(
+        "tolerated_integer_masses"
     ).to_list()
 
-    # Convert the targets and tolerated_integer_masses to integers for easy operations
+    # Convert the target to an integer for easy operations
     target = int(round(mass / TOLERANCE, 0))
 
     # Set matching threshold based on target mass
     matching_threshold = int(np.ceil(matching_threshold * target))
 
-    # Ensure unique entries after tolerance correction
-    tolerated_integer_masses = list(set(tolerated_integer_masses))
-
-    # Sort the tolerated_integer_masses, makes life easier
-    tolerated_integer_masses.sort()
+    # Ensure unique and sorted entries after tolerance correction
+    tolerated_integer_masses = sorted(set(tolerated_integer_masses))
 
     # Memoization dictionary to store results for a given target
     memo = {}
