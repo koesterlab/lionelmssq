@@ -55,8 +55,9 @@ TABLE_PATH = (
 )
 
 # Create directory for DP table if it does not already exist
-if not os.path.exists(TABLE_PATH):
-    os.makedirs(TABLE_PATH)
+subdir = "/".join(TABLE_PATH.split("/")[:-1])
+if not os.path.exists(subdir):
+    os.makedirs(subdir)
 
 print(TABLE_PATH)
 
