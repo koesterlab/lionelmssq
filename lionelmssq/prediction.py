@@ -429,7 +429,6 @@ class Predictor:
                 entry
                 for entry in explain_mass(
                     diff,
-                    explanation_masses=explanation_masses,
                     matching_threshold=threshold,
                 )
                 if entry.breakage == "c/y_c/y"
