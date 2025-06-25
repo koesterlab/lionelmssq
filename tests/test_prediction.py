@@ -6,10 +6,9 @@ import pytest
 from lionelmssq.prediction import Predictor
 from lionelmssq.common import parse_nucleosides
 from lionelmssq.plotting import plot_prediction
-from lionelmssq.utils import (
-    estimate_MS_error_matching_threshold,
-    mark_terminal_fragment_candidates,
-)
+from lionelmssq.utils import estimate_MS_error_matching_threshold
+from lionelmssq.fragment_classification import mark_terminal_fragment_candidates
+
 import polars as pl
 import yaml
 
@@ -17,6 +16,7 @@ from lionelmssq.masses import (
     UNIQUE_MASSES,
     TOLERANCE,
     MATCHING_THRESHOLD,
+    PHOSPHATE_LINK_MASS,
 )
 
 _TESTCASES = importlib.resources.files("tests") / "testcases"
@@ -59,20 +59,17 @@ def test_testcase(testcase):
         fragments = pl.read_csv(
             base_path / "fragments.tsv", separator="\t"
         ).with_columns(
-            (pl.col("observed_mass_without_backbone").alias("observed_mass")),
-            (pl.col("true_nucleoside_mass").alias("true_mass")),
-            # ((pl.col("left") == 0) & (~(pl.col("right") == (len(true_seq))))).alias("is_start"),
-            # ((pl.col("right") == (len(true_seq))) & (~(pl.col("left") == 0))).alias("is_end"),
-            # ((pl.col("left") == 0) & (pl.col("right") == (len(true_seq)))).alias("is_start_end"),
-            # ((~(pl.col("left") == 0)) & (~(pl.col("right") == (len(true_seq))))).alias("is_internal"),
+            (pl.col("observed_mass").alias("observed_mass")),
+            (pl.col("true_mass_with_backbone").alias("true_mass")),
         )
         with pl.Config(tbl_rows=30):
             print(fragments)
 
-        unique_masses = UNIQUE_MASSES
-        # unique_masses = UNIQUE_MASSES.filter(
-        #     pl.col("nucleoside").is_in(["A", "U", "G", "C"])
-        # )
+        unique_masses = UNIQUE_MASSES.with_columns(
+            (pl.col("monoisotopic_mass") + PHOSPHATE_LINK_MASS).alias(
+                "monoisotopic_mass"
+            )  # Added the appropriate backbone mass!
+        )
 
         explanation_masses = unique_masses.with_columns(
             (pl.col("monoisotopic_mass") / TOLERANCE)
