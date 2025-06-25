@@ -409,8 +409,6 @@ def explain_mass(
     memo = {}
 
     def dp(remaining, start):
-        # TODO: Can check if there are any possible ways to achieve remaining using tolerated_integer_masses[start:], if NOT, don't execute the dict check, nor store the values (empty list) in the dictionary!
-
         # If the result for this state is already computed, return it
         if (remaining, start) in memo:
             return memo[(remaining, start)]

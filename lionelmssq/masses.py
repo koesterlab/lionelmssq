@@ -30,7 +30,6 @@ ROUND_DECIMAL = 5  # The precision (after decimal points) to which to consider t
 
 MASSES = MASSES.with_columns(pl.col("monoisotopic_mass").round(ROUND_DECIMAL))
 
-# TODO: Add the appropriate backbone masses and the terminal extra masses to the nucleosides!
 UNIQUE_MASSES = (
     MASSES.group_by("monoisotopic_mass", maintain_order=True)
     .first()
