@@ -64,7 +64,12 @@ print(TABLE_PATH)
 
 PHOSPHATE_LINK_MASS = 61.95577  # P(30.97389) + 2*O(2*15.99491) + H(1.00783)
 
-# Additional weights for different breakage options
+
+# METHOD: Precompute all weight changes caused by breakages and adapt the
+# target masses accordingly while finding compositions explaining it.
+# We consider tags at the 5'- or 3'-end to be possible breakage options.
+
+# Load additional weights for different breakage options
 START_OPTIONS = pl.read_csv(
     importlib.resources.files(__package__)
     / "assets"
@@ -78,6 +83,8 @@ END_OPTIONS = pl.read_csv(
     separator="\t",
 )
 
+# Compute dict assigning each possible breakage-induced weight change its list
+# of associated breakage pairs (i.e. 5'- and 3'-end) that can result into it
 BREAKAGES = {}
 for start, end in list(
     product(
@@ -93,8 +100,8 @@ for start, end in list(
         BREAKAGES[val] = []
     BREAKAGES[val] += [f"{start}_{end}"]
 
-# BREAKAGES = {0: ["c/y_c/y"]}
 BREAKAGES = {int(val / TOLERANCE): BREAKAGES[val] for val in BREAKAGES.keys()}
+
 
 # This dictates a relative matching threshold such that we consider abs(sum(masses)/target_mass - 1) < MATCHING_THRESHOLD to be matched!
 MATCHING_THRESHOLD = 20e-6
