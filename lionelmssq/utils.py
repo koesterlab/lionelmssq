@@ -1,9 +1,19 @@
-from lionelmssq.mass_explanation import explain_mass
-import polars as pl
+from lionelmssq.mass_explanation import (
+    load_dp_table,
+    is_valid_mass,
+    explain_mass_with_dp,
+)
 
-from lionelmssq.masses import EXPLANATION_MASSES, UNIQUE_MASSES, MATCHING_THRESHOLD
-from lionelmssq.masses import TOLERANCE
-from lionelmssq.masses import ROUND_DECIMAL
+import polars as pl
+import numpy as np
+
+from lionelmssq.masses import (
+    COMPRESSION_RATE,
+    UNIQUE_MASSES,
+    MATCHING_THRESHOLD,
+    TOLERANCE,
+    BREAKAGES,
+)
 
 
 def counts_subset(explanation, ms1_explanations):
@@ -19,243 +29,241 @@ def counts_subset(explanation, ms1_explanations):
     return False
 
 
-def determine_terminal_fragments(
+def filter_by_ms1_composition(fragment_mass, ms1_mass, ms1_compositions, threshold):
+    compositions = [
+        entry
+        for entry in explain_mass_with_dp(
+            mass=fragment_mass,
+            with_memo=True,
+            compression_rate=COMPRESSION_RATE,
+            threshold=threshold,
+        )
+    ]
+
+    # Remove all full-sequence explanations that differ in mass by more than the threshold
+    if abs(fragment_mass / ms1_mass - 1) > threshold:
+        compositions = {
+            composition
+            for composition in compositions
+            if composition.breakage != "START_END"
+        }
+
+    # Remove all explanations that are not a subset of any MS1 composition
+    for composition in compositions:
+        composition.explanations = {
+            explanation
+            for explanation in composition.explanations
+            if counts_subset(explanation, ms1_compositions.explanations)
+        }
+    return compositions
+
+
+def is_complete_fragment_candidate(mass, dp_table):
+    # Reduce breakage options to only allow complete sequences
+    breakages = {
+        breakage_weight: [
+            breakage
+            for breakage in BREAKAGES[breakage_weight]
+            if breakage == "START_END"
+        ]
+        for breakage_weight in BREAKAGES
+    }
+    # Return flag whether the mass is valid with any remaining breakage options
+    return is_valid_mass(mass, dp_table, breakages)
+
+
+def is_start_fragment_candidate(mass, dp_table):
+    # Reduce breakage options to only allow terminal fragments (start only)
+    breakages = {
+        breakage_weight: [
+            breakage
+            for breakage in BREAKAGES[breakage_weight]
+            if "START_" in breakage and breakage != "START_END"
+        ]
+        for breakage_weight in BREAKAGES
+    }
+    # Return flag whether the mass is valid with any remaining breakage options
+    return is_valid_mass(mass, dp_table, breakages)
+
+
+def is_end_fragment_candidate(mass, dp_table):
+    # Reduce breakage options to only allow terminal fragments (end only)
+    breakages = {
+        breakage_weight: [
+            breakage
+            for breakage in BREAKAGES[breakage_weight]
+            if "_END" in breakage and breakage != "START_END"
+        ]
+        for breakage_weight in BREAKAGES
+    }
+    # Return flag whether the mass is valid with any remaining breakage options
+    return is_valid_mass(mass, dp_table, breakages)
+
+
+def is_internal_fragment_candidate(mass, dp_table):
+    # Reduce breakage options to only allow internal fragments
+    breakages = {
+        breakage_weight: [
+            breakage
+            for breakage in BREAKAGES[breakage_weight]
+            if not ("START_" in breakage or "_END" in breakage)
+        ]
+        for breakage_weight in BREAKAGES
+    }
+    # Return flag whether the mass is valid with any remaining breakage options
+    return is_valid_mass(mass, dp_table, breakages)
+
+
+def is_singleton_candidate(mass, integer_masses, threshold=MATCHING_THRESHOLD):
+    # Convert the target to an integer for easy operations
+    target = int(round(mass / TOLERANCE, 0))
+
+    # Set matching threshold based on target mass
+    threshold = int(np.ceil(threshold * target))
+
+    # Check for each breakage whether a singleton mass could be found
+    for breakage_weight in BREAKAGES:
+        for value in range(target - threshold, target + threshold + 1):
+            if value - breakage_weight in integer_masses:
+                return True
+    return False
+
+
+def mark_terminal_fragment_candidates(
     fragment_masses,
     ms1_mass=None,
     output_file_path=None,
-    label_mass_3T=0.0,
-    label_mass_5T=0.0,
-    explanation_masses=EXPLANATION_MASSES,
     mass_column_name="neutral_mass",
     output_mass_column_name="observed_mass",
     intensity_cutoff=0.5e6,
     mass_cutoff=50000,
     matching_threshold=MATCHING_THRESHOLD,
-    ms1_mass_deviations_allowed=0.01,
+    table_path=None,
+    # ms1_mass_deviations_allowed=0.01,
 ):
     neutral_masses = (
         fragment_masses.select(pl.col(mass_column_name)).to_series().to_list()
     )
 
-    tags = ["3Tag", "5Tag"]
-    tag_masses = [
-        round(label_mass_3T, ROUND_DECIMAL),
-        round(label_mass_5T, ROUND_DECIMAL),
-    ]
-    nucleoside_df = pl.DataFrame({"nucleoside": tags, "monoisotopic_mass": tag_masses})
-
-    nucleoside_df = nucleoside_df.with_columns(
-        (pl.col("monoisotopic_mass") / TOLERANCE)
-        .round(0)
-        .cast(pl.Int64)
-        .alias("tolerated_integer_masses")
+    dp_table, integer_masses = load_dp_table(
+        compression_rate=COMPRESSION_RATE, table_path=table_path
     )
 
-    explanation_masses = explanation_masses.vstack(nucleoside_df)
-
-    is_start = []  # Start tag in an explanation but NOT end tag in the SAME explanation
-    is_end = []  # End tag in an explanation but NOT start tag in the SAME explanation
-    is_start_end = []  # Both start and end tag in the same explanation (WITH OR WITHOUT MS1 MASS)
-    is_internal = []  # NO tags in an explanation
-    skip_mass = []
-    # nucleotide_only_masses = []
-    mass_explanations = []
-    singleton_mass = []
-
+    ms1_compositions = None
     if ms1_mass:
-        ms1_explained_mass = [
+        # Compute all compositions for the full sequence (with both tags)
+        ms1_compositions = [
             entry
-            for entry in explain_mass(
-                ms1_mass,
-                explanation_masses=explanation_masses,
-                matching_threshold=matching_threshold,
+            for entry in explain_mass_with_dp(
+                mass=ms1_mass,
+                with_memo=True,
+                compression_rate=COMPRESSION_RATE,
+                threshold=matching_threshold,
             )
-            if entry.breakage == "c/y_c/y"
-        ][0]
-        ms1_explained_mass.explanations = {
-            element
-            for element in ms1_explained_mass.explanations
-            if element.count("3Tag") == 1 and element.count("5Tag") == 1
-        }
-        # print(ms1_explained_mass.explanations)
-        if not ms1_mass:
-            print("MS1 mass is not explained by the nucleosides!")
-            ms1_mass = None
-
-    for mass in neutral_masses:
-        explained_mass = [
-            entry
-            for entry in explain_mass(
-                mass,
-                explanation_masses=explanation_masses,
-                matching_threshold=matching_threshold,
-            )
-            if entry.breakage == "c/y_c/y"
+            if entry.breakage == "START_END"
         ][0]
 
-        if ms1_mass:
-            explained_mass.explanations = {
-                explanation
-                for explanation in explained_mass.explanations
-                if counts_subset(explanation, ms1_explained_mass.explanations)
-                # if the counts of the different nucleosides are less than or equal to the respective counts in the MS1 mass explanation
-            }
-            # print(explained_mass.explanations)
+        if len(ms1_compositions) == 0:
+            print("The MS1 mass could not be explained by the nucleosides!")
 
-            # If ms1 mass is defined, then also remove the explanations which differ in mass by more than 1% and have both kind of tags in there!
-            if abs(mass / ms1_mass - 1) > ms1_mass_deviations_allowed:
-                explained_mass.explanations = {
-                    explanation
-                    for explanation in explained_mass.explanations
-                    if not ("3Tag" in explanation and "5Tag" in explanation)
-                }
-        else:
-            # Remove explanations which have more than one tag of each kind in them!
-            # This greatly increases the reliability of tag determination!
-            explained_mass.explanations = {
-                explanation
-                for explanation in explained_mass.explanations
-                if explanation.count("3Tag") <= 1 and explanation.count("5Tag") <= 1
-            }
+    # Filter compositions by MS1 mass
+    # TODO: Using the MS1 filter here is not compatible with only doing a table look-up;
+    #  check whether it is still helpful when having composition profiles
+    # for mass in neutral_masses:
+    #     if ms1_compositions:
+    #         compositions = filter_by_ms1_composition(
+    #             fragment_mass=mass, ms1_mass=ms1_mass,
+    #             ms1_compositions=ms1_compositions,
+    #             threshold=ms1_mass_deviations_allowed
+    #         )
 
-        mass_explanations.append(str(explained_mass.explanations))
+    fragments = fragment_masses.with_columns(
+        pl.Series(neutral_masses).alias(output_mass_column_name)
+    )
 
-        if explained_mass.explanations != set():
-            # #Determine if its only a single nucleotide mass!
-            if any(
-                len(element) == 1 for element in explained_mass.explanations
-            ):  # Only the case without tags is considered. Note: Check if to use all or any here!
-                singleton_mass.append(True)
-            else:
-                singleton_mass.append(False)
+    # Determine all fragments that may be terminal ones (start only)
+    fragments = fragments.with_columns(
+        pl.col(mass_column_name)
+        .map_elements(
+            lambda x: is_start_fragment_candidate(x, dp_table=dp_table),
+            return_dtype=bool,
+        )
+        .alias("is_start")
+    )
 
-            # #Determine if its only a single nucleotide mass! The following code also considers Tags with a single nucleotide as singleton!
-            # singleton_bool = False
-            # for element in explained_mass.explanations:
-            #     if len(element) == 1:
-            #         singleton_mass.append(True)
-            #         singleton_bool = True
-            #         break
-            #     elif len(element) == 2:
-            #         if "3Tag" in element or "5Tag" in element:
-            #             singleton_mass.append(True)
-            #             singleton_bool = True
-            #             break
-            # if not singleton_bool:
-            #     singleton_mass.append(False)
+    # Determine all fragments that may be terminal ones (end only)
+    fragments = fragments.with_columns(
+        pl.col(mass_column_name)
+        .map_elements(
+            lambda x: is_end_fragment_candidate(x, dp_table=dp_table),
+            return_dtype=bool,
+        )
+        .alias("is_end")
+    )
 
-            # Do not consider the mass if it is purely only explained by the tags!
-            # This is slightly redundant with earlier pruning based count of tags, but ensures that we are not trying to fit fragments with only tags!
-            if all(
-                element == ("3Tag",) for element in explained_mass.explanations
-            ) or all(element == ("5Tag",) for element in explained_mass.explanations):
-                skip_mass.append(True)
-            elif all(
-                element
-                == (
-                    "3Tag",
-                    "5Tag",
-                )
-                for element in explained_mass.explanations
-            ):
-                skip_mass.append(True)
-            else:
-                skip_mass.append(False)
+    # Determine all fragments that may be singletons (with or without tags)
+    fragments = fragments.with_columns(
+        pl.col(mass_column_name)
+        .map_elements(
+            lambda x: is_singleton_candidate(x, integer_masses=integer_masses),
+            return_dtype=bool,
+        )
+        .alias("single_nucleoside")
+    )
 
-            if ms1_mass:
-                if (
-                    abs(mass / ms1_mass - 1) < ms1_mass_deviations_allowed
-                    and any(
-                        "5Tag" in element and "3Tag" in element
-                        for element in explained_mass.explanations
-                    )
-                ):  # Note that we allow for approx 1% deviation from the MS1 mass for both tags!
-                    # TODO: This still first preferrentially marks this case, and then 5Tag and then 3Tag!
-                    is_start_end.append(True)
-                else:
-                    is_start_end.append(False)
-            else:
-                if any(
-                    "5Tag" in element and "3Tag" in element
-                    for element in explained_mass.explanations
-                ):
-                    is_start_end.append(True)
-                else:
-                    is_start_end.append(False)
+    # Determine all fragments that may be the complete sequence
+    fragments = fragments.with_columns(
+        pl.col(mass_column_name)
+        .map_elements(
+            lambda x: is_complete_fragment_candidate(x, dp_table=dp_table),
+            return_dtype=bool,
+        )
+        .alias("is_start_end")
+    )
 
-            if not is_start_end[-1]:
-                if any(
-                    "5Tag" in element and "3Tag" not in element
-                    for element in explained_mass.explanations
-                ):
-                    is_start.append(True)
-                else:
-                    is_start.append(False)
+    # Determine all fragments that may be internal ones
+    fragments = fragments.with_columns(
+        pl.col(mass_column_name)
+        .map_elements(
+            lambda x: is_internal_fragment_candidate(x, dp_table=dp_table),
+            return_dtype=bool,
+        )
+        .alias("is_internal")
+    )
 
-                if any(
-                    "5Tag" not in element and "3Tag" in element
-                    for element in explained_mass.explanations
-                ):
-                    is_end.append(True)
-                else:
-                    is_end.append(False)
+    # Set all other terminal/internal indicators to False for full-sequence candidates
+    # TODO: Figure out why this is needed for skeleton
+    fragments = fragments.with_columns(
+        pl.col("is_start") & ~pl.col("is_start_end").alias("is_start"),
+        pl.col("is_end") & ~pl.col("is_start_end").alias("is_end"),
+        pl.col("is_internal") & ~pl.col("is_start_end").alias("is_internal"),
+    )
 
-                if any(
-                    "5Tag" not in element and "3Tag" not in element
-                    for element in explained_mass.explanations
-                ):
-                    is_internal.append(True)
-                else:
-                    is_internal.append(False)
-
-            else:
-                is_start.append(False)
-                is_end.append(False)
-                is_internal.append(False)
-
-        else:
-            # nucleotide_only_masses.append(mass)
-            skip_mass.append(True)
-            is_start.append(False)
-            is_end.append(False)
-            singleton_mass.append(False)
-            is_start_end.append(False)
-            is_internal.append(False)
-
-    # Use ms1_mass additionally as a cutoff for the fragment masses!
-    if ms1_mass:
+    # Use MS1 mass as an additional cutoff for the fragment masses
+    if ms1_compositions:
         mass_cutoff = 1.01 * ms1_mass
 
-    fragment_masses = (
-        fragment_masses.with_columns(
-            # pl.Series(nucleotide_only_masses).alias(output_mass_column_name)
-            pl.Series(neutral_masses).alias(output_mass_column_name)
-        )
-        .hstack(
-            pl.DataFrame(
-                {
-                    "is_start": is_start,
-                    "is_end": is_end,
-                    "single_nucleoside": singleton_mass,
-                    "is_start_end": is_start_end,
-                    "is_internal": is_internal,
-                }
+    # Filter out fragments that are either non-terminal or have a too high
+    # mass or too low intensity
+    fragments = (
+        fragments.filter(
+            (
+                pl.col("is_start")
+                | pl.col("is_end")
+                | pl.col("is_start_end")
+                | pl.col("is_internal")
             )
         )
-        .with_columns(pl.Series(mass_explanations).alias("mass_explanations"))
-        .filter(~pl.Series(skip_mass))
-        # .filter(
-        #    pl.col("neutral_mass") > 305.04129
-        # )
         .sort(pl.col("observed_mass"))
         .filter(pl.col("intensity") > intensity_cutoff)
         .filter(pl.col("neutral_mass") < mass_cutoff)
     )
 
+    # Write terminal fragments to file if file name is given
     if output_file_path is not None:
-        fragment_masses.write_csv(output_file_path, separator="\t")
+        fragments.write_csv(output_file_path, separator="\t")
 
-    return fragment_masses
+    return fragments
 
 
 def estimate_MS_error_matching_threshold(

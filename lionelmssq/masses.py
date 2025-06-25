@@ -64,11 +64,15 @@ PHOSPHATE_LINK_MASS = 61.95577  # P(30.97389) + 2*O(2*15.99491) + H(1.00783)
 
 # Additional weights for different breakage options
 START_OPTIONS = pl.read_csv(
-    importlib.resources.files(__package__) / "assets" / "5_prime_end_breakage.tsv",
+    importlib.resources.files(__package__)
+    / "assets"
+    / "5_prime_end_breakage.experimental.tsv",
     separator="\t",
 )
 END_OPTIONS = pl.read_csv(
-    importlib.resources.files(__package__) / "assets" / "3_prime_end_breakage.tsv",
+    importlib.resources.files(__package__)
+    / "assets"
+    / "3_prime_end_breakage.experimental.tsv",
     separator="\t",
 )
 

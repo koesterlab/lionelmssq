@@ -138,7 +138,7 @@ def set_up_mass_table(integer_masses):
     return dp_table
 
 
-def load_dp_table(compression_rate):
+def load_dp_table(compression_rate, table_path=TABLE_PATH):
     """
     Load dynamic-programming table if it exists and compute it otherwise.
     """
@@ -152,17 +152,71 @@ def load_dp_table(compression_rate):
     integer_masses = sorted(set(integer_masses))
 
     # Compute and save bit-representation DP table if not existing
-    if not pathlib.Path(f"{TABLE_PATH}.{compression_rate}_per_cell.npy").is_file():
+    if not pathlib.Path(f"{table_path}.{compression_rate}_per_cell.npy").is_file():
         print("Table not found")
         dp_table = (
             set_up_mass_table(integer_masses)
             if compression_rate == 1
             else (set_up_bit_table(integer_masses))
         )
-        np.save(f"{TABLE_PATH}.{compression_rate}_per_cell", dp_table)
+        np.save(f"{table_path}.{compression_rate}_per_cell", dp_table)
 
     # Read DP table
-    return np.load(f"{TABLE_PATH}.{compression_rate}_per_cell.npy"), integer_masses
+    return np.load(f"{table_path}.{compression_rate}_per_cell.npy"), integer_masses
+
+
+def is_valid_mass(
+    mass: float,
+    dp_table,
+    breakages=BREAKAGES,
+    compression_rate=COMPRESSION_RATE,
+    threshold=MATCHING_THRESHOLD,
+) -> bool:
+    # Ensure that all breakage weights have a associated breakage
+    breakages = {
+        breakage_weight: breakage
+        for breakage_weight, breakage in breakages.items()
+        if len(breakage) > 0
+    }
+
+    # Convert the target to an integer for easy operations
+    target = int(round(mass / TOLERANCE, 0))
+
+    # Set matching threshold based on target mass
+    threshold = int(np.ceil(threshold * target))
+
+    current_idx = len(dp_table) - 1
+    for breakage_weight in breakages:
+        for value in range(
+            target - breakage_weight - threshold,
+            target - breakage_weight + threshold + 1,
+        ):
+            # Skip non-positive masses
+            if value <= 0:
+                continue
+
+            # Raise error if mass is not in table (due to its size)
+            if value >= len(dp_table[0]) * compression_rate:
+                raise NotImplementedError(
+                    f"The value {value} is not in the DP table. Extend its "
+                    f"size if you want to compute larger masses."
+                )
+
+            current_value = (
+                dp_table[current_idx, value]
+                if compression_rate == 1
+                else dp_table[current_idx, value // compression_rate]
+                >> 2 * (compression_rate - 1 - value % compression_rate)
+            )
+
+            # Skip unreachable cells
+            if compression_rate != 1 and current_value % compression_rate == 0.0:
+                continue
+
+            # Return True when mass corresponds to valid entry in table
+            if current_value % 2 == 1 or (current_value >> 1) % 2 == 1:
+                return True
+    return False
 
 
 def explain_mass_with_dp(
@@ -199,6 +253,13 @@ def explain_mass_with_dp(
         # Initialize a new nucleoside set for a valid start in table
         if total_mass == 0:
             return [[]]
+
+        # Raise error if mass is not in table (due to its size)
+        if total_mass >= len(dp_table[0]) * compression_rate:
+            raise NotImplementedError(
+                f"The value {value} is not in the DP table. Extend its "
+                f"size if you want to compute larger masses."
+            )
 
         current_value = (
             dp_table[current_idx, total_mass]

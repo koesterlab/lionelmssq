@@ -2,12 +2,13 @@ import importlib.resources
 import os
 
 import pytest
+
 from lionelmssq.prediction import Predictor
 from lionelmssq.common import parse_nucleosides
 from lionelmssq.plotting import plot_prediction
 from lionelmssq.utils import (
-    determine_terminal_fragments,
     estimate_MS_error_matching_threshold,
+    mark_terminal_fragment_candidates,
 )
 import polars as pl
 import yaml
@@ -120,15 +121,13 @@ def test_testcase(testcase):
         #     matching_threshold,
         # )
 
-        fragments = determine_terminal_fragments(
+        fragments = mark_terminal_fragment_candidates(
             fragment_masses_read,
-            output_file_path=base_path / "fragments_terminal_marked.tsv",
-            label_mass_3T=label_mass_3T,
-            label_mass_5T=label_mass_5T,
-            explanation_masses=explanation_masses,
+            output_file_path=base_path / "fragments_with_classification_marked.tsv",
             matching_threshold=matching_threshold,
             intensity_cutoff=intensity_cutoff,
             ms1_mass=ms1_mass,
+            table_path="dp_table/full_table.reduced_set/tol_1E-03",
         )
         with pl.Config(tbl_rows=30):
             print(fragments)
