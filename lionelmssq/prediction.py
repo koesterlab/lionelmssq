@@ -425,11 +425,15 @@ class Predictor:
 
     def _calculate_diff_dp(self, diff, threshold, explanation_masses):
         explanation_list = list(
-            explain_mass(
-                diff,
-                explanation_masses=explanation_masses,
-                matching_threshold=threshold,
-            ).explanations
+            [
+                entry
+                for entry in explain_mass(
+                    diff,
+                    explanation_masses=explanation_masses,
+                    matching_threshold=threshold,
+                )
+                if entry.breakage == "c/y_c/y"
+            ][0].explanations
         )
         if len(explanation_list) > 0:
             retval = [
