@@ -1,8 +1,5 @@
-# import importlib.resources
-# import os
 import pytest
 import polars as pl
-# import yaml
 
 from lionelmssq.mass_explanation import explain_mass, explain_mass_with_dp
 from lionelmssq.masses import START_OPTIONS, END_OPTIONS, PHOSPHATE_LINK_MASS, MASSES
@@ -53,16 +50,20 @@ MASS_SEQ_DICT = dict(
     )
 )
 THRESHOLDS = [10e-6, 5e-6, 2e-6]
+MOD_RATE = 0.5
 
 
 @pytest.mark.parametrize("testcase", MASS_SEQ_DICT.items())
 @pytest.mark.parametrize("threshold", THRESHOLDS)
 def test_testcase(testcase, threshold):
+    breakage = list(testcase[1].keys())[0]
+
     predicted_mass_explanations = explain_mass(
-        testcase[0], matching_threshold=threshold
+        testcase[0],
+        max_modifications=round(MOD_RATE * len(tuple(testcase[1][breakage]))),
+        matching_threshold=threshold,
     )
 
-    breakage = list(testcase[1].keys())[0]
     explanations = [
         tuple(solution)
         for expl in predicted_mass_explanations
@@ -82,11 +83,16 @@ COMPRESSION_RATES = [32]
 @pytest.mark.parametrize("memo", WITH_MEMO)
 @pytest.mark.parametrize("threshold", THRESHOLDS)
 def test_testcase_with_dp(testcase, compression, memo, threshold):
+    breakage = list(testcase[1].keys())[0]
+
     predicted_mass_explanations = explain_mass_with_dp(
-        testcase[0], with_memo=memo, compression_rate=compression, threshold=threshold
+        testcase[0],
+        with_memo=memo,
+        max_modifications=round(MOD_RATE * len(tuple(testcase[1][breakage]))),
+        compression_rate=compression,
+        threshold=threshold,
     )
 
-    breakage = list(testcase[1].keys())[0]
     explanations = [
         tuple(solution)
         for expl in predicted_mass_explanations

@@ -67,6 +67,21 @@ MASS_NAMES = {
     .to_list()
     for mass in EXPLANATION_MASSES.get_column("tolerated_integer_masses").to_list()
 }
+UNMODIFIED_BASES = ["A", "C", "G", "U"]
+IS_MOD = {
+    mass: any(
+        base not in UNMODIFIED_BASES
+        for base in pl.DataFrame({"tolerated_integer_masses": mass})
+        .join(
+            EXPLANATION_MASSES,
+            on="tolerated_integer_masses",
+            how="left",
+        )
+        .get_column("nucleoside")
+        .to_list()
+    )
+    for mass in EXPLANATION_MASSES.get_column("tolerated_integer_masses").to_list()
+}
 
 
 def set_up_bit_table(integer_masses):
@@ -222,6 +237,7 @@ def is_valid_mass(
 def explain_mass_with_dp(
     mass: float,
     with_memo: bool,
+    max_modifications=np.inf,
     compression_rate=COMPRESSION_RATE,
     threshold=MATCHING_THRESHOLD,
 ) -> list[MassExplanations]:
@@ -239,7 +255,7 @@ def explain_mass_with_dp(
 
     memo = {}
 
-    def backtrack_with_memo(total_mass, current_idx):
+    def backtrack_with_memo(total_mass, current_idx, max_mods):
         current_weight = tolerated_integer_masses[current_idx]
 
         # If the result for this state is already computed, return it
@@ -275,23 +291,28 @@ def explain_mass_with_dp(
         solutions = []
         # Backtrack to the next row above if possible
         if current_value % 2 == 1:
-            solutions += backtrack_with_memo(total_mass, current_idx - 1)
+            solutions += backtrack_with_memo(total_mass, current_idx - 1, max_mods)
 
         # Backtrack to the next left-side column if possible
         if (current_value >> 1) % 2 == 1:
-            solutions += [
-                entry + [current_weight]
-                for entry in backtrack_with_memo(
-                    total_mass - current_weight, current_idx
-                )
-            ]
+            if not IS_MOD[current_weight] or max_mods > 0:
+                # Adjust number of still allowed modifications if necessary
+                if IS_MOD[current_weight]:
+                    max_mods -= 1
+
+                solutions += [
+                    entry + [current_weight]
+                    for entry in backtrack_with_memo(
+                        total_mass - current_weight, current_idx, max_mods
+                    )
+                ]
 
         # Store result in memo
         memo[(total_mass, current_idx)] = solutions
 
         return solutions
 
-    def backtrack(total_mass, current_idx):
+    def backtrack(total_mass, current_idx, max_mods):
         current_weight = tolerated_integer_masses[current_idx]
 
         # Return empty list for cells outside of table
@@ -316,14 +337,21 @@ def explain_mass_with_dp(
         solutions = []
         # Backtrack to the next row above if possible
         if current_value % 2 == 1:
-            solutions += backtrack(total_mass, current_idx - 1)
+            solutions += backtrack(total_mass, current_idx - 1, max_mods)
 
         # Backtrack to the next left-side column if possible
         if (current_value >> 1) % 2 == 1:
-            solutions += [
-                entry + [current_weight]
-                for entry in backtrack(total_mass - current_weight, current_idx)
-            ]
+            if not IS_MOD[current_weight] or max_mods > 0:
+                # Adjust number of still allowed modifications if necessary
+                if IS_MOD[current_weight]:
+                    max_mods -= 1
+
+                solutions += [
+                    entry + [current_weight]
+                    for entry in backtrack(
+                        total_mass - current_weight, current_idx, max_mods
+                    )
+                ]
 
         return solutions
 
@@ -336,9 +364,13 @@ def explain_mass_with_dp(
             target - breakage_weight + threshold + 1,
         ):
             solutions += (
-                backtrack_with_memo(value, len(tolerated_integer_masses) - 1)
+                backtrack_with_memo(
+                    value, len(tolerated_integer_masses) - 1, max_modifications
+                )
                 if with_memo
-                else backtrack(value, len(tolerated_integer_masses) - 1)
+                else backtrack(
+                    value, len(tolerated_integer_masses) - 1, max_modifications
+                )
             )
 
         # Add valid solutions to dictionary of breakpoint options
@@ -386,6 +418,7 @@ def explain_mass_with_dp(
 
 def explain_mass(
     mass: float,
+    max_modifications=np.inf,
     matching_threshold=MATCHING_THRESHOLD,
 ) -> MassExplanations:
     """
@@ -408,7 +441,11 @@ def explain_mass(
     # Memoization dictionary to store results for a given target
     memo = {}
 
-    def dp(remaining, start):
+    def dp(remaining, start, used_mods):
+        # If too many modifications are used, return empty list
+        if used_mods > max_modifications:
+            return []
+
         # If the result for this state is already computed, return it
         if (remaining, start) in memo:
             return memo[(remaining, start)]
@@ -432,7 +469,11 @@ def explain_mass(
         for i in range(start, len(tolerated_integer_masses)):
             tolerated_integer_mass = tolerated_integer_masses[i]
             # Recurse with reduced target and the current tolerated_integer_mass
-            sub_combinations = dp(remaining - tolerated_integer_mass, i)
+            sub_combinations = dp(
+                remaining - tolerated_integer_mass,
+                i,
+                used_mods + 1 if IS_MOD[tolerated_integer_mass] else used_mods,
+            )
             # Add current tolerated_integer_mass to all sub-combinations
             for combo in sub_combinations:
                 combinations.append([tolerated_integer_mass] + combo)
@@ -445,7 +486,7 @@ def explain_mass(
     solution_tolerated_integer_masses = {}
     for breakage_weight in BREAKAGES:
         # Start with the full target and all tolerated_integer_masses
-        solutions = dp(target - breakage_weight, 0)
+        solutions = dp(target - breakage_weight, 0, 0)
         for breakage in BREAKAGES[breakage_weight]:
             solution_tolerated_integer_masses[breakage] = solutions
 
