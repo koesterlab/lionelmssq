@@ -208,7 +208,10 @@ class LinearProgramInstance:
 
         # interpret solution
         seq = [self._get_base(i) for i in range(self.seq_len)]
-        print("Predicted sequence = ", "".join(seq))
+        print(
+            "Predicted sequence = ",
+            "".join([val if val is not None else "-" for val in seq]),
+        )
 
         # Get the sequence corresponding to each of the fragments!
         fragment_seq = [

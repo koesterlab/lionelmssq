@@ -120,7 +120,7 @@ class Predictor:
         )
 
     def predict(self) -> Prediction:
-        # TODO: get rid of the requirement to pass the length of the sequence
+        # TODO: Get rid of the requirement to pass the length of the sequence
         #  and instead infer it from the fragments
 
         # Collect the fragments for the start and end side which also include the start_end fragments (entire sequences)
@@ -146,10 +146,11 @@ class Predictor:
         self._collect_diffs(Side.END)
         self._collect_diff_explanations()
 
-        # TODO:
-        # also consider that the observations are not complete and that we probably don't see all the letters as diffs or singletons.
-        # Hence, maybe do the following: solve first with the reduced alphabet, and if the optimization does not yield a sufficiently
-        # good result, then try again with an extended alphabet.
+        # TODO: Also consider that the observations are not complete and that
+        #  we probably don't see all the letters as diffs or singletons.
+        #  Hence, maybe do the following: Solve first with the reduced
+        #  alphabet, and if the optimization does not yield a sufficiently
+        #  good result, then try again with an extended alphabet.
         masses = (  # self.unique_masses
             self._reduce_alphabet()
         )
@@ -381,8 +382,9 @@ class Predictor:
             if not skeleton_seq[i]:
                 skeleton_seq[i] = skeleton_seq_start[i].union(skeleton_seq_end[i])
 
-        # TODO: Its more complicated, since if two positions are ambigious, they are not indepenedent.
-        # If one nucleotide is selected this way, then the same nucleotide cannot be selected in the other position!
+        # TODO: Its more complicated, since if two positions are ambiguous,
+        #  they are not independent. If one nucleotide is selected this way,
+        #  then the same nucleotide cannot be selected in the other position!
 
         return skeleton_seq
 
@@ -424,12 +426,16 @@ class Predictor:
         self.singleton_masses = set(masses)
 
     def _calculate_diff_dp(self, diff, threshold, explanation_masses):
+        # TODO: Add support for other breakages than 'c/y_c/y'
         explanation_list = list(
-            explain_mass(
-                diff,
-                explanation_masses=explanation_masses,
-                matching_threshold=threshold,
-            ).explanations
+            [
+                entry
+                for entry in explain_mass(
+                    diff,
+                    matching_threshold=threshold,
+                )
+                if entry.breakage == "c/y_c/y"
+            ][0].explanations
         )
         if len(explanation_list) > 0:
             retval = [
