@@ -1,8 +1,19 @@
 import pytest
 import polars as pl
 
-from lionelmssq.mass_explanation import explain_mass, explain_mass_with_dp
-from lionelmssq.masses import START_OPTIONS, END_OPTIONS, PHOSPHATE_LINK_MASS, MASSES
+from lionelmssq.mass_explanation import (
+    DynamicProgrammingTable,
+    explain_mass,
+    explain_mass_with_dp,
+)
+from lionelmssq.masses import (
+    EXPLANATION_MASSES,
+    START_OPTIONS,
+    END_OPTIONS,
+    PHOSPHATE_LINK_MASS,
+    MASSES,
+    TOLERANCE,
+)
 
 
 def get_breakage_weight(breakage: str) -> float:
@@ -85,12 +96,21 @@ COMPRESSION_RATES = [32]
 def test_testcase_with_dp(testcase, compression, memo, threshold):
     breakage = list(testcase[1].keys())[0]
 
+    dp_table = DynamicProgrammingTable(
+        EXPLANATION_MASSES,
+        reduced_table=True,
+        reduced_set=False,
+        compression_rate=compression,
+        tolerance=threshold,
+        precision=TOLERANCE,
+    )
+
     predicted_mass_explanations = explain_mass_with_dp(
         testcase[0],
         with_memo=memo,
+        dp_table=dp_table,
         max_modifications=round(MOD_RATE * len(tuple(testcase[1][breakage]))),
         compression_rate=compression,
-        threshold=threshold,
     )
 
     explanations = [

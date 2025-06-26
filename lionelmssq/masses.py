@@ -1,8 +1,6 @@
 import importlib.resources
 import polars as pl
-import os
 from itertools import product
-from platformdirs import user_cache_dir
 
 _COLS = ["nucleoside", "monoisotopic_mass"]
 
@@ -15,27 +13,6 @@ ROUND_DECIMAL = 5  # The precision (after decimal points) to which to consider t
 
 TOLERANCE = 1e-3  # For perfect matching, the TOLERANCE should be the
 # precision (digits after decimal) to which the masses of nucleosides and sequences are reported, i.e. 1e-(ROUND_DECIMAL)
-
-
-# Set OS-independent cache directory for DP tables
-TABLE_DIR = user_cache_dir(
-    appname="lionelmssq/dp_table", version="1.0", ensure_exists=True
-)
-
-# Set path for DP table
-TABLE_PATH = (
-    f"{TABLE_DIR}/{'reduced' if REDUCE_TABLE else 'full'}_table."
-    f"{'reduced' if REDUCE_SET else 'full'}_set/"
-    f"tol_{TOLERANCE:.0E}"
-)
-
-# Create directory for DP table if it does not already exist
-subdir = "/".join(TABLE_PATH.split("/")[:-1])
-if not os.path.exists(subdir):
-    os.makedirs(subdir)
-
-print(TABLE_PATH)
-
 
 PHOSPHATE_LINK_MASS = 61.95577  # P(30.97389) + 2*O(2*15.99491) + H(1.00783)
 

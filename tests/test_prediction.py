@@ -3,6 +3,7 @@ import os
 
 import pytest
 
+from lionelmssq.mass_explanation import DynamicProgrammingTable
 from lionelmssq.prediction import Predictor
 from lionelmssq.common import parse_nucleosides
 from lionelmssq.plotting import plot_prediction
@@ -13,10 +14,10 @@ import polars as pl
 import yaml
 
 from lionelmssq.masses import (
-    UNIQUE_MASSES,
+    COMPRESSION_RATE,
     TOLERANCE,
     MATCHING_THRESHOLD,
-    PHOSPHATE_LINK_MASS,
+    initialize_nucleotide_df,
 )
 
 _TESTCASES = importlib.resources.files("tests") / "testcases"
@@ -65,17 +66,8 @@ def test_testcase(testcase):
         with pl.Config(tbl_rows=30):
             print(fragments)
 
-        unique_masses = UNIQUE_MASSES.with_columns(
-            (pl.col("monoisotopic_mass") + PHOSPHATE_LINK_MASS).alias(
-                "monoisotopic_mass"
-            )  # Added the appropriate backbone mass!
-        )
-
-        explanation_masses = unique_masses.with_columns(
-            (pl.col("monoisotopic_mass") / TOLERANCE)
-            .round(0)
-            .cast(pl.Int64)
-            .alias("tolerated_integer_masses")
+        _, unique_masses, explanation_masses, _ = initialize_nucleotide_df(
+            reduce_table=True, reduce_set=False
         )
 
         # TODO: Discuss why it doesn't work with the estimated error!
@@ -91,21 +83,6 @@ def test_testcase(testcase):
     else:
         simulation = False
 
-        unique_masses = UNIQUE_MASSES.filter(
-            pl.col("nucleoside").is_in(["A", "U", "G", "C"])
-        ).with_columns(
-            (pl.col("monoisotopic_mass") + 61.95577).alias(
-                "monoisotopic_mass"
-            )  # Added the appropriate backbone mass!
-        )
-
-        explanation_masses = unique_masses.with_columns(
-            (pl.col("monoisotopic_mass") / TOLERANCE)
-            .round(0)
-            .cast(pl.Int64)
-            .alias("tolerated_integer_masses")
-        )
-
         fragment_masses_read = pl.read_csv(base_path / "fragments.tsv", separator="\t")
 
         matching_threshold = MATCHING_THRESHOLD
@@ -118,13 +95,26 @@ def test_testcase(testcase):
         #     matching_threshold,
         # )
 
+        _, unique_masses, explanation_masses, _ = initialize_nucleotide_df(
+            reduce_table=False, reduce_set=True
+        )
+
+        dp_table = DynamicProgrammingTable(
+            explanation_masses,
+            reduced_table=False,
+            reduced_set=True,
+            compression_rate=COMPRESSION_RATE,
+            tolerance=MATCHING_THRESHOLD,
+            precision=TOLERANCE,
+        )
+
         fragments = mark_terminal_fragment_candidates(
             fragment_masses_read,
+            dp_table=dp_table,
             output_file_path=base_path / "fragments_with_classification_marked.tsv",
             matching_threshold=matching_threshold,
             intensity_cutoff=intensity_cutoff,
             ms1_mass=ms1_mass,
-            table_path="dp_table/full_table.reduced_set/tol_1E-03",
         )
         with pl.Config(tbl_rows=30):
             print(fragments)
