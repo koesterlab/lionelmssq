@@ -19,40 +19,6 @@ TABLE_DIR = user_cache_dir(
     appname="lionelmssq/dp_table", version="1.0", ensure_exists=True
 )
 
-match COMPRESSION_RATE:
-    case 4:
-        settings = {
-            "type": np.uint8,
-            "init": 0xC0,
-            "alt_first": 0xAA,
-            "alt_sec": 0x55,
-            "full": np.uint8(0xFF),
-        }
-    case 8:
-        settings = {
-            "type": np.uint16,
-            "init": 0xC000,
-            "alt_first": 0xAAAA,
-            "alt_sec": 0x5555,
-            "full": np.uint16(0xFFFF),
-        }
-    case 16:
-        settings = {
-            "type": np.uint32,
-            "init": 0xC0000000,
-            "alt_first": 0xAAAAAAAA,
-            "alt_sec": 0x55555555,
-            "full": np.uint32(0xFFFFFFFF),
-        }
-    case 32:
-        settings = {
-            "type": np.uint64,
-            "init": 0xC000000000000000,
-            "alt_first": 0xAAAAAAAAAAAAAAAA,
-            "alt_sec": 0x5555555555555555,
-            "full": np.uint64(0xFFFFFFFFFFFFFFFF),
-        }
-
 
 @dataclass
 class NucleotideMass:
@@ -157,6 +123,8 @@ def set_up_bit_table(integer_masses):
     """
     Calculate complete bit-representation mass table with dynamic programming.
     """
+    settings = select_table_building_settings(compression_rate=COMPRESSION_RATE)
+
     # Initialize bit-representation numpy table
     max_col = int(np.ceil((MAX_MASS + 1) / COMPRESSION_RATE))
     dp_table = np.zeros((len(integer_masses), max_col), dtype=settings["type"])
@@ -193,6 +161,47 @@ def set_up_bit_table(integer_masses):
     dp_table[:, -1] &= settings["full"] << 2 * (max_col - (MAX_MASS + 1) % max_col)
 
     return dp_table
+
+
+def select_table_building_settings(compression_rate):
+    match compression_rate:
+        case 4:
+            return {
+                "type": np.uint8,
+                "init": 0xC0,
+                "alt_first": 0xAA,
+                "alt_sec": 0x55,
+                "full": np.uint8(0xFF),
+            }
+        case 8:
+            return {
+                "type": np.uint16,
+                "init": 0xC000,
+                "alt_first": 0xAAAA,
+                "alt_sec": 0x5555,
+                "full": np.uint16(0xFFFF),
+            }
+        case 16:
+            return {
+                "type": np.uint32,
+                "init": 0xC0000000,
+                "alt_first": 0xAAAAAAAA,
+                "alt_sec": 0x55555555,
+                "full": np.uint32(0xFFFFFFFF),
+            }
+        case 32:
+            return {
+                "type": np.uint64,
+                "init": 0xC000000000000000,
+                "alt_first": 0xAAAAAAAAAAAAAAAA,
+                "alt_sec": 0x5555555555555555,
+                "full": np.uint64(0xFFFFFFFFFFFFFFFF),
+            }
+        case _:
+            raise ValueError(
+                f"The compression rate {compression_rate} is "
+                f"not compatible with the table setup."
+            )
 
 
 def set_up_mass_table(integer_masses):
