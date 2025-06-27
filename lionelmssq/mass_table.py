@@ -7,12 +7,8 @@ import pathlib
 import numpy as np
 import os
 
-from lionelmssq.masses import EXPLANATION_MASSES
-from lionelmssq.masses import TOLERANCE
-from lionelmssq.masses import MATCHING_THRESHOLD
-from lionelmssq.masses import MAX_MASS
-from lionelmssq.masses import COMPRESSION_RATE
 from lionelmssq.linear_program import UNMODIFIED_BASES
+
 
 # Set OS-independent cache directory for DP tables
 TABLE_DIR = user_cache_dir(
@@ -37,30 +33,32 @@ class DynamicProgrammingTable:
 
     def __init__(
         self,
-        nucleotide_dataframe,
+        nucleotide_df,
+        compression_rate,
+        tolerance,
+        precision,
         reduced_table=False,
         reduced_set=False,
-        compression_rate=COMPRESSION_RATE,
-        tolerance=MATCHING_THRESHOLD,
-        precision=TOLERANCE,
     ):
         self.compression_per_cell = compression_rate
         self.precision = precision
         self.tolerance = tolerance
-        self.masses = initialize_nucleotide_masses(nucleotide_dataframe)
+        self.masses = initialize_nucleotide_masses(nucleotide_df)
         self.table = load_dp_table(
-            compression_rate,
-            table_path=set_table_path(reduced_table, reduced_set, precision),
+            table_path=set_table_path(
+                reduced_table, reduced_set, precision, compression_rate
+            ),
+            reduce_table=reduced_table,
             integer_masses=[mass.mass for mass in self.masses],
         )
 
 
-def set_table_path(reduce_table, reduce_set, precision):
+def set_table_path(reduce_table, reduce_set, precision, compression_rate):
     # Set path for DP table
     path = (
         f"{TABLE_DIR}/{'reduced' if reduce_table else 'full'}_table."
         f"{'reduced' if reduce_set else 'full'}_set/"
-        f"tol_{precision:.0E}"
+        f"tol_{precision:.0E}.{compression_rate}_per_cell"
     )
 
     # Create directory for DP table if it does not already exist
@@ -71,7 +69,7 @@ def set_table_path(reduce_table, reduce_set, precision):
     return path
 
 
-def initialize_nucleotide_masses(nucleotide_df=EXPLANATION_MASSES):
+def initialize_nucleotide_masses(nucleotide_df):
     # Get list of integer masses
     integer_masses = nucleotide_df.get_column("tolerated_integer_masses").to_list()
 
@@ -119,14 +117,14 @@ def initialize_nucleotide_masses(nucleotide_df=EXPLANATION_MASSES):
     ]
 
 
-def set_up_bit_table(integer_masses):
+def set_up_bit_table(integer_masses, max_mass, compression_rate):
     """
     Calculate complete bit-representation mass table with dynamic programming.
     """
-    settings = select_table_building_settings(compression_rate=COMPRESSION_RATE)
+    settings = select_table_building_settings(compression_rate)
 
     # Initialize bit-representation numpy table
-    max_col = int(np.ceil((MAX_MASS + 1) / COMPRESSION_RATE))
+    max_col = int(np.ceil((max_mass + 1) / compression_rate))
     dp_table = np.zeros((len(integer_masses), max_col), dtype=settings["type"])
     dp_table[0, 0] = settings["init"]
 
@@ -138,8 +136,8 @@ def set_up_bit_table(integer_masses):
         ]
 
         # Define number of cells to move (step) and bit shift in a cell (shift)
-        step = int(integer_masses[i] / COMPRESSION_RATE)
-        shift = integer_masses[i] % COMPRESSION_RATE
+        step = int(integer_masses[i] / compression_rate)
+        shift = integer_masses[i] % compression_rate
 
         # Case: Add more of current nucleotide
         for j in range(max_col):
@@ -153,12 +151,12 @@ def set_up_bit_table(integer_masses):
             # If shift is needed, consider the next cell as well
             if shift != 0 and j + step + 1 < max_col:
                 dp_table[i, j + step + 1] |= settings["alt_first"] & (
-                    (dp_table[i, j] << 2 * (COMPRESSION_RATE - shift) << 1)
-                    | (dp_table[i, j] << 2 * (COMPRESSION_RATE - shift))
+                    (dp_table[i, j] << 2 * (compression_rate - shift) << 1)
+                    | (dp_table[i, j] << 2 * (compression_rate - shift))
                 )
 
     # Adjust last column for unused cells
-    dp_table[:, -1] &= settings["full"] << 2 * (max_col - (MAX_MASS + 1) % max_col)
+    dp_table[:, -1] &= settings["full"] << 2 * (max_col - (max_mass + 1) % max_col)
 
     return dp_table
 
@@ -204,12 +202,12 @@ def select_table_building_settings(compression_rate):
             )
 
 
-def set_up_mass_table(integer_masses):
+def set_up_mass_table(integer_masses, max_mass):
     """
     Calculate complete mass table with dynamic programming.
     """
     # Initialize numpy table
-    dp_table = np.zeros((len(integer_masses), MAX_MASS + 1), dtype=np.uint8)
+    dp_table = np.zeros((len(integer_masses), max_mass + 1), dtype=np.uint8)
     dp_table[0, 0] = 3.0
 
     # Fill DP table row-wise
@@ -219,31 +217,37 @@ def set_up_mass_table(integer_masses):
         dp_table[i] = [int(val != 0.0) for val in dp_table[i - 1]]
 
         # Case: Add more of current nucleoside
-        for j in range(MAX_MASS + 1):
+        for j in range(max_mass + 1):
             # If cell is not reachable, skip it
             if dp_table[i, j] == 0.0:
                 continue
 
             # Add another nucleoside if possible
-            if integer_masses[i] + j <= MAX_MASS:
+            if integer_masses[i] + j <= max_mass:
                 dp_table[i, j + integer_masses[i]] += 2.0
 
     return dp_table
 
 
-def load_dp_table(compression_rate, table_path, integer_masses):
+def load_dp_table(table_path, reduce_table, integer_masses):
     """
     Load dynamic-programming table if it exists and compute it otherwise.
     """
+    # Select compression rate from path string
+    compression_rate = table_path.split(".")[-1].rstrip("_per_cell")
+
+    # Select maximum integer mass for which table should be built
+    max_mass = max(integer_masses) * (12 if reduce_table else 35)
+
     # Compute and save bit-representation DP table if not existing
-    if not pathlib.Path(f"{table_path}.{compression_rate}_per_cell.npy").is_file():
+    if not pathlib.Path(f"{table_path}.npy").is_file():
         print("Table not found")
         dp_table = (
-            set_up_mass_table(integer_masses)
+            set_up_mass_table(integer_masses, max_mass)
             if compression_rate == 1
-            else (set_up_bit_table(integer_masses))
+            else (set_up_bit_table(integer_masses, max_mass, compression_rate))
         )
-        np.save(f"{table_path}.{compression_rate}_per_cell", dp_table)
+        np.save(table_path, dp_table)
 
     # Read DP table
-    return np.load(f"{table_path}.{compression_rate}_per_cell.npy")
+    return np.load(f"{table_path}.npy")
