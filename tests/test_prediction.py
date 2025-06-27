@@ -66,8 +66,8 @@ def test_testcase(testcase):
         with pl.Config(tbl_rows=30):
             print(fragments)
 
-        _, unique_masses, explanation_masses, _ = initialize_nucleotide_df(
-            reduce_table=True, reduce_set=False
+        _, unique_masses, explanation_masses = initialize_nucleotide_df(
+            reduce_set=False
         )
 
         # TODO: Discuss why it doesn't work with the estimated error!
@@ -95,9 +95,7 @@ def test_testcase(testcase):
         #     matching_threshold,
         # )
 
-        _, unique_masses, explanation_masses, _ = initialize_nucleotide_df(
-            reduce_table=False, reduce_set=True
-        )
+        _, unique_masses, explanation_masses = initialize_nucleotide_df(reduce_set=True)
 
         dp_table = DynamicProgrammingTable(
             explanation_masses,

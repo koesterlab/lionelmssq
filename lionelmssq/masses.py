@@ -62,7 +62,7 @@ for start, end in list(
 BREAKAGES = {int(val / TOLERANCE): BREAKAGES[val] for val in BREAKAGES.keys()}
 
 
-def initialize_nucleotide_df(reduce_table, reduce_set):
+def initialize_nucleotide_df(reduce_set):
     masses = pl.read_csv(
         (
             importlib.resources.files(__package__)
@@ -91,13 +91,7 @@ def initialize_nucleotide_df(reduce_table, reduce_set):
         .alias("tolerated_integer_masses")
     )
 
-    max_mass = explanation_masses.select(
-        pl.col("tolerated_integer_masses")
-    ).max().item() * (12 if reduce_table else 35)
-
-    return masses, unique_masses, explanation_masses, max_mass
+    return masses, unique_masses, explanation_masses
 
 
-MASSES, UNIQUE_MASSES, EXPLANATION_MASSES, MAX_MASS = initialize_nucleotide_df(
-    REDUCE_TABLE, REDUCE_SET
-)
+MASSES, UNIQUE_MASSES, EXPLANATION_MASSES = initialize_nucleotide_df(REDUCE_SET)
