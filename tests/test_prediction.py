@@ -3,7 +3,7 @@ import os
 
 import pytest
 
-from lionelmssq.mass_explanation import DynamicProgrammingTable
+from lionelmssq.mass_table import DynamicProgrammingTable
 from lionelmssq.prediction import Predictor
 from lionelmssq.common import parse_nucleosides
 from lionelmssq.plotting import plot_prediction

@@ -1,9 +1,3 @@
-from lionelmssq.mass_explanation import (
-    DynamicProgrammingTable,
-    is_valid_mass,
-    explain_mass_with_dp,
-)
-
 import polars as pl
 import numpy as np
 
@@ -13,6 +7,11 @@ from lionelmssq.masses import (
     TOLERANCE,
     BREAKAGES,
 )
+from lionelmssq.mass_explanation import (
+    is_valid_mass,
+    explain_mass_with_dp,
+)
+from lionelmssq.mass_table import DynamicProgrammingTable
 
 
 def counts_subset(explanation, ms1_explanations):

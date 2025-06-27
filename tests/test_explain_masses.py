@@ -2,7 +2,6 @@ import pytest
 import polars as pl
 
 from lionelmssq.mass_explanation import (
-    DynamicProgrammingTable,
     explain_mass,
     explain_mass_with_dp,
 )
@@ -14,6 +13,7 @@ from lionelmssq.masses import (
     MASSES,
     TOLERANCE,
 )
+from lionelmssq.mass_table import DynamicProgrammingTable
 
 
 def get_breakage_weight(breakage: str) -> float:
