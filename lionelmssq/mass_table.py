@@ -21,6 +21,7 @@ class NucleotideMass:
     mass: int
     names: List[str]
     is_modification: bool
+    modification_rate: float
 
 
 @dataclass
@@ -94,15 +95,20 @@ def initialize_nucleotide_masses(nucleotide_df):
 
     # Create dict with indicator whether each mass is associated with a modified base
     is_mod = {
-        mass: any(
-            base not in UNMODIFIED_BASES
-            for base in pl.DataFrame({"tolerated_integer_masses": mass})
+        mass: any(base not in UNMODIFIED_BASES for base in names[mass])
+        for mass in nucleotide_df.get_column("tolerated_integer_masses").to_list()
+    }
+
+    # Create dict with the largest associated modification rate for each mass
+    rates = {
+        mass: max(
+            pl.DataFrame({"tolerated_integer_masses": mass})
             .join(
                 nucleotide_df,
                 on="tolerated_integer_masses",
                 how="left",
             )
-            .get_column("nucleoside")
+            .get_column("modification_rate")
             .to_list()
         )
         for mass in nucleotide_df.get_column("tolerated_integer_masses").to_list()
@@ -110,9 +116,9 @@ def initialize_nucleotide_masses(nucleotide_df):
 
     # Return list of NucleotideMass instances
     return [
-        NucleotideMass(mass, names[mass], is_mod[mass])
+        NucleotideMass(mass, names[mass], is_mod[mass], rates[mass])
         if mass != 0
-        else NucleotideMass(0, [], False)
+        else NucleotideMass(0, [], False, 0.0)
         for mass in integer_masses
     ]
 

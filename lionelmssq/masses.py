@@ -2,7 +2,7 @@ import importlib.resources
 import polars as pl
 from itertools import product
 
-_COLS = ["nucleoside", "monoisotopic_mass"]
+_COLS = ["nucleoside", "monoisotopic_mass", "modification_rate"]
 
 REDUCE_TABLE = True
 REDUCE_SET = False

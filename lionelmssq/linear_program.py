@@ -25,7 +25,9 @@ class LinearProgramInstance:
         self.fragment_masses = fragments.get_column("observed_mass").to_list()
         self.seq_len = len(skeleton_seq)
         self.nucleoside_names = nucleosides.get_column("nucleoside").to_list()
-        self.nucleoside_masses = dict(nucleosides.iter_rows())
+        self.nucleoside_masses = dict(
+            nucleosides.select(["nucleoside", "monoisotopic_mass"]).iter_rows()
+        )
         valid_fragment_range = list(range(len(self.fragment_masses)))
         # x: binary variables indicating fragment j presence at position i
         self.x = self._set_x(valid_fragment_range, fragments)
