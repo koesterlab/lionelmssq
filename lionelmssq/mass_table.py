@@ -53,20 +53,14 @@ class DynamicProgrammingTable:
             integer_masses=[mass.mass for mass in self.masses],
         )
 
-
-    def adapt_individual_modification_rates_by_universal_one(
-            self, universal_rate
-    ):
+    def adapt_individual_modification_rates_by_universal_one(self, universal_rate):
         for nucleotide_mass in self.masses:
             if not nucleotide_mass.is_modification:
                 continue
             if nucleotide_mass.modification_rate > universal_rate:
                 nucleotide_mass.modification_rate = universal_rate
 
-
-    def adapt_individual_modification_rates_by_alphabet_reduction(
-            self, alphabet
-    ):
+    def adapt_individual_modification_rates_by_alphabet_reduction(self, alphabet):
         for nucleotide_mass in self.masses:
             if not nucleotide_mass.is_modification:
                 continue

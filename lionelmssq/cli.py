@@ -2,8 +2,14 @@ from pathlib import Path
 from typing import Literal
 
 from lionelmssq.mass_table import DynamicProgrammingTable
-from lionelmssq.masses import COMPRESSION_RATE, REDUCE_SET, REDUCE_TABLE, \
-    TOLERANCE
+from lionelmssq.masses import (
+    COMPRESSION_RATE,
+    EXPLANATION_MASSES,
+    MATCHING_THRESHOLD,
+    REDUCE_SET,
+    REDUCE_TABLE,
+    TOLERANCE,
+)
 from lionelmssq.prediction import Predictor
 from tap import Tap
 import polars as pl
@@ -31,17 +37,20 @@ def main():
     fragments = pl.read_csv(settings.fragments, separator="\t")
 
     dp_table = DynamicProgrammingTable(
-        nucleotide_df=explanation_masses,
+        nucleotide_df=EXPLANATION_MASSES,
         compression_rate=int(COMPRESSION_RATE),
-        tolerance=matching_threshold,
+        tolerance=MATCHING_THRESHOLD,
         precision=TOLERANCE,
         reduced_table=REDUCE_TABLE,
         reduced_set=REDUCE_SET,
     )
 
     prediction = Predictor(
-        fragments, settings.seq_len, settings.solver, settings.threads,
-        dp_table=dp_table
+        fragments,
+        settings.seq_len,
+        settings.solver,
+        settings.threads,
+        dp_table=dp_table,
     ).predict(settings.modification_rate)
 
     # save fragment predictions

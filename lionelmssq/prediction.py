@@ -122,7 +122,9 @@ class Predictor:
 
     def predict(self, modification_rate: float = 0.5) -> Prediction:
         # Adapt individual modification rates to universal one
-        self.dp_table.adapt_individual_modification_rates_by_universal_one(modification_rate)
+        self.dp_table.adapt_individual_modification_rates_by_universal_one(
+            modification_rate
+        )
 
         # TODO: get rid of the requirement to pass the length of the sequence
         #  and instead infer it from the fragments
@@ -438,8 +440,10 @@ class Predictor:
                 entry
                 for entry in explain_mass(
                     diff,
+                    dp_table=self.dp_table,
+                    seq_len=self.seq_len,
                     max_modifications=round(modification_rate * self.seq_len),
-                    matching_threshold=threshold,
+                    threshold=threshold,
                 )
                 if entry.breakage == "c/y_c/y"
             ][0].explanations

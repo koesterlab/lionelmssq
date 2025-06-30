@@ -119,7 +119,7 @@ def test_testcase(testcase):
             fragment_masses_read,
             dp_table=dp_table,
             output_file_path=base_path / "fragments_with_classification_marked.tsv",
-            matching_threshold=matching_threshold,
+            # matching_threshold=matching_threshold,
             intensity_cutoff=intensity_cutoff,
             ms1_mass=ms1_mass,
         )

@@ -106,6 +106,7 @@ def explain_mass_with_dp(
     mass: float,
     dp_table: DynamicProgrammingTable,
     with_memo: bool,
+    seq_len: int,
     max_modifications=np.inf,
     compression_rate=None,
     threshold=None,
@@ -127,7 +128,7 @@ def explain_mass_with_dp(
 
     memo = {}
 
-    def backtrack_with_memo(total_mass, current_idx, max_mods):
+    def backtrack_with_memo(total_mass, current_idx, max_mods_all, max_mods_ind):
         current_weight = dp_table.masses[current_idx].mass
 
         # If the result for this state is already computed, return it
@@ -163,19 +164,30 @@ def explain_mass_with_dp(
         solutions = []
         # Backtrack to the next row above if possible
         if current_value % 2 == 1:
-            solutions += backtrack_with_memo(total_mass, current_idx - 1, max_mods)
+            solutions += backtrack_with_memo(
+                total_mass,
+                current_idx - 1,
+                max_mods_all,
+                round(seq_len * dp_table.masses[current_idx - 1].modification_rate),
+            )
 
         # Backtrack to the next left-side column if possible
         if (current_value >> 1) % 2 == 1:
-            if not dp_table.masses[current_idx].is_modification or max_mods > 0:
+            if not dp_table.masses[current_idx].is_modification or (
+                max_mods_all > 0 and max_mods_ind > 0
+            ):
                 # Adjust number of still allowed modifications if necessary
                 if dp_table.masses[current_idx].is_modification:
-                    max_mods -= 1
+                    max_mods_all -= 1
+                    max_mods_ind -= 1
 
                 solutions += [
                     entry + [current_weight]
                     for entry in backtrack_with_memo(
-                        total_mass - current_weight, current_idx, max_mods
+                        total_mass - current_weight,
+                        current_idx,
+                        max_mods_all,
+                        max_mods_ind,
                     )
                 ]
 
@@ -184,7 +196,7 @@ def explain_mass_with_dp(
 
         return solutions
 
-    def backtrack(total_mass, current_idx, max_mods):
+    def backtrack(total_mass, current_idx, max_mods_all, max_mods_ind):
         current_weight = dp_table.masses[current_idx].mass
 
         # Return empty list for cells outside of table
@@ -209,19 +221,30 @@ def explain_mass_with_dp(
         solutions = []
         # Backtrack to the next row above if possible
         if current_value % 2 == 1:
-            solutions += backtrack(total_mass, current_idx - 1, max_mods)
+            solutions += backtrack(
+                total_mass,
+                current_idx - 1,
+                max_mods_all,
+                round(seq_len * dp_table.masses[current_idx - 1].modification_rate),
+            )
 
         # Backtrack to the next left-side column if possible
         if (current_value >> 1) % 2 == 1:
-            if not dp_table.masses[current_idx].is_modification or max_mods > 0:
+            if not dp_table.masses[current_idx].is_modification or (
+                max_mods_all > 0 and max_mods_ind > 0
+            ):
                 # Adjust number of still allowed modifications if necessary
                 if dp_table.masses[current_idx].is_modification:
-                    max_mods -= 1
+                    max_mods_all -= 1
+                    max_mods_ind -= 1
 
                 solutions += [
                     entry + [current_weight]
                     for entry in backtrack(
-                        total_mass - current_weight, current_idx, max_mods
+                        total_mass - current_weight,
+                        current_idx,
+                        max_mods_all,
+                        max_mods_ind,
                     )
                 ]
 
@@ -236,9 +259,19 @@ def explain_mass_with_dp(
             target - breakage_weight + threshold + 1,
         ):
             solutions += (
-                backtrack_with_memo(value, len(dp_table.masses) - 1, max_modifications)
+                backtrack_with_memo(
+                    value,
+                    len(dp_table.masses) - 1,
+                    max_modifications,
+                    round(seq_len * dp_table.masses[-1].modification_rate),
+                )
                 if with_memo
-                else backtrack(value, len(dp_table.masses) - 1, max_modifications)
+                else backtrack(
+                    value,
+                    len(dp_table.masses) - 1,
+                    max_modifications,
+                    round(seq_len * dp_table.masses[-1].modification_rate),
+                )
             )
 
         # Add valid solutions to dictionary of breakpoint options
@@ -286,32 +319,34 @@ def explain_mass_with_dp(
 
 def explain_mass(
     mass: float,
+    dp_table: DynamicProgrammingTable,
+    seq_len: int,
     max_modifications=np.inf,
-    matching_threshold=MATCHING_THRESHOLD,
+    threshold=None,
 ) -> MassExplanations:
     """
     Returns all the possible combinations of nucleosides that could sum up to the given mass.
     """
+    if threshold is None:
+        threshold = dp_table.tolerance
 
-    tolerated_integer_masses = EXPLANATION_MASSES.get_column(
-        "tolerated_integer_masses"
-    ).to_list()
+    tolerated_integer_masses = [mass.mass for mass in dp_table.masses]
 
     # Convert the target to an integer for easy operations
     target = int(round(mass / TOLERANCE, 0))
 
     # Set matching threshold based on target mass
-    matching_threshold = int(np.ceil(matching_threshold * target))
-
-    # Ensure unique and sorted entries after tolerance correction
-    tolerated_integer_masses = sorted(set(tolerated_integer_masses))
+    threshold = int(np.ceil(threshold * target))
 
     # Memoization dictionary to store results for a given target
     memo = {}
 
-    def dp(remaining, start, used_mods):
+    def dp(remaining, start, used_mods_all, used_mods_ind):
         # If too many modifications are used, return empty list
-        if used_mods > max_modifications:
+        print(start)
+        if used_mods_all > max_modifications or used_mods_ind > round(
+            seq_len * dp_table.masses[start].modification_rate
+        ):
             return []
 
         # If the result for this state is already computed, return it
@@ -319,7 +354,7 @@ def explain_mass(
             return memo[(remaining, start)]
 
         # Base case: if abs(target) is less than threshold, return a list with one empty combination
-        if abs(remaining) <= matching_threshold:
+        if abs(remaining) <= threshold:
             return [[]]
 
         # Base case: if target is zero, return a list with one empty combination
@@ -340,7 +375,14 @@ def explain_mass(
             sub_combinations = dp(
                 remaining - tolerated_integer_mass,
                 i,
-                used_mods + 1 if IS_MOD[tolerated_integer_mass] else used_mods,
+                used_mods_all + 1 if IS_MOD[tolerated_integer_mass] else used_mods_all,
+                0
+                if i != start
+                else (
+                    used_mods_ind + 1
+                    if IS_MOD[tolerated_integer_mass]
+                    else used_mods_ind
+                ),
             )
             # Add current tolerated_integer_mass to all sub-combinations
             for combo in sub_combinations:
@@ -353,8 +395,8 @@ def explain_mass(
 
     solution_tolerated_integer_masses = {}
     for breakage_weight in BREAKAGES:
-        # Start with the full target and all tolerated_integer_masses
-        solutions = dp(target - breakage_weight, 0, 0)
+        # Start with the full target and all tolerated_integer_masses (except 0.0)
+        solutions = dp(target - breakage_weight, 1, 0, 0)
         for breakage in BREAKAGES[breakage_weight]:
             solution_tolerated_integer_masses[breakage] = solutions
 

@@ -69,10 +69,20 @@ MOD_RATE = 0.5
 def test_testcase(testcase, threshold):
     breakage = list(testcase[1].keys())[0]
 
+    dp_table = DynamicProgrammingTable(
+        EXPLANATION_MASSES,
+        reduced_table=True,
+        reduced_set=False,
+        compression_rate=32,
+        tolerance=threshold,
+        precision=TOLERANCE,
+    )
+
     predicted_mass_explanations = explain_mass(
         testcase[0],
+        dp_table=dp_table,
+        seq_len=len(testcase[1][breakage]),
         max_modifications=round(MOD_RATE * len(tuple(testcase[1][breakage]))),
-        matching_threshold=threshold,
     )
 
     explanations = [
@@ -109,6 +119,7 @@ def test_testcase_with_dp(testcase, compression, memo, threshold):
         testcase[0],
         with_memo=memo,
         dp_table=dp_table,
+        seq_len=len(testcase[1][breakage]),
         max_modifications=round(MOD_RATE * len(tuple(testcase[1][breakage]))),
         compression_rate=compression,
     )

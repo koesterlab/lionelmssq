@@ -2,14 +2,13 @@ import polars as pl
 import numpy as np
 
 from lionelmssq.masses import (
-    COMPRESSION_RATE,
     MATCHING_THRESHOLD,
     TOLERANCE,
     BREAKAGES,
 )
 from lionelmssq.mass_explanation import (
     is_valid_mass,
-    explain_mass_with_dp,
+    # explain_mass_with_dp,
 )
 from lionelmssq.mass_table import DynamicProgrammingTable
 
@@ -27,36 +26,38 @@ def counts_subset(explanation, ms1_explanations):
     return False
 
 
-def filter_by_ms1_composition(
-    fragment_mass, dp_table, ms1_mass, ms1_compositions, threshold
-):
-    compositions = [
-        entry
-        for entry in explain_mass_with_dp(
-            mass=fragment_mass,
-            with_memo=True,
-            dp_table=dp_table,
-            compression_rate=dp_table.compression_per_cell,
-            threshold=threshold,
-        )
-    ]
-
-    # Remove all full-sequence explanations that differ in mass by more than the threshold
-    if abs(fragment_mass / ms1_mass - 1) > threshold:
-        compositions = {
-            composition
-            for composition in compositions
-            if composition.breakage != "START_END"
-        }
-
-    # Remove all explanations that are not a subset of any MS1 composition
-    for composition in compositions:
-        composition.explanations = {
-            explanation
-            for explanation in composition.explanations
-            if counts_subset(explanation, ms1_compositions.explanations)
-        }
-    return compositions
+# TODO: Decide whether to keep MS1-composition filter (would require
+#  prior knowledge about sequence length)
+# def filter_by_ms1_composition(
+#     fragment_mass, dp_table, ms1_mass, ms1_compositions, threshold
+# ):
+#     compositions = [
+#         entry
+#         for entry in explain_mass_with_dp(
+#             mass=fragment_mass,
+#             with_memo=True,
+#             dp_table=dp_table,
+#             compression_rate=dp_table.compression_per_cell,
+#             threshold=threshold,
+#         )
+#     ]
+#
+#     # Remove all full-sequence explanations that differ in mass by more than the threshold
+#     if abs(fragment_mass / ms1_mass - 1) > threshold:
+#         compositions = {
+#             composition
+#             for composition in compositions
+#             if composition.breakage != "START_END"
+#         }
+#
+#     # Remove all explanations that are not a subset of any MS1 composition
+#     for composition in compositions:
+#         composition.explanations = {
+#             explanation
+#             for explanation in composition.explanations
+#             if counts_subset(explanation, ms1_compositions.explanations)
+#         }
+#     return compositions
 
 
 def is_complete_fragment_candidate(mass, dp_table):
@@ -139,7 +140,7 @@ def mark_terminal_fragment_candidates(
     output_mass_column_name="observed_mass",
     intensity_cutoff=0.5e6,
     mass_cutoff=50000,
-    matching_threshold=MATCHING_THRESHOLD,
+    # threshold=MATCHING_THRESHOLD,
     # ms1_mass_deviations_allowed=0.01,
 ):
     neutral_masses = (
@@ -149,22 +150,22 @@ def mark_terminal_fragment_candidates(
     integer_masses = [mass.mass for mass in dp_table.masses]
 
     ms1_compositions = None
-    if ms1_mass:
-        # Compute all compositions for the full sequence (with both tags)
-        ms1_compositions = [
-            entry
-            for entry in explain_mass_with_dp(
-                mass=ms1_mass,
-                with_memo=True,
-                dp_table=dp_table,
-                compression_rate=COMPRESSION_RATE,
-                threshold=matching_threshold,
-            )
-            if entry.breakage == "START_END"
-        ][0]
-
-        if len(ms1_compositions) == 0:
-            print("The MS1 mass could not be explained by the nucleosides!")
+    # if ms1_mass:
+    #     # Compute all compositions for the full sequence (with both tags)
+    #     ms1_compositions = [
+    #         entry
+    #         for entry in explain_mass_with_dp(
+    #             mass=ms1_mass,
+    #             with_memo=True,
+    #             dp_table=dp_table,
+    #             compression_rate=dp_table.compression_per_cell,
+    #             threshold=threshold,
+    #         )
+    #         if entry.breakage == "START_END"
+    #     ][0]
+    #
+    #     if len(ms1_compositions) == 0:
+    #         print("The MS1 mass could not be explained by the nucleosides!")
 
     # Filter compositions by MS1 mass
     # TODO: Using the MS1 filter here is not compatible with only doing a table look-up;
