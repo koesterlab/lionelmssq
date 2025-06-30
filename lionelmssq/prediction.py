@@ -121,6 +121,9 @@ class Predictor:
         )
 
     def predict(self, modification_rate: float = 0.5) -> Prediction:
+        # Adapt individual modification rates to universal one
+        self.dp_table.adapt_individual_modification_rates_by_universal_one(modification_rate)
+
         # TODO: get rid of the requirement to pass the length of the sequence
         #  and instead infer it from the fragments
 
