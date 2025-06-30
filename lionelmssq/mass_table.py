@@ -64,6 +64,16 @@ class DynamicProgrammingTable:
                 nucleotide_mass.modification_rate = universal_rate
 
 
+    def adapt_individual_modification_rates_by_alphabet_reduction(
+            self, alphabet
+    ):
+        for nucleotide_mass in self.masses:
+            if not nucleotide_mass.is_modification:
+                continue
+            if all(name not in alphabet for name in nucleotide_mass.names):
+                nucleotide_mass.modification_rate = 0.0
+
+
 def set_table_path(reduce_table, reduce_set, precision, compression_rate):
     # Set path for DP table
     path = (
