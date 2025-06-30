@@ -18,7 +18,9 @@ UNMODIFIED_BASES = ["A", "C", "G", "U"]
 
 
 class LinearProgramInstance:
-    def __init__(self, fragments, nucleosides, skeleton_seq, modification_rate):
+    def __init__(
+        self, fragments, nucleosides, dp_table, skeleton_seq, modification_rate
+    ):
         # i = 1,...,n: positions in the sequence
         # j = 1,...,m: fragments
         # b = 1,...,k: (modified) bases
@@ -40,7 +42,9 @@ class LinearProgramInstance:
             valid_fragment_range
         )
 
-        self.problem = self._define_lp_problem(valid_fragment_range, modification_rate)
+        self.problem = self._define_lp_problem(
+            valid_fragment_range, modification_rate, dp_table
+        )
 
     def _set_x(self, valid_fragment_range, fragments):
         x = [
@@ -152,7 +156,7 @@ class LinearProgramInstance:
             for j in valid_fragment_range
         ]
 
-    def _define_lp_problem(self, valid_fragment_range, modification_rate):
+    def _define_lp_problem(self, valid_fragment_range, modification_rate, dp_table):
         problem = LpProblem("Fragment filter", LpMinimize)
 
         # weight_diff_abs: absolute value of weight_diff
@@ -177,6 +181,14 @@ class LinearProgramInstance:
                 if b not in UNMODIFIED_BASES
             ]
         ) <= np.ceil(modification_rate * self.seq_len)
+
+        # Enforce individual modification rates
+        for mass in dp_table.masses:
+            for b in mass.names:
+                if b in self.nucleoside_names:
+                    problem += lpSum(
+                        [self.y[i][b] for i in range(self.seq_len)]
+                    ) <= np.ceil(mass.modification_rate * self.seq_len)
 
         # fill z with the product of binary variables x and y
         for i in range(self.seq_len):

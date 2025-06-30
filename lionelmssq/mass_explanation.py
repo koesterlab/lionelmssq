@@ -343,7 +343,6 @@ def explain_mass(
 
     def dp(remaining, start, used_mods_all, used_mods_ind):
         # If too many modifications are used, return empty list
-        print(start)
         if used_mods_all > max_modifications or used_mods_ind > round(
             seq_len * dp_table.masses[start].modification_rate
         ):

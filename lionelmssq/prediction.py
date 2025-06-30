@@ -271,6 +271,7 @@ class Predictor:
                     pl.col("index") == frag[self.fragments.get_column_index("index")]
                 ),
                 nucleosides=masses,
+                dp_table=self.dp_table,
                 skeleton_seq=skeleton_seq,
                 modification_rate=modification_rate,
             )
@@ -316,6 +317,7 @@ class Predictor:
         lp_instance = LinearProgramInstance(
             fragments=self.fragments,
             nucleosides=masses,
+            dp_table=self.dp_table,
             skeleton_seq=skeleton_seq,
             modification_rate=modification_rate,
         )
