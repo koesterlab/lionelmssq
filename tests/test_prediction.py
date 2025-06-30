@@ -80,6 +80,15 @@ def test_testcase(testcase):
         #     matching_threshold,
         # )
 
+        dp_table = DynamicProgrammingTable(
+            explanation_masses,
+            reduced_table=True,
+            reduced_set=False,
+            compression_rate=COMPRESSION_RATE,
+            tolerance=MATCHING_THRESHOLD,
+            precision=TOLERANCE,
+        )
+
     else:
         simulation = False
 
@@ -125,6 +134,7 @@ def test_testcase(testcase):
         os.environ.get("SOLVER", "cbc"),
         # os.environ.get("SOLVER", "gurobi"),  # "solver": "gurobi" or "cbc"
         threads=16,
+        dp_table=dp_table,
         unique_masses=unique_masses,
         explanation_masses=explanation_masses,
         matching_threshold=matching_threshold,

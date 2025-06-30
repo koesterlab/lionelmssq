@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import List, Optional, Self, Set, Tuple
 from lionelmssq.common import Side
 from lionelmssq.linear_program import LinearProgramInstance
+from lionelmssq.mass_table import DynamicProgrammingTable
 from lionelmssq.masses import UNIQUE_MASSES, EXPLANATION_MASSES, MATCHING_THRESHOLD
 from lionelmssq.mass_explanation import explain_mass
 import polars as pl
@@ -39,6 +40,7 @@ class Predictor:
         seq_len: int,
         solver: str,
         threads: int,
+        dp_table: DynamicProgrammingTable,
         unique_masses: pl.DataFrame = UNIQUE_MASSES,
         explanation_masses: pl.DataFrame = EXPLANATION_MASSES,
         matching_threshold: float = MATCHING_THRESHOLD,
@@ -84,6 +86,7 @@ class Predictor:
         self.mass_tags = {Side.START: mass_tag_start, Side.END: mass_tag_end}
         self.fragments_side = dict()
         self.fragment_masses = dict()
+        self.dp_table = dp_table
 
     def build_skeleton(
         self, modification_rate

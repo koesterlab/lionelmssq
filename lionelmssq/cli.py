@@ -1,5 +1,9 @@
 from pathlib import Path
 from typing import Literal
+
+from lionelmssq.mass_table import DynamicProgrammingTable
+from lionelmssq.masses import COMPRESSION_RATE, REDUCE_SET, REDUCE_TABLE, \
+    TOLERANCE
 from lionelmssq.prediction import Predictor
 from tap import Tap
 import polars as pl
@@ -25,8 +29,19 @@ class Settings(Tap):
 def main():
     settings = Settings(underscores_to_dashes=True).parse_args()
     fragments = pl.read_csv(settings.fragments, separator="\t")
+
+    dp_table = DynamicProgrammingTable(
+        nucleotide_df=explanation_masses,
+        compression_rate=int(COMPRESSION_RATE),
+        tolerance=matching_threshold,
+        precision=TOLERANCE,
+        reduced_table=REDUCE_TABLE,
+        reduced_set=REDUCE_SET,
+    )
+
     prediction = Predictor(
-        fragments, settings.seq_len, settings.solver, settings.threads
+        fragments, settings.seq_len, settings.solver, settings.threads,
+        dp_table=dp_table
     ).predict(settings.modification_rate)
 
     # save fragment predictions
