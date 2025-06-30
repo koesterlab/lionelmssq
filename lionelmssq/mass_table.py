@@ -123,7 +123,7 @@ def initialize_nucleotide_masses(nucleotide_df):
     ]
 
 
-def set_up_bit_table(integer_masses, max_mass, compression_rate):
+def set_up_bit_table(integer_masses, max_mass: int, compression_rate: int):
     """
     Calculate complete bit-representation mass table with dynamic programming.
     """
@@ -167,7 +167,7 @@ def set_up_bit_table(integer_masses, max_mass, compression_rate):
     return dp_table
 
 
-def select_table_building_settings(compression_rate):
+def select_table_building_settings(compression_rate: int):
     match compression_rate:
         case 4:
             return {
@@ -240,7 +240,7 @@ def load_dp_table(table_path, reduce_table, integer_masses):
     Load dynamic-programming table if it exists and compute it otherwise.
     """
     # Select compression rate from path string
-    compression_rate = table_path.split(".")[-1].rstrip("_per_cell")
+    compression_rate = int(table_path.split(".")[-1].rstrip("_per_cell"))
 
     # Select maximum integer mass for which table should be built
     max_mass = max(integer_masses) * (12 if reduce_table else 35)
