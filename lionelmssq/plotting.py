@@ -56,7 +56,7 @@ def plot_prediction(
                 return_dtype=pl.List(pl.Int64),
             )
             .alias("range"),
-            pl.col("true_mass")
+            pl.col("true_mass_with_backbone")
             .map_elements(lambda mass: f"{mass:.2f}", return_dtype=pl.Utf8)
             .alias("mass_info"),
             # pl.col("sequence").alias("fragment_seq"),
