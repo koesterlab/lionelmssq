@@ -157,7 +157,7 @@ class LinearProgramInstance:
         ]
 
     def _define_lp_problem(self, valid_fragment_range, modification_rate, dp_table):
-        problem = LpProblem("Fragment filter", LpMinimize)
+        problem = LpProblem("fragment_filter", LpMinimize)
 
         # weight_diff_abs: absolute value of weight_diff
         predicted_mass_diff_abs = [
@@ -239,11 +239,11 @@ class LinearProgramInstance:
 
         # Get the sequence corresponding to each of the fragments!
         fragment_seq = [
-            [
+            "".join([
                 self._get_base_fragmentwise(i, j)
                 for i in range(self.seq_len)
                 if self._get_base_fragmentwise(i, j) is not None
-            ]
+            ])
             for j in list(range(len(self.fragment_masses)))
         ]
 
