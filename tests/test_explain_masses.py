@@ -1,11 +1,19 @@
-# import importlib.resources
-# import os
 import pytest
 import polars as pl
-# import yaml
 
-from lionelmssq.mass_explanation import explain_mass, explain_mass_with_dp
-from lionelmssq.masses import START_OPTIONS, END_OPTIONS, PHOSPHATE_LINK_MASS, MASSES
+from lionelmssq.mass_explanation import (
+    explain_mass,
+    explain_mass_with_dp,
+)
+from lionelmssq.masses import (
+    EXPLANATION_MASSES,
+    START_OPTIONS,
+    END_OPTIONS,
+    PHOSPHATE_LINK_MASS,
+    MASSES,
+    TOLERANCE,
+)
+from lionelmssq.mass_table import DynamicProgrammingTable
 
 
 def get_breakage_weight(breakage: str) -> float:
@@ -53,16 +61,30 @@ MASS_SEQ_DICT = dict(
     )
 )
 THRESHOLDS = [10e-6, 5e-6, 2e-6]
+MOD_RATE = 0.5
 
 
 @pytest.mark.parametrize("testcase", MASS_SEQ_DICT.items())
 @pytest.mark.parametrize("threshold", THRESHOLDS)
 def test_testcase(testcase, threshold):
-    predicted_mass_explanations = explain_mass(
-        testcase[0], matching_threshold=threshold
+    breakage = list(testcase[1].keys())[0]
+
+    dp_table = DynamicProgrammingTable(
+        EXPLANATION_MASSES,
+        reduced_table=True,
+        reduced_set=False,
+        compression_rate=32,
+        tolerance=threshold,
+        precision=TOLERANCE,
     )
 
-    breakage = list(testcase[1].keys())[0]
+    predicted_mass_explanations = explain_mass(
+        testcase[0],
+        dp_table=dp_table,
+        seq_len=len(testcase[1][breakage]),
+        max_modifications=round(MOD_RATE * len(tuple(testcase[1][breakage]))),
+    )
+
     explanations = [
         tuple(solution)
         for expl in predicted_mass_explanations
@@ -82,11 +104,26 @@ COMPRESSION_RATES = [32]
 @pytest.mark.parametrize("memo", WITH_MEMO)
 @pytest.mark.parametrize("threshold", THRESHOLDS)
 def test_testcase_with_dp(testcase, compression, memo, threshold):
-    predicted_mass_explanations = explain_mass_with_dp(
-        testcase[0], with_memo=memo, compression_rate=compression, threshold=threshold
+    breakage = list(testcase[1].keys())[0]
+
+    dp_table = DynamicProgrammingTable(
+        EXPLANATION_MASSES,
+        reduced_table=True,
+        reduced_set=False,
+        compression_rate=compression,
+        tolerance=threshold,
+        precision=TOLERANCE,
     )
 
-    breakage = list(testcase[1].keys())[0]
+    predicted_mass_explanations = explain_mass_with_dp(
+        testcase[0],
+        with_memo=memo,
+        dp_table=dp_table,
+        seq_len=len(testcase[1][breakage]),
+        max_modifications=round(MOD_RATE * len(tuple(testcase[1][breakage]))),
+        compression_rate=compression,
+    )
+
     explanations = [
         tuple(solution)
         for expl in predicted_mass_explanations

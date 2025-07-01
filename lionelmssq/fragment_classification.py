@@ -1,18 +1,16 @@
-from lionelmssq.mass_explanation import (
-    load_dp_table,
-    is_valid_mass,
-    explain_mass_with_dp,
-)
-
 import polars as pl
 import numpy as np
 
 from lionelmssq.masses import (
-    COMPRESSION_RATE,
     MATCHING_THRESHOLD,
     TOLERANCE,
     BREAKAGES,
 )
+from lionelmssq.mass_explanation import (
+    is_valid_mass,
+    # explain_mass_with_dp,
+)
+from lionelmssq.mass_table import DynamicProgrammingTable
 
 
 def counts_subset(explanation, ms1_explanations):
@@ -28,33 +26,38 @@ def counts_subset(explanation, ms1_explanations):
     return False
 
 
-def filter_by_ms1_composition(fragment_mass, ms1_mass, ms1_compositions, threshold):
-    compositions = [
-        entry
-        for entry in explain_mass_with_dp(
-            mass=fragment_mass,
-            with_memo=True,
-            compression_rate=COMPRESSION_RATE,
-            threshold=threshold,
-        )
-    ]
-
-    # Remove all full-sequence explanations that differ in mass by more than the threshold
-    if abs(fragment_mass / ms1_mass - 1) > threshold:
-        compositions = {
-            composition
-            for composition in compositions
-            if composition.breakage != "START_END"
-        }
-
-    # Remove all explanations that are not a subset of any MS1 composition
-    for composition in compositions:
-        composition.explanations = {
-            explanation
-            for explanation in composition.explanations
-            if counts_subset(explanation, ms1_compositions.explanations)
-        }
-    return compositions
+# TODO: Decide whether to keep MS1-composition filter (would require
+#  prior knowledge about sequence length)
+# def filter_by_ms1_composition(
+#     fragment_mass, dp_table, ms1_mass, ms1_compositions, threshold
+# ):
+#     compositions = [
+#         entry
+#         for entry in explain_mass_with_dp(
+#             mass=fragment_mass,
+#             with_memo=True,
+#             dp_table=dp_table,
+#             compression_rate=dp_table.compression_per_cell,
+#             threshold=threshold,
+#         )
+#     ]
+#
+#     # Remove all full-sequence explanations that differ in mass by more than the threshold
+#     if abs(fragment_mass / ms1_mass - 1) > threshold:
+#         compositions = {
+#             composition
+#             for composition in compositions
+#             if composition.breakage != "START_END"
+#         }
+#
+#     # Remove all explanations that are not a subset of any MS1 composition
+#     for composition in compositions:
+#         composition.explanations = {
+#             explanation
+#             for explanation in composition.explanations
+#             if counts_subset(explanation, ms1_compositions.explanations)
+#         }
+#     return compositions
 
 
 def is_complete_fragment_candidate(mass, dp_table):
@@ -130,40 +133,39 @@ def is_singleton_candidate(mass, integer_masses, threshold=MATCHING_THRESHOLD):
 
 def mark_terminal_fragment_candidates(
     fragment_masses,
+    dp_table: DynamicProgrammingTable,
     ms1_mass=None,
     output_file_path=None,
     mass_column_name="neutral_mass",
     output_mass_column_name="observed_mass",
     intensity_cutoff=0.5e6,
     mass_cutoff=50000,
-    matching_threshold=MATCHING_THRESHOLD,
-    table_path=None,
+    # threshold=MATCHING_THRESHOLD,
     # ms1_mass_deviations_allowed=0.01,
 ):
     neutral_masses = (
         fragment_masses.select(pl.col(mass_column_name)).to_series().to_list()
     )
 
-    dp_table, integer_masses = load_dp_table(
-        compression_rate=COMPRESSION_RATE, table_path=table_path
-    )
+    integer_masses = [mass.mass for mass in dp_table.masses]
 
     ms1_compositions = None
-    if ms1_mass:
-        # Compute all compositions for the full sequence (with both tags)
-        ms1_compositions = [
-            entry
-            for entry in explain_mass_with_dp(
-                mass=ms1_mass,
-                with_memo=True,
-                compression_rate=COMPRESSION_RATE,
-                threshold=matching_threshold,
-            )
-            if entry.breakage == "START_END"
-        ][0]
-
-        if len(ms1_compositions) == 0:
-            print("The MS1 mass could not be explained by the nucleosides!")
+    # if ms1_mass:
+    #     # Compute all compositions for the full sequence (with both tags)
+    #     ms1_compositions = [
+    #         entry
+    #         for entry in explain_mass_with_dp(
+    #             mass=ms1_mass,
+    #             with_memo=True,
+    #             dp_table=dp_table,
+    #             compression_rate=dp_table.compression_per_cell,
+    #             threshold=threshold,
+    #         )
+    #         if entry.breakage == "START_END"
+    #     ][0]
+    #
+    #     if len(ms1_compositions) == 0:
+    #         print("The MS1 mass could not be explained by the nucleosides!")
 
     # Filter compositions by MS1 mass
     # TODO: Using the MS1 filter here is not compatible with only doing a table look-up;
@@ -171,7 +173,7 @@ def mark_terminal_fragment_candidates(
     # for mass in neutral_masses:
     #     if ms1_compositions:
     #         compositions = filter_by_ms1_composition(
-    #             fragment_mass=mass, ms1_mass=ms1_mass,
+    #             fragment_mass=mass, dp_table=dp_table, ms1_mass=ms1_mass,
     #             ms1_compositions=ms1_compositions,
     #             threshold=ms1_mass_deviations_allowed
     #         )
@@ -184,7 +186,7 @@ def mark_terminal_fragment_candidates(
     fragments = fragments.with_columns(
         pl.col(mass_column_name)
         .map_elements(
-            lambda x: is_start_fragment_candidate(x, dp_table=dp_table),
+            lambda x: is_start_fragment_candidate(x, dp_table=dp_table.table),
             return_dtype=bool,
         )
         .alias("is_start")
@@ -194,7 +196,7 @@ def mark_terminal_fragment_candidates(
     fragments = fragments.with_columns(
         pl.col(mass_column_name)
         .map_elements(
-            lambda x: is_end_fragment_candidate(x, dp_table=dp_table),
+            lambda x: is_end_fragment_candidate(x, dp_table=dp_table.table),
             return_dtype=bool,
         )
         .alias("is_end")
@@ -214,7 +216,7 @@ def mark_terminal_fragment_candidates(
     fragments = fragments.with_columns(
         pl.col(mass_column_name)
         .map_elements(
-            lambda x: is_complete_fragment_candidate(x, dp_table=dp_table),
+            lambda x: is_complete_fragment_candidate(x, dp_table=dp_table.table),
             return_dtype=bool,
         )
         .alias("is_start_end")
@@ -224,7 +226,7 @@ def mark_terminal_fragment_candidates(
     fragments = fragments.with_columns(
         pl.col(mass_column_name)
         .map_elements(
-            lambda x: is_internal_fragment_candidate(x, dp_table=dp_table),
+            lambda x: is_internal_fragment_candidate(x, dp_table=dp_table.table),
             return_dtype=bool,
         )
         .alias("is_internal")

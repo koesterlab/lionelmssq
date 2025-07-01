@@ -10,14 +10,16 @@ from pulp import (
 from lionelmssq.common import get_singleton_set_item, milp_is_one
 from itertools import combinations
 import polars as pl
+import numpy as np
+
+# TODO: Currently, the list of unmodified bases is only defined for RNA;
+#  make it universally applicable
+UNMODIFIED_BASES = ["A", "C", "G", "U"]
 
 
 class LinearProgramInstance:
     def __init__(
-        self,
-        fragments,
-        nucleosides,
-        skeleton_seq,
+        self, fragments, nucleosides, dp_table, skeleton_seq, modification_rate
     ):
         # i = 1,...,n: positions in the sequence
         # j = 1,...,m: fragments
@@ -25,7 +27,9 @@ class LinearProgramInstance:
         self.fragment_masses = fragments.get_column("observed_mass").to_list()
         self.seq_len = len(skeleton_seq)
         self.nucleoside_names = nucleosides.get_column("nucleoside").to_list()
-        self.nucleoside_masses = dict(nucleosides.iter_rows())
+        self.nucleoside_masses = dict(
+            nucleosides.select(["nucleoside", "monoisotopic_mass"]).iter_rows()
+        )
         valid_fragment_range = list(range(len(self.fragment_masses)))
         # x: binary variables indicating fragment j presence at position i
         self.x = self._set_x(valid_fragment_range, fragments)
@@ -38,7 +42,9 @@ class LinearProgramInstance:
             valid_fragment_range
         )
 
-        self.problem = self._define_lp_problem(valid_fragment_range)
+        self.problem = self._define_lp_problem(
+            valid_fragment_range, modification_rate, dp_table
+        )
 
     def _set_x(self, valid_fragment_range, fragments):
         x = [
@@ -150,7 +156,7 @@ class LinearProgramInstance:
             for j in valid_fragment_range
         ]
 
-    def _define_lp_problem(self, valid_fragment_range):
+    def _define_lp_problem(self, valid_fragment_range, modification_rate, dp_table):
         problem = LpProblem("Fragment filter", LpMinimize)
 
         # weight_diff_abs: absolute value of weight_diff
@@ -165,6 +171,24 @@ class LinearProgramInstance:
         # select one base per position
         for i in range(self.seq_len):
             problem += lpSum([self.y[i][b] for b in self.nucleoside_names]) == 1
+
+        # Enforce universal modification rate
+        problem += lpSum(
+            [
+                self.y[i][b]
+                for i in range(self.seq_len)
+                for b in self.nucleoside_names
+                if b not in UNMODIFIED_BASES
+            ]
+        ) <= np.ceil(modification_rate * self.seq_len)
+
+        # Enforce individual modification rates
+        for mass in dp_table.masses:
+            for b in mass.names:
+                if b in self.nucleoside_names:
+                    problem += lpSum(
+                        [self.y[i][b] for i in range(self.seq_len)]
+                    ) <= np.ceil(mass.modification_rate * self.seq_len)
 
         # fill z with the product of binary variables x and y
         for i in range(self.seq_len):

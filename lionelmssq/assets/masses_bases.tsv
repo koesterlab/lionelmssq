@@ -1,5 +1,5 @@
-nucleoside	monoisotopic_mass
-A	267.09675
-G	283.09167
-C	243.08552
-U	244.06954
+nucleoside	monoisotopic_mass	modification_rate
+A	267.09675	1.0
+G	283.09167	1.0
+C	243.08552	1.0
+U	244.06954	1.0

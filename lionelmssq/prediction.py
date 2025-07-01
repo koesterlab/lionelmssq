@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import List, Optional, Self, Set, Tuple
 from lionelmssq.common import Side
 from lionelmssq.linear_program import LinearProgramInstance
+from lionelmssq.mass_table import DynamicProgrammingTable
 from lionelmssq.masses import UNIQUE_MASSES, EXPLANATION_MASSES, MATCHING_THRESHOLD
 from lionelmssq.mass_explanation import explain_mass
 import polars as pl
@@ -39,6 +40,7 @@ class Predictor:
         seq_len: int,
         solver: str,
         threads: int,
+        dp_table: DynamicProgrammingTable,
         unique_masses: pl.DataFrame = UNIQUE_MASSES,
         explanation_masses: pl.DataFrame = EXPLANATION_MASSES,
         matching_threshold: float = MATCHING_THRESHOLD,
@@ -84,9 +86,10 @@ class Predictor:
         self.mass_tags = {Side.START: mass_tag_start, Side.END: mass_tag_end}
         self.fragments_side = dict()
         self.fragment_masses = dict()
+        self.dp_table = dp_table
 
     def build_skeleton(
-        self,
+        self, modification_rate
     ) -> Tuple[
         List[Set[str]],
         List[TerminalFragment],
@@ -95,15 +98,13 @@ class Predictor:
         List[int],
     ]:
         skeleton_seq_start, start_fragments, invalid_start_fragments = (
-            self._predict_skeleton(
-                Side.START,
-            )
+            self._predict_skeleton(Side.START, modification_rate)
         )
 
         print("Skeleton sequence start = ", skeleton_seq_start)
 
         skeleton_seq_end, end_fragments, invalid_end_fragments = self._predict_skeleton(
-            Side.END,
+            Side.END, modification_rate
         )
         print("Skeleton sequence end = ", skeleton_seq_end)
 
@@ -119,8 +120,13 @@ class Predictor:
             invalid_end_fragments,
         )
 
-    def predict(self) -> Prediction:
-        # TODO: Get rid of the requirement to pass the length of the sequence
+    def predict(self, modification_rate: float = 0.5) -> Prediction:
+        # Adapt individual modification rates to universal one
+        self.dp_table.adapt_individual_modification_rates_by_universal_one(
+            modification_rate
+        )
+
+        # TODO: get rid of the requirement to pass the length of the sequence
         #  and instead infer it from the fragments
 
         # Collect the fragments for the start and end side which also include the start_end fragments (entire sequences)
@@ -144,7 +150,7 @@ class Predictor:
         # Note that there may be faulty mass fragments which will lead to bad (not truly existent) differences here!
         self._collect_diffs(Side.START)
         self._collect_diffs(Side.END)
-        self._collect_diff_explanations()
+        self._collect_diff_explanations(modification_rate)
 
         # TODO: Also consider that the observations are not complete and that
         #  we probably don't see all the letters as diffs or singletons.
@@ -162,7 +168,7 @@ class Predictor:
             end_fragments,
             invalid_start_fragments,
             invalid_end_fragments,
-        ) = self.build_skeleton()
+        ) = self.build_skeleton(modification_rate)
 
         # TODO: If the tags are considered in the LP at the end, then most of the following code will become obsolete!
 
@@ -265,7 +271,9 @@ class Predictor:
                     pl.col("index") == frag[self.fragments.get_column_index("index")]
                 ),
                 nucleosides=masses,
+                dp_table=self.dp_table,
                 skeleton_seq=skeleton_seq,
+                modification_rate=modification_rate,
             )
             if filter_instance.check_feasibility(
                 solver_name=solver_name,
@@ -309,7 +317,9 @@ class Predictor:
         lp_instance = LinearProgramInstance(
             fragments=self.fragments,
             nucleosides=masses,
+            dp_table=self.dp_table,
             skeleton_seq=skeleton_seq,
+            modification_rate=modification_rate,
         )
 
         seq, fragment_predictions = lp_instance.evaluate(solver_name, self.threads)
@@ -425,14 +435,17 @@ class Predictor:
         )
         self.singleton_masses = set(masses)
 
-    def _calculate_diff_dp(self, diff, threshold, explanation_masses):
+    def _calculate_diff_dp(self, diff, threshold, modification_rate):
         # TODO: Add support for other breakages than 'c/y_c/y'
         explanation_list = list(
             [
                 entry
                 for entry in explain_mass(
                     diff,
-                    matching_threshold=threshold,
+                    dp_table=self.dp_table,
+                    seq_len=self.seq_len,
+                    max_modifications=round(modification_rate * self.seq_len),
+                    threshold=threshold,
                 )
                 if entry.breakage == "c/y_c/y"
             ][0].explanations
@@ -445,7 +458,7 @@ class Predictor:
             retval = []
         return retval
 
-    def _collect_diff_explanations(self) -> None:
+    def _collect_diff_explanations(self, modification_rate) -> None:
         diffs = (self.mass_diffs[Side.START]) + (self.mass_diffs[Side.END])
 
         diffs_errors = (
@@ -453,12 +466,12 @@ class Predictor:
         )
         for diff, diff_error in zip(diffs, diffs_errors):
             self.explanations[diff] = self._calculate_diff_dp(
-                diff, diff_error, self.explanation_masses
+                diff, diff_error, modification_rate
             )
 
         for diff in self.singleton_masses:
             self.explanations[diff] = self._calculate_diff_dp(
-                diff, self.matching_threshold, self.explanation_masses
+                diff, self.matching_threshold, modification_rate
             )
         # TODO: Can make it simpler here by rejecting diff which cannot be explained instead of doing it in the _predict_skeleton function!
 
@@ -474,11 +487,16 @@ class Predictor:
         )
         print("Nucleosides considered for fitting after alphabet reduction:", reduced)
 
+        self.dp_table.adapt_individual_modification_rates_by_alphabet_reduction(
+            observed_nucleosides
+        )
+
         return reduced
 
     def _predict_skeleton(
         self,
         side: Side,
+        modification_rate,
         skeleton_seq: Optional[List[Set[str]]] = None,
         fragment_masses=None,
         candidate_fragments=None,
@@ -538,7 +556,7 @@ class Predictor:
                     self.matching_threshold,
                 )
                 explanations = self._calculate_diff_dp(
-                    diff, threshold, self.explanation_masses
+                    diff, threshold, modification_rate
                 )
 
             # METHOD: if there is only one single nucleoside explanation, we can
