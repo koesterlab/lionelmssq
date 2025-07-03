@@ -674,4 +674,4 @@ class Explanation:
         return len(self.nucleosides)
 
     def __repr__(self):
-        return f"{{{",".join(self.nucleosides)}}}"
+        return f"{{{','.join(self.nucleosides)}}}"

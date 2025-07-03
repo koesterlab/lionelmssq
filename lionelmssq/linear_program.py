@@ -239,11 +239,13 @@ class LinearProgramInstance:
 
         # Get the sequence corresponding to each of the fragments!
         fragment_seq = [
-            "".join([
-                self._get_base_fragmentwise(i, j)
-                for i in range(self.seq_len)
-                if self._get_base_fragmentwise(i, j) is not None
-            ])
+            "".join(
+                [
+                    self._get_base_fragmentwise(i, j)
+                    for i in range(self.seq_len)
+                    if self._get_base_fragmentwise(i, j) is not None
+                ]
+            )
             for j in list(range(len(self.fragment_masses)))
         ]
 

@@ -67,7 +67,7 @@ def initialize_nucleotide_df(reduce_set):
         (
             importlib.resources.files(__package__)
             / "assets"
-            / f"{"masses_bases" if reduce_set else "masses"}.tsv"
+            / f"{'masses_bases' if reduce_set else 'masses'}.tsv"
         ),
         separator="\t",
     )

@@ -47,8 +47,8 @@ def main():
         reduce_set = False
 
     _, unique_masses, explanation_masses = initialize_nucleotide_df(
-        reduce_set=reduce_set)
-
+        reduce_set=reduce_set
+    )
 
     dp_table = DynamicProgrammingTable(
         nucleotide_df=explanation_masses,
@@ -70,14 +70,13 @@ def main():
         fragments = mark_terminal_fragment_candidates(
             fragments,
             dp_table=dp_table,
-            output_file_path=fragment_dir
-                             +"/fragments_with_classification_marked.tsv",
+            output_file_path=fragment_dir + "/fragments_with_classification_marked.tsv",
             # matching_threshold=matching_threshold,
-            intensity_cutoff=meta["intensity_cutoff"] if "intensity_cutoff"
-                                                         in meta else 1e4,
+            intensity_cutoff=meta["intensity_cutoff"]
+            if "intensity_cutoff" in meta
+            else 1e4,
             ms1_mass=meta["sequence_mass"] if "sequence_mass" in meta else None,
         )
-
 
     prediction = Predictor(
         fragments=fragments,
