@@ -41,6 +41,7 @@ def plot_prediction(
         ).alias("mass_info"),
         pl.col("predicted_fragment_seq")
         # .map_elements(reject_none, return_dtype=pl.List(pl.Utf8))
+        .map_elements(parse_nucleosides, return_dtype=pl.List(pl.Utf8))
         .alias("fragment_seq"),
         pl.lit("predicted").alias("type"),
     ).with_row_index()
@@ -55,7 +56,7 @@ def plot_prediction(
                 return_dtype=pl.List(pl.Int64),
             )
             .alias("range"),
-            pl.col("true_mass")
+            pl.col("true_mass_with_backbone")
             .map_elements(lambda mass: f"{mass:.2f}", return_dtype=pl.Utf8)
             .alias("mass_info"),
             # pl.col("sequence").alias("fragment_seq"),

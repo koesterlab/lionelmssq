@@ -150,15 +150,15 @@ def test_testcase(testcase):
         prediction.fragments.select(pl.col("predicted_fragment_mass"))
     ).to_list()
 
-    print("Predicted sequence = ", prediction.sequence)
-    print("True sequence = ", true_seq)
+    print("Predicted sequence =\t", prediction.sequence)
+    print("True sequence =\t\t", true_seq)
 
     if simulation:
         plot_prediction(
             prediction,
             true_seq,
         ).save(base_path / "plot.html")
-        # The above is temporary, until the preeiction for the entire intact sequence is fixed!)
+        # The above is temporary, until the prediction for the entire intact sequence is fixed!)
     else:
         plot_prediction(prediction, true_seq).save(base_path / "plot.html")
 
