@@ -60,8 +60,8 @@ def main():
     )
 
     if not simulation:
-        fragment_dir = "/".join(str(settings.fragments).split("/")[:-1])
-        with open(fragment_dir + "/meta.yaml", "r") as f:
+        fragment_dir = settings.fragments.parent
+        with open(fragment_dir / "/meta.yaml", "r") as f:
             meta = yaml.safe_load(f)
 
         start_tag = meta["label_mass_5T"]
@@ -70,7 +70,7 @@ def main():
         fragments = mark_terminal_fragment_candidates(
             fragments,
             dp_table=dp_table,
-            output_file_path=fragment_dir + "/fragments_with_classification_marked.tsv",
+            output_file_path=fragment_dir / "/fragments_with_classification_marked.tsv",
             # matching_threshold=matching_threshold,
             intensity_cutoff=meta["intensity_cutoff"]
             if "intensity_cutoff" in meta
