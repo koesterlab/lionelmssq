@@ -3,6 +3,7 @@ import os
 
 import pytest
 
+from lionelmssq.cli import select_solver
 from lionelmssq.mass_table import DynamicProgrammingTable
 from lionelmssq.prediction import Predictor
 from lionelmssq.common import parse_nucleosides
@@ -128,19 +129,23 @@ def test_testcase(testcase):
 
     # fragment_masses = pl.Series(fragments.select(pl.col("observed_mass"))).to_list()
 
+    solver_params = {
+        "solver": select_solver(os.environ.get("SOLVER", "cbc")),
+        # "solver": select_solver(os.environ.get("SOLVER", "gurobi")),
+        "threads": 16,
+        "msg": False,
+    }
+
     prediction = Predictor(
         fragments,
         len(true_seq),
-        os.environ.get("SOLVER", "cbc"),
-        # os.environ.get("SOLVER", "gurobi"),  # "solver": "gurobi" or "cbc"
-        threads=16,
         dp_table=dp_table,
         unique_masses=unique_masses,
         explanation_masses=explanation_masses,
         matching_threshold=matching_threshold,
         mass_tag_start=label_mass_5T,
         mass_tag_end=label_mass_3T,
-    ).predict()
+    ).predict(solver_params=solver_params)
 
     fragment_masses = pl.Series(
         prediction.fragments.select(pl.col("observed_mass"))

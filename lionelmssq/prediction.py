@@ -32,8 +32,6 @@ class Predictor:
         self,
         fragments: pl.DataFrame,
         seq_len: int,
-        solver: str,
-        threads: int,
         dp_table: DynamicProgrammingTable,
         unique_masses: pl.DataFrame = UNIQUE_MASSES,
         explanation_masses: pl.DataFrame = EXPLANATION_MASSES,
@@ -68,8 +66,6 @@ class Predictor:
             )
 
         self.seq_len = seq_len
-        self.solver = solver
-        self.threads = threads
         self.explanations = {}
         self.mass_diffs = dict()
         self.mass_diffs_errors = dict()
@@ -83,7 +79,9 @@ class Predictor:
         self.dp_table = dp_table
 
 
-    def predict(self, modification_rate: float = 0.5) -> Prediction:
+    def predict(
+            self, solver_params: dict, modification_rate: float = 0.5
+        ) -> Prediction:
         # Adapt individual modification rates to universal one
         self.dp_table.adapt_individual_modification_rates_by_universal_one(
             modification_rate
@@ -236,17 +234,6 @@ class Predictor:
             ]
         )
 
-        # TODO: Move solver selection in function called in init
-        match self.solver:
-            case "gurobi":
-                solver_name = "GUROBI_CMD"
-            case "cbc":
-                solver_name = "PULP_CBC_CMD"
-            case _:
-                raise NotImplementedError(
-                    f"Support for '{self.solver}' is currently not given."
-                )
-
         print(
             "Number of internal fragments before filtering: ",
             len(self.fragments.filter(pl.col("true_internal"))),
@@ -265,8 +252,7 @@ class Predictor:
                 modification_rate=modification_rate,
             )
             if filter_instance.check_feasibility(
-                solver_name=solver_name,
-                num_threads=self.threads,
+                solver_params=solver_params,
                 threshold=MATCHING_THRESHOLD
                 * frag[self.fragments.get_column_index("observed_mass")],
             ):
@@ -311,7 +297,7 @@ class Predictor:
             modification_rate=modification_rate,
         )
 
-        seq, fragment_predictions = lp_instance.evaluate(solver_name, self.threads)
+        seq, fragment_predictions = lp_instance.evaluate(solver_params)
 
         fragment_predictions = pl.concat(
             [fragment_predictions, self.fragments.select(pl.col("orig_index"))],
