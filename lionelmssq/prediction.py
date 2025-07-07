@@ -104,9 +104,6 @@ class Predictor:
         self._collect_fragment_side_masses(Side.START)
         self._collect_fragment_side_masses(Side.END)
 
-        # Collect the masses of the single nucleosides
-        self._collect_singleton_masses()
-
         # Roughly estimate the differences as a first step with all fragments marked as start and then as end
         # Note that we do not consider fragments is_start_end now,
         # since the difference may be quite large and explained by lots of combinations
@@ -377,16 +374,12 @@ class Predictor:
         ]
 
 
-    def _collect_singleton_masses(
-        self,
-    ) -> None:
-        masses = self.fragments.filter(pl.col("single_nucleoside")).get_column(
-            "observed_mass"
-        )
-        self.singleton_masses = set(masses)
-
-
     def _collect_diff_explanations(self, modification_rate) -> None:
+        # Collect singleton masses
+        singleton_masses = set(self.fragments.filter(pl.col("single_nucleoside")).get_column(
+                    "observed_mass"
+                ))
+
         diffs = (self.mass_diffs[Side.START]) + (self.mass_diffs[Side.END])
 
         diffs_errors = (
@@ -397,7 +390,7 @@ class Predictor:
                 diff, diff_error, modification_rate, self.seq_len, self.dp_table
             )
 
-        for diff in self.singleton_masses:
+        for diff in singleton_masses:
             self.explanations[diff] = calculate_diff_dp(
                 diff, self.matching_threshold, modification_rate,
                 self.seq_len, self.dp_table
