@@ -86,14 +86,13 @@ def main():
         )
 
     prediction = Predictor(
-        fragments=fragments,
-        seq_len=settings.seq_len,
         dp_table=dp_table,
-        unique_masses=unique_masses,
         explanation_masses=explanation_masses,
         mass_tag_start=start_tag,
         mass_tag_end=end_tag,
     ).predict(
+        fragments=fragments,
+        seq_len=settings.seq_len,
         solver_params=solver_params,
         modification_rate=settings.modification_rate
     )

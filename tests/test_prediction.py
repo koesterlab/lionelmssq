@@ -137,15 +137,15 @@ def test_testcase(testcase):
     }
 
     prediction = Predictor(
-        fragments,
-        len(true_seq),
         dp_table=dp_table,
-        unique_masses=unique_masses,
         explanation_masses=explanation_masses,
-        matching_threshold=matching_threshold,
         mass_tag_start=label_mass_5T,
         mass_tag_end=label_mass_3T,
-    ).predict(solver_params=solver_params)
+    ).predict(
+        fragments=fragments,
+        seq_len=len(true_seq),
+        solver_params=solver_params
+    )
 
     fragment_masses = pl.Series(
         prediction.fragments.select(pl.col("observed_mass"))
