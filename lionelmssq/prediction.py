@@ -118,7 +118,11 @@ class Predictor:
         self.mass_diffs[Side.END] = self._collect_diffs(Side.END)
         self.mass_diffs_errors[Side.START] = self._collect_diff_errors(Side.START)
         self.mass_diffs_errors[Side.END] = self._collect_diff_errors(Side.END)
-        self._collect_diff_explanations(modification_rate)
+        self.explanations = self._collect_diff_explanations(
+            mass_diffs=self.mass_diffs,
+            mass_diff_errors=self.mass_diffs_errors,
+            modification_rate=modification_rate,
+        )
 
         # TODO: Also consider that the observations are not complete and that
         #  we probably don't see all the letters as diffs or singletons.
@@ -378,27 +382,30 @@ class Predictor:
             ]
 
 
-    def _collect_diff_explanations(self, modification_rate) -> None:
+    def _collect_diff_explanations(
+            self, mass_diffs, mass_diff_errors, modification_rate
+    ) -> dict:
         # Collect singleton masses
         singleton_masses = set(self.fragments.filter(pl.col("single_nucleoside")).get_column(
                     "observed_mass"
                 ))
 
-        diffs = (self.mass_diffs[Side.START]) + (self.mass_diffs[Side.END])
-
-        diffs_errors = (
-            (self.mass_diffs_errors[Side.START]) + (self.mass_diffs_errors[Side.END])
-        )
-        for diff, diff_error in zip(diffs, diffs_errors):
-            self.explanations[diff] = calculate_diff_dp(
+        explanations = {}
+        for diff, diff_error in zip(
+                mass_diffs[Side.START] + mass_diffs[Side.END],
+                mass_diff_errors[Side.START] + mass_diff_errors[Side.END],
+        ):
+            explanations[diff] = calculate_diff_dp(
                 diff, diff_error, modification_rate, self.seq_len, self.dp_table
             )
 
         for diff in singleton_masses:
-            self.explanations[diff] = calculate_diff_dp(
+            explanations[diff] = calculate_diff_dp(
                 diff, self.matching_threshold, modification_rate,
                 self.seq_len, self.dp_table
             )
+
+        return explanations
         # TODO: Can make it simpler here by rejecting diff which cannot be explained instead of doing it in the _predict_skeleton function!
 
 
