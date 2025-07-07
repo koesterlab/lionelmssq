@@ -101,8 +101,14 @@ class Predictor:
         )
 
         # Collect the masses of these fragments (subtract the appropriate tag masses)
-        self._collect_fragment_side_masses(Side.START)
-        self._collect_fragment_side_masses(Side.END)
+        self.fragment_masses[Side.START] = self._collect_fragment_side_masses(
+            fragments=self.fragments,
+            side=Side.START,
+        )
+        self.fragment_masses[Side.END] = self._collect_fragment_side_masses(
+            fragments=self.fragments,
+            side=Side.END,
+        )
 
         # Roughly estimate the differences as a first step with all fragments marked as start and then as end
         # Note that we do not consider fragments is_start_end now,
@@ -158,8 +164,14 @@ class Predictor:
         )
 
         # Collect the masses of the fragments for the _reduced_ start and end side
-        self._collect_fragment_side_masses(Side.START, restrict_is_start_end=True)
-        self._collect_fragment_side_masses(Side.END, restrict_is_start_end=True)
+        self.fragment_masses[Side.START] = self._collect_fragment_side_masses(
+            fragments=self.fragments_side[Side.START],
+            side=Side.START,
+        )
+        self.fragment_masses[Side.END] = self._collect_fragment_side_masses(
+            fragments=self.fragments_side[Side.END],
+            side=Side.END,
+        )
 
         def select_ends(fragments, idx):
             selected_fragments = [frag for frag in fragments if frag.index == idx]
@@ -310,32 +322,23 @@ class Predictor:
 
 
     def _collect_fragment_side_masses(
-        self, side: Side, restrict_is_start_end: bool = False
+        self, fragments, side: Side
     ):
-        # Collects the fragment masses for the given side (also includes the start_end fragments, i.e the entire sequence)
-        # Optionally ``restrict_is_start_end`` can be set to True to only consider the start_end fragments which have been included in self.fragments_side[side]
-        # This is useful later when a skeleton is already built and we need the masses of the accepted fragments!
+        """
+        Collect the fragment masses for the given side (also including the
+        start_end fragments, i.e. the entire sequence).
+        """
 
-        if restrict_is_start_end:
-            # Collect the (tag subtracted) masses of the fragments for the side
-            side_fragments = self._get_terminal_fragments_without_tags(
-                side=side, fragments=self.fragments_side[side]
-            )
-            # Collect the (both tags subtracted) masses of the start_end fragments
-            start_end_fragments = self._get_terminal_fragments_without_tags(
-                side=None, fragments=self.fragments_side[side]
-            )
-        else:
-            # Collect the (tag subtracted) masses of the fragments for the side
-            side_fragments = self._get_terminal_fragments_without_tags(
-                side=side, fragments=self.fragments
-            )
-            # Collect the (both tags subtracted) masses of the start_end fragments
-            start_end_fragments = self._get_terminal_fragments_without_tags(
-                side=None, fragments=self.fragments
-            )
+        # Collect the (tag subtracted) masses of the fragments for the side
+        side_fragments = self._get_terminal_fragments_without_tags(
+            side=side, fragments=fragments
+        )
+        # Collect the (both tags subtracted) masses of the start_end fragments
+        start_end_fragments = self._get_terminal_fragments_without_tags(
+            side=None, fragments=fragments
+        )
 
-        self.fragment_masses[side] = side_fragments + start_end_fragments
+        return side_fragments + start_end_fragments
 
     def _get_terminal_fragments_without_tags(self, side: Side, fragments:
     pl.DataFrame):
