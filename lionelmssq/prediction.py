@@ -114,8 +114,10 @@ class Predictor:
         # Note that we do not consider fragments is_start_end now,
         # since the difference may be quite large and explained by lots of combinations
         # Note that there may be faulty mass fragments which will lead to bad (not truly existent) differences here!
-        self._collect_diffs(Side.START)
-        self._collect_diffs(Side.END)
+        self.mass_diffs[Side.START] = self._collect_diffs(Side.START)
+        self.mass_diffs[Side.END] = self._collect_diffs(Side.END)
+        self.mass_diffs_errors[Side.START] = self._collect_diff_errors(Side.START)
+        self.mass_diffs_errors[Side.END] = self._collect_diff_errors(Side.END)
         self._collect_diff_explanations(modification_rate)
 
         # TODO: Also consider that the observations are not complete and that
@@ -356,26 +358,24 @@ class Predictor:
             .to_list()
         ]
 
-    def _collect_diffs(self, side: Side) -> None:
+    def _collect_diffs(self, side: Side) -> list:
         masses = self.fragment_masses[side]
 
-        self.mass_diffs[side] = [masses[0]] + [
-            masses[i] - masses[i - 1] for i in range(1, len(masses))
-        ]
-        self.mass_diffs_errors[side] = [
-            calculate_diff_errors(
-                self.mass_tags[side],
-                masses[0] + self.mass_tags[side],
-                self.matching_threshold,
-            )
-        ] + [
-            calculate_diff_errors(
+        return [masses[0]] + [masses[i] - masses[i - 1] for i in range(1, len(masses))]
+
+    def _collect_diff_errors(self, side: Side) -> list:
+        masses = self.fragment_masses[side]
+
+        return [calculate_diff_errors(
+            self.mass_tags[side], masses[0] + self.mass_tags[side],
+            self.matching_threshold,
+            )] + [calculate_diff_errors(
                 masses[i] + self.mass_tags[side],
                 masses[i - 1] + self.mass_tags[side],
                 self.matching_threshold,
             )
             for i in range(1, len(masses))
-        ]
+            ]
 
 
     def _collect_diff_explanations(self, modification_rate) -> None:
