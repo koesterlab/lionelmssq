@@ -316,41 +316,42 @@ class Predictor:
         # Optionally ``restrict_is_start_end`` can be set to True to only consider the start_end fragments which have been included in self.fragments_side[side]
         # This is useful later when a skeleton is already built and we need the masses of the accepted fragments!
 
-        def _get_side_fragments(side: Side, fragments: pl.DataFrame):
-            return [
-                i - self.mass_tags[side]
-                for i in fragments.filter(pl.col(f"is_{side}"))
-                .get_column("observed_mass")
-                .to_list()
-            ]
+        if restrict_is_start_end:
+            # Collect the (tag subtracted) masses of the fragments for the side
+            side_fragments = self._get_terminal_fragments_without_tags(
+                side=side, fragments=self.fragments_side[side]
+            )
+            # Collect the (both tags subtracted) masses of the start_end fragments
+            start_end_fragments = self._get_terminal_fragments_without_tags(
+                side=None, fragments=self.fragments_side[side]
+            )
+        else:
+            # Collect the (tag subtracted) masses of the fragments for the side
+            side_fragments = self._get_terminal_fragments_without_tags(
+                side=side, fragments=self.fragments
+            )
+            # Collect the (both tags subtracted) masses of the start_end fragments
+            start_end_fragments = self._get_terminal_fragments_without_tags(
+                side=None, fragments=self.fragments
+            )
 
-        def _get_start_end_fragments(side: Side, fragments: pl.DataFrame):
+        self.fragment_masses[side] = side_fragments + start_end_fragments
+
+    def _get_terminal_fragments_without_tags(self, side: Side, fragments:
+    pl.DataFrame):
+        if side is None:
             return [
                 i - self.mass_tags[Side.START] - self.mass_tags[Side.END]
                 for i in fragments.filter(pl.col("is_start_end"))
                 .get_column("observed_mass")
                 .to_list()
             ]
-
-        if restrict_is_start_end:
-            # Collect the (tag subtracted) masses of the fragments for the side
-            side_fragments = _get_side_fragments(
-                side=side, fragments=self.fragments_side[side]
-            )
-            # Collect the (both tags subtracted) masses of the start_end fragments
-            start_end_fragments = _get_start_end_fragments(
-                side=side, fragments=self.fragments_side[side]
-            )
-        else:
-            # Collect the (tag subtracted) masses of the fragments for the side
-            side_fragments = _get_side_fragments(side=side, fragments=self.fragments)
-            # Collect the (both tags subtracted) masses of the start_end fragments
-            start_end_fragments = _get_start_end_fragments(
-                side=side, fragments=self.fragments
-            )
-
-        self.fragment_masses[side] = side_fragments + start_end_fragments
-
+        return [
+            i - self.mass_tags[side]
+            for i in fragments.filter(pl.col(f"is_{side}"))
+            .get_column("observed_mass")
+            .to_list()
+        ]
 
     def _collect_diffs(self, side: Side) -> None:
         masses = self.fragment_masses[side]
