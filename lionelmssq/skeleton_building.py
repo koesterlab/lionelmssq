@@ -35,7 +35,7 @@ class SkeletonBuilder:
 
 
     def build_skeleton(
-        self, modification_rate
+        self, modification_rate: float
     ) -> Tuple[
         List[Set[str]],
         List[TerminalFragment],
@@ -241,18 +241,17 @@ class SkeletonBuilder:
 
 
 
-    def _align_skeletons(self, skeleton_seq_start, skeleton_seq_end) -> List[Set[str]]:
-        # While building the ladder it may happen that things are unambiguous from one side, but not from the other!
-        # In that case, we should consider the unambiguous side as the correct one! If the intersection is empty, then we can consider the union of the two!
-
-        # Align the skeletons of the start and end fragments to get the final skeleton sequence!
-        # Wherever there is no ambiguity, that nucleotide is preferrentially considered!
-
+    def _align_skeletons(
+            self, start_skeleton: List[Set[str]], end_skeleton: List[Set[str]]
+    ) -> List[Set[str]]:
         skeleton_seq = [set() for _ in range(self.seq_len)]
         for i in range(self.seq_len):
-            skeleton_seq[i] = skeleton_seq_start[i].intersection(skeleton_seq_end[i])
+            # Wherever there is agreement between start and end sequence,
+            # those nucleotides are preferentially considered
+            skeleton_seq[i] = start_skeleton[i].intersection(end_skeleton[i])
+            # If the intersection is empty, use the union instead
             if not skeleton_seq[i]:
-                skeleton_seq[i] = skeleton_seq_start[i].union(skeleton_seq_end[i])
+                skeleton_seq[i] = start_skeleton[i].union(end_skeleton[i])
 
         # TODO: Its more complicated, since if two positions are ambiguous,
         #  they are not independent. If one nucleotide is selected this way,
