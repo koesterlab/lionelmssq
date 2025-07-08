@@ -235,35 +235,20 @@ class Predictor:
             ]
         )
 
+        # print(fragments.select(
+        #     ["index", "observed_mass", "neutral_mass", "true_start",
+        #     "true_end", "true_internal"])
+        # )
+
+        # Filter out all internal fragments that do not fit anywhere in skeleton
         print(
             "Number of internal fragments before filtering: ",
             len(fragments.filter(pl.col("true_internal"))),
         )
-
-        # Filter out all internal fragments that do not fit anywhere in skeleton
-        is_valid_fragment = []
-        for frag in fragments.filter(pl.col("true_internal")).rows():
-            filter_instance = LinearProgramInstance(
-                fragments=fragments.filter(
-                    pl.col("index") == frag[fragments.get_column_index("index")]
-                ),
-                nucleosides=masses,
-                dp_table=self.dp_table,
-                skeleton_seq=skeleton_seq,
-                modification_rate=modification_rate,
-            )
-            if filter_instance.check_feasibility(
-                solver_params=solver_params,
-                threshold=self.dp_table.tolerance
-                * frag[fragments.get_column_index("observed_mass")],
-            ):
-                is_valid_fragment.append(frag[fragments.get_column_index("index")])
-        fragments = fragments.with_columns(
-            true_internal=pl.when(pl.col("index").is_in(is_valid_fragment))
-            .then(pl.col("true_internal"))
-            .otherwise(False)
+        fragments = self.filter_with_lp(
+            fragments=fragments, masses=masses, skeleton_seq=skeleton_seq,
+            modification_rate=modification_rate, solver_params=solver_params
         )
-
         print(
             "Number of internal fragments after filtering: ",
             len(fragments.filter(pl.col("true_internal"))),
@@ -409,3 +394,39 @@ class Predictor:
         )
 
         return reduced
+
+    def filter_with_lp(
+            self,
+            fragments: pl.DataFrame,
+            masses: list,
+            skeleton_seq: list,
+            modification_rate: float,
+            solver_params: dict
+    ):
+        is_valid_fragment = []
+        for frag in fragments.filter(pl.col("true_internal")).rows():
+            # Initialize LP instance for a singular fragment
+            filter_instance = LinearProgramInstance(
+                fragments=fragments.filter(
+                    pl.col("index") == frag[fragments.get_column_index("index")]
+                ),
+                nucleosides=masses,
+                dp_table=self.dp_table,
+                skeleton_seq=skeleton_seq,
+                modification_rate=modification_rate,
+            )
+
+            # Check whether fragment can feasibly be aligned to skeleton
+            if filter_instance.check_feasibility(
+                solver_params=solver_params,
+                threshold=self.dp_table.tolerance
+                * frag[fragments.get_column_index("observed_mass")],
+            ):
+                is_valid_fragment.append(frag[fragments.get_column_index("index")])
+
+        # Return only valid fragments
+        return fragments.with_columns(
+            true_internal=pl.when(pl.col("index").is_in(is_valid_fragment))
+            .then(pl.col("true_internal"))
+            .otherwise(False)
+        )
