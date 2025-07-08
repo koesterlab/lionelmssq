@@ -283,20 +283,7 @@ class Predictor:
             modification_rate=modification_rate,
         )
 
-        seq, fragment_predictions = lp_instance.evaluate(solver_params)
-
-        fragment_predictions = pl.concat(
-            [fragment_predictions, fragments.select(pl.col("orig_index"))],
-            how="horizontal",
-        )
-
-        # reorder fragment predictions so that they match the original order again
-        fragment_predictions = fragment_predictions.sort("orig_index")
-
-        return Prediction(
-            sequence=seq,
-            fragments=fragment_predictions,
-        )
+        return Prediction(*lp_instance.evaluate(solver_params))
 
 
     def _collect_fragment_side_masses(
