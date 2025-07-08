@@ -43,27 +43,29 @@ class SkeletonBuilder:
         List[int],
         List[int],
     ]:
-        skeleton_seq_start, start_fragments, invalid_start_fragments = (
+        # Build skeleton sequence from 5'-end
+        start_skeleton, start_fragments, non_start_fragments = (
             self._predict_skeleton(Side.START, modification_rate)
         )
+        print("Skeleton sequence start = ", start_skeleton)
 
-        print("Skeleton sequence start = ", skeleton_seq_start)
-
-        skeleton_seq_end, end_fragments, invalid_end_fragments = self._predict_skeleton(
+        # Build skeleton sequence from 3'-end
+        end_skeleton, end_fragments, non_end_fragments = self._predict_skeleton(
             Side.END, modification_rate
         )
-        print("Skeleton sequence end = ", skeleton_seq_end)
+        print("Skeleton sequence end = ", end_skeleton)
 
-        skeleton_seq = self._align_skeletons(skeleton_seq_start, skeleton_seq_end)
-
+        # Combine both skeleton sequences
+        skeleton_seq = self._align_skeletons(start_skeleton, end_skeleton)
         print("Skeleton sequence = ", skeleton_seq)
 
+        # Return skeleton and fragments (divided by sequence end and validity)
         return (
             skeleton_seq,
             start_fragments,
             end_fragments,
-            invalid_start_fragments,
-            invalid_end_fragments,
+            non_start_fragments,
+            non_end_fragments,
         )
 
 
