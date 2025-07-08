@@ -12,9 +12,7 @@ from itertools import combinations
 import polars as pl
 import numpy as np
 
-# TODO: Currently, the list of unmodified bases is only defined for RNA;
-#  make it universally applicable
-UNMODIFIED_BASES = ["A", "C", "G", "U"]
+from lionelmssq.masses import UNMODIFIED_BASES
 
 
 class LinearProgramInstance:

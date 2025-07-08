@@ -6,12 +6,14 @@ import polars as pl
 import numpy as np
 
 from lionelmssq.mass_table import DynamicProgrammingTable
-from lionelmssq.masses import EXPLANATION_MASSES
-from lionelmssq.masses import TOLERANCE
-from lionelmssq.masses import MATCHING_THRESHOLD
-from lionelmssq.masses import BREAKAGES
-from lionelmssq.masses import COMPRESSION_RATE
-from lionelmssq.linear_program import UNMODIFIED_BASES
+from lionelmssq.masses import (
+    EXPLANATION_MASSES,
+    TOLERANCE,
+    MATCHING_THRESHOLD,
+    BREAKAGES,
+    COMPRESSION_RATE,
+    UNMODIFIED_BASES,
+)
 
 
 @dataclass

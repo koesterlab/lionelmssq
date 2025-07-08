@@ -7,7 +7,7 @@ import pathlib
 import numpy as np
 import os
 
-from lionelmssq.linear_program import UNMODIFIED_BASES
+from lionelmssq.masses import UNMODIFIED_BASES
 
 
 # Set OS-independent cache directory for DP tables
