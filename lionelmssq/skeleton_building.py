@@ -3,8 +3,12 @@ from itertools import chain, groupby
 from typing import List, Optional, Set, Tuple
 from loguru import logger
 
-from lionelmssq.common import Side
-from lionelmssq.mass_explanation import explain_mass
+from lionelmssq.common import (
+    Explanation,
+    Side,
+    calculate_diff_dp,
+    calculate_diff_errors,
+)
 from lionelmssq.mass_table import DynamicProgrammingTable
 
 
@@ -13,20 +17,6 @@ class TerminalFragment:
     index: int  # fragment index
     min_end: int  # minimum length of fragment (negative for end fragments)
     max_end: int  # maximum length of fragment (negative for end fragments)
-
-
-class Explanation:
-    def __init__(self, *nucleosides):
-        self.nucleosides = tuple(sorted(nucleosides))
-
-    def __iter__(self):
-        yield from self.nucleosides
-
-    def __len__(self):
-        return len(self.nucleosides)
-
-    def __repr__(self):
-        return f"{{{','.join(self.nucleosides)}}}"
 
 
 @dataclass
@@ -267,34 +257,3 @@ class SkeletonBuilder:
         #  then the same nucleotide cannot be selected in the other position!
 
         return skeleton_seq
-
-def calculate_diff_errors(mass1, mass2, threshold) -> float:
-    retval = threshold * ((mass1**2 + mass2**2) ** 0.5) / abs(mass1 - mass2)
-    # Constrain the maximum relative error to 1!
-    # For mass difference very close to zero, the relative error can be very high!
-    if retval > 1:
-        retval = 1.0
-    return retval
-
-def calculate_diff_dp(diff, threshold, modification_rate, seq_len, dp_table):
-    # TODO: Add support for other breakages than 'c/y_c/y'
-    explanation_list = list(
-        [
-            entry
-            for entry in explain_mass(
-                diff,
-                dp_table=dp_table,
-                seq_len=seq_len,
-                max_modifications=round(modification_rate * seq_len),
-                threshold=threshold,
-            )
-            if entry.breakage == "c/y_c/y"
-        ][0].explanations
-    )
-    if len(explanation_list) > 0:
-        retval = [
-            Explanation(*explanation_list[i]) for i in range(len(explanation_list))
-        ]
-    else:
-        retval = []
-    return retval

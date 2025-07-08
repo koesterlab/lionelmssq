@@ -1,14 +1,13 @@
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Self
-from lionelmssq.common import Side
-from lionelmssq.linear_program import LinearProgramInstance
-from lionelmssq.mass_table import DynamicProgrammingTable
 import polars as pl
 from loguru import logger
 
-from lionelmssq.skeleton_building import SkeletonBuilder, \
-    calculate_diff_dp, calculate_diff_errors
+from lionelmssq.common import Side, calculate_diff_dp, calculate_diff_errors
+from lionelmssq.linear_program import LinearProgramInstance
+from lionelmssq.mass_table import DynamicProgrammingTable
+from lionelmssq.skeleton_building import SkeletonBuilder
 
 
 @dataclass
