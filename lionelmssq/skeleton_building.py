@@ -146,12 +146,9 @@ class SkeletonBuilder:
             # whether the previous explanations had different lengths.
             if explanations:
                 next_pos = set()
-                if side is Side.START:
-                    min_p = min(pos)
-                    max_p = max(pos)
-                else:
-                    min_p = max(pos)
-                    max_p = min(pos)
+                min_p, max_p = select_outer_positions(
+                    side=side, pos_list=pos
+                )
                 min_fragment_end = None
                 max_fragment_end = None
 
@@ -207,12 +204,9 @@ class SkeletonBuilder:
                 abs(diff) <= self.matching_threshold * abs(mass + self.mass_tags[side])
                 # Problem! The above approach might blow up if the masses are very close, i.e. diff is very close to zero!
             ):
-                if side == Side.START:
-                    min_fragment_end = min(pos)
-                    max_fragment_end = max(pos)
-                else:
-                    min_fragment_end = max(pos)
-                    max_fragment_end = min(pos)
+                min_fragment_end, max_fragment_end = select_outer_positions(
+                    side=side, pos_list=pos
+                )
                 next_pos = pos
             else:
                 is_valid = False
@@ -260,3 +254,13 @@ class SkeletonBuilder:
         #  then the same nucleotide cannot be selected in the other position!
 
         return skeleton_seq
+
+
+def select_outer_positions(pos_list, side):
+    match side:
+        case Side.START:
+            return min(pos_list), max(pos_list)
+        case Side.END:
+            return max(pos_list), min(pos_list)
+        case _:
+            raise ValueError(f"Side {side} does not exist.")
