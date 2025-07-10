@@ -125,18 +125,12 @@ class SkeletonBuilder:
             assert pos
 
             is_valid = True
-            if diff in self.explanations:
-                explanations = self.explanations.get(diff, [])
-            else:
-                threshold = calculate_diff_errors(
-                    last_valid_mass + self.mass_tags[side],
-                    last_valid_mass + diff + self.mass_tags[side],
-                    self.matching_threshold,
-                )
-                explanations = calculate_diff_dp(
-                    diff, threshold, modification_rate, self.seq_len,
-                    self.dp_table
-                )
+            explanations = self.explain_difference(
+                diff=diff,
+                prev_mass=last_valid_mass,
+                modification_rate=modification_rate,
+                side=side,
+            )
 
             # METHOD: if there is only one single nucleoside explanation, we can
             # directly assign the nucleoside if there are tuples, we have to assign a
@@ -254,6 +248,20 @@ class SkeletonBuilder:
         #  then the same nucleotide cannot be selected in the other position!
 
         return skeleton_seq
+
+    def explain_difference(self, diff, prev_mass, modification_rate, side):
+        if diff in self.explanations:
+            return self.explanations.get(diff, [])
+        else:
+            threshold = calculate_diff_errors(
+                prev_mass + self.mass_tags[side],
+                prev_mass + self.mass_tags[side] + diff,
+                self.matching_threshold,
+            )
+            return calculate_diff_dp(
+                diff, threshold, modification_rate, self.seq_len,
+                self.dp_table
+            )
 
 
 def select_outer_positions(pos_list, side):
