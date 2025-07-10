@@ -77,10 +77,9 @@ class SkeletonBuilder:
         fragment_masses=None,
         candidate_fragments=None,
     ) -> Tuple[List[Set[str]], List[TerminalFragment], List[int]]:
+        # Initialize required variables (if not already given)
         if skeleton_seq is None:
             skeleton_seq = [set() for _ in range(self.seq_len)]
-
-        factor = 1 if side == Side.START else -1
 
         if not fragment_masses:
             fragment_masses = self.fragment_masses[side]
@@ -89,6 +88,9 @@ class SkeletonBuilder:
             candidate_fragments = (
                 self.fragments_side[side].get_column("index").to_list()
             )
+
+        # Set factor based on considered sequence end
+        factor = 1 if side == Side.START else -1
 
         def get_possible_nucleosides(pos: int, i: int) -> Set[str]:
             return skeleton_seq[pos + factor * i]
@@ -108,14 +110,14 @@ class SkeletonBuilder:
         # We reject some masses/some fragments which are not explained well by mass differences.
         # While iterating through the fragments, the "carry_over_mass" keeps a track of the rejected mass difference.
         # This is added to "diff" to get the next mass_difference.
-        carry_over_mass = 0
+        carry_over_mass = 0.0
 
-        # "last_mass_valid" keeps a track of the last mass which was NOT rejected.
+        # "last_valid_mass" keeps a track of the last mass which was NOT rejected.
         # This is useful for calculating the difference threshold
-        last_mass_valid = 0.0
+        last_valid_mass = 0.0
 
-        valid_terminal_fragments = []
-        invalid_fragments = []
+        fragments_valid = []
+        fragments_invalid = []
         for fragment_index, (diff, mass) in enumerate(
             zip(self.mass_diffs[side], fragment_masses)
         ):
@@ -127,8 +129,8 @@ class SkeletonBuilder:
                 explanations = self.explanations.get(diff, [])
             else:
                 threshold = calculate_diff_errors(
-                    last_mass_valid + self.mass_tags[side],
-                    last_mass_valid + diff + self.mass_tags[side],
+                    last_valid_mass + self.mass_tags[side],
+                    last_valid_mass + diff + self.mass_tags[side],
                     self.matching_threshold,
                 )
                 explanations = calculate_diff_dp(
@@ -216,7 +218,7 @@ class SkeletonBuilder:
                 is_valid = False
 
             if is_valid:
-                valid_terminal_fragments.append(
+                fragments_valid.append(
                     TerminalFragment(
                         index=candidate_fragments[fragment_index],
                         min_end=min_fragment_end,
@@ -224,7 +226,7 @@ class SkeletonBuilder:
                     )
                 )
                 pos = next_pos
-                last_mass_valid = mass
+                last_valid_mass = mass
                 carry_over_mass = 0.0
             else:
                 logger.warning(
@@ -235,9 +237,9 @@ class SkeletonBuilder:
 
                 # Consider the skipped fragments as internal fragments! Add back the terminal mass to this fragments!
                 if fragment_index and candidate_fragments:
-                    invalid_fragments.append(candidate_fragments[fragment_index])
+                    fragments_invalid.append(candidate_fragments[fragment_index])
 
-        return skeleton_seq, valid_terminal_fragments, invalid_fragments
+        return skeleton_seq, fragments_valid, fragments_invalid
 
 
 
