@@ -27,11 +27,7 @@ class SkeletonBuilder:
     explanations: list[Explanation]
     seq_len: int
     matching_threshold: float
-    mass_tags: dict
     dp_table: DynamicProgrammingTable
-
-    # def __init__(self, fragment_masses, fragments_side, seq_len):
-    #     pass
 
 
     def build_skeleton(
@@ -132,7 +128,7 @@ class SkeletonBuilder:
                     )
                 )
             elif (
-                abs(diff) <= self.matching_threshold * abs(mass + self.mass_tags[side])
+                abs(diff) <= self.matching_threshold * abs(mass)
                 # Problem! The above approach might blow up if the masses are very close, i.e. diff is very close to zero!
             ):
                 min_fragment_end, max_fragment_end = select_outer_positions(
@@ -192,9 +188,7 @@ class SkeletonBuilder:
             return self.explanations.get(diff, [])
         else:
             threshold = calculate_diff_errors(
-                prev_mass + self.mass_tags[side],
-                prev_mass + self.mass_tags[side] + diff,
-                self.matching_threshold,
+                prev_mass, prev_mass + diff, self.matching_threshold,
             )
             return calculate_diff_dp(
                 diff, threshold, modification_rate, self.seq_len,

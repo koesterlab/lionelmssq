@@ -106,8 +106,12 @@ class Predictor:
         # since the difference may be quite large and explained by lots of combinations
         # Note that there may be faulty mass fragments which will lead to bad (not truly existent) differences here!
         mass_diffs = {
-            Side.START: self._collect_diffs(fragment_masses[Side.START]),
-            Side.END: self._collect_diffs(fragment_masses[Side.END]),
+            Side.START: self._collect_diffs(
+                fragment_masses[Side.START], side=Side.START
+            ),
+            Side.END: self._collect_diffs(
+                fragment_masses[Side.END], side=Side.END
+            ),
         }
         mass_diffs_errors = {
             Side.START: self._collect_diff_errors(
@@ -139,7 +143,6 @@ class Predictor:
             explanations=explanations,
             seq_len=seq_len,
             matching_threshold=self.dp_table.tolerance,
-            mass_tags=self.mass_tags,
             dp_table=self.dp_table,
         )
 
@@ -154,30 +157,15 @@ class Predictor:
 
         # TODO: If the tags are considered in the LP at the end, then most of the following code will become obsolete!
 
-        # We now create reduced self.fragments_side and their masses
-        # which keeps the ordering of accepted start and end candidates while rejecting
-        # the invalid ones, but keeping the ones with internal marking as internal candidates!
+        # Filter out incorrectly flagged terminal fragments and reject also all END fragments that are also START fragments
         fragments_side[Side.START] = fragments_side[Side.START].filter(
             ~pl.col("index").is_in(invalid_start_fragments)
         )
-
-        # We also remove the fragments from the end side which are also present in the start side:
         fragments_side[Side.END] = (
             fragments_side[Side.END]
             .filter(~pl.col("index").is_in(invalid_end_fragments))
             .filter(~pl.col("index").is_in([i.index for i in start_fragments]))
         )
-
-        # Collect the masses of the fragments for the _reduced_ start and end side
-        fragment_masses[Side.START] = self._collect_fragment_side_masses(
-            fragments=fragments_side[Side.START],
-            side=Side.START,
-        )
-        fragment_masses[Side.END] = self._collect_fragment_side_masses(
-            fragments=fragments_side[Side.END],
-            side=Side.END,
-        )
-
 
         def select_ends(fragments, idx):
             selected_fragments = [frag for frag in fragments if frag.index == idx]
@@ -213,31 +201,30 @@ class Predictor:
             ).alias("max_end"),
         )
 
-        # Rewriting the observed_mass column for the start and the end
-        # fragments with the tag(s) subtracted masses for latter processing!
+        # Subtract tags from "observed_mass" column for true terminal fragments
         fragments = pl.concat(
             [
-                fragments.filter(pl.col("true_start")).replace_column(
-                    fragments.get_column_index("observed_mass"),
-                    pl.Series("observed_mass", fragment_masses[Side.START]),
+                fragments.filter(pl.col("true_start")).with_columns(
+                    pl.col("observed_mass")
+                    .map_elements(
+                        lambda x: x - self.mass_tags[Side.START],
+                        return_dtype=float,
+                    ).alias("observed_mass")
                 ),
                 fragments.filter(~pl.col("true_start")),
             ]
         )
         fragments = pl.concat(
             [
-                fragments.filter(pl.col("true_end")).replace_column(
-                    fragments.get_column_index("observed_mass"),
-                    pl.Series("observed_mass", fragment_masses[Side.END]),
+                fragments.filter(pl.col("true_end")).with_columns(
+                    pl.col("observed_mass").map_elements(
+                        lambda x: x - self.mass_tags[Side.END],
+                        return_dtype=float,
+                    ).alias("observed_mass")
                 ),
                 fragments.filter(~pl.col("true_end")),
             ]
         )
-
-        # print(fragments.select(
-        #     ["index", "observed_mass", "neutral_mass", "true_start",
-        #     "true_end", "true_internal"])
-        # )
 
         # Filter out all internal fragments that do not fit anywhere in skeleton
         print(
@@ -293,47 +280,46 @@ class Predictor:
         start_end fragments, i.e. the entire sequence).
         """
 
-        # Collect the (tag subtracted) masses of the fragments for the side
-        side_fragments = self._get_terminal_fragments_without_tags(
+        # Collect masses of terminal fragments for the given side
+        side_fragments = fragments.filter(pl.col(f"is_{side}")).get_column("observed_mass").to_list()
+
+        # Collect masses of complete fragments (opposing tag subtracted)
+        start_end_fragments = self._get_terminal_fragments_without_opposing_tag(
             side=side, fragments=fragments
-        )
-        # Collect the (both tags subtracted) masses of the start_end fragments
-        start_end_fragments = self._get_terminal_fragments_without_tags(
-            side=None, fragments=fragments
         )
 
         return side_fragments + start_end_fragments
 
-    def _get_terminal_fragments_without_tags(self, side: Side, fragments:
-    pl.DataFrame):
-        if side is None:
-            return [
-                i - self.mass_tags[Side.START] - self.mass_tags[Side.END]
-                for i in fragments.filter(pl.col("is_start_end"))
-                .get_column("observed_mass")
-                .to_list()
-            ]
+
+    def _get_terminal_fragments_without_opposing_tag(
+            self, side: Side, fragments: pl.DataFrame
+    ):
+        other_side = Side.END if side==Side.START else Side.START
         return [
-            i - self.mass_tags[side]
-            for i in fragments.filter(pl.col(f"is_{side}"))
+            i - self.mass_tags[other_side]
+            for i in fragments.filter(pl.col("is_start_end"))
             .get_column("observed_mass")
             .to_list()
         ]
 
-    def _collect_diffs(self, masses: list) -> list:
-        return [masses[0]] + [masses[i] - masses[i - 1] for i in range(1, len(masses))]
+
+    def _collect_diffs(self, masses: list, side: Side) -> list:
+        return (
+            [masses[0] - self.mass_tags[side]] +
+            [masses[i] - masses[i - 1] for i in range(1, len(masses))]
+        )
+
 
     def _collect_diff_errors(self, masses: list, side: Side) -> list:
-        return [calculate_diff_errors(
-            self.mass_tags[side], masses[0] + self.mass_tags[side],
-            self.dp_table.tolerance,
-            )] + [calculate_diff_errors(
-                masses[i] + self.mass_tags[side],
-                masses[i - 1] + self.mass_tags[side],
-                self.dp_table.tolerance,
-            )
-            for i in range(1, len(masses))
-            ]
+        return (
+            [calculate_diff_errors(
+                self.mass_tags[side], masses[0], self.dp_table.tolerance,
+            )] +
+            [calculate_diff_errors(
+                masses[i], masses[i - 1], self.dp_table.tolerance,
+            ) for i in range(1, len(masses))]
+        )
+
 
     def _collect_diff_explanations(
             self, mass_diffs, mass_diff_errors, modification_rate,
@@ -380,6 +366,7 @@ class Predictor:
         )
 
         return reduced
+
 
     def filter_with_lp(
             self,
