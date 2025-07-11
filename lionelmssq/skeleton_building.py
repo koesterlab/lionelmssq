@@ -41,14 +41,28 @@ class SkeletonBuilder:
     ]:
         # Build skeleton sequence from 5'-end
         start_skeleton, start_fragments, non_start_fragments = (
-            self._predict_skeleton(Side.START, modification_rate)
+            self._predict_skeleton(
+                modification_rate=modification_rate,
+                fragment_masses=self.fragment_masses[Side.START],
+                candidate_fragments=self.fragments_side[Side.START].get_column(
+                    "index").to_list(),
+                mass_diffs=self.mass_diffs[Side.START],
+                skeleton_seq=[set() for _ in range(self.seq_len)],
+            )
         )
         print("Skeleton sequence start = ", start_skeleton)
 
         # Build skeleton sequence from 3'-end
         end_skeleton, end_fragments, non_end_fragments = self._predict_skeleton(
-            Side.END, modification_rate
+            modification_rate=modification_rate,
+            fragment_masses=self.fragment_masses[Side.END],
+            candidate_fragments=self.fragments_side[Side.END].get_column(
+                "index").to_list(),
+            mass_diffs=self.mass_diffs[Side.END],
+            skeleton_seq=[set() for _ in range(self.seq_len)],
         )
+        end_skeleton = end_skeleton[::-1]
+        end_fragments = adjust_end_fragment_info(end_fragments)
         print("Skeleton sequence end = ", end_skeleton)
 
         # Combine both skeleton sequences
@@ -67,25 +81,17 @@ class SkeletonBuilder:
 
     def _predict_skeleton(
         self,
-        side: Side,
         modification_rate,
+        fragment_masses,
+        candidate_fragments,
+        mass_diffs,
         skeleton_seq: Optional[List[Set[str]]] = None,
-        fragment_masses=None,
-        candidate_fragments=None,
     ) -> Tuple[List[Set[str]], List[TerminalFragment], List[int]]:
-        # Initialize required variables (if not already given)
+        # Initialize skeleton sequence (if not already given)
         if skeleton_seq is None:
             skeleton_seq = [set() for _ in range(self.seq_len)]
 
-        if not fragment_masses:
-            fragment_masses = self.fragment_masses[side]
-
-        if not candidate_fragments:
-            candidate_fragments = (
-                self.fragments_side[side].get_column("index").to_list()
-            )
-
-        pos = {0} if side == Side.START else {-1}
+        pos = {0}
 
         # We reject some masses/some fragments which are not explained well by mass differences.
         # While iterating through the fragments, the "carry_over_mass" keeps a track of the rejected mass difference.
@@ -99,7 +105,7 @@ class SkeletonBuilder:
         fragments_valid = []
         fragments_invalid = []
         for fragment_index, (diff, mass) in enumerate(
-            zip(self.mass_diffs[side], fragment_masses)
+            zip(mass_diffs, fragment_masses)
         ):
             diff += carry_over_mass
             assert pos
@@ -108,7 +114,6 @@ class SkeletonBuilder:
                 diff=diff,
                 prev_mass=last_valid_mass,
                 modification_rate=modification_rate,
-                side=side,
             )
 
             # METHOD: if there is only one single nucleoside explanation, we can
@@ -123,7 +128,6 @@ class SkeletonBuilder:
                     self.update_skeleton_for_given_explanations(
                         explanations=explanations,
                         pos=pos,
-                        side=side,
                         skeleton_seq=skeleton_seq,
                     )
                 )
@@ -137,7 +141,7 @@ class SkeletonBuilder:
                 # even come to pass?
             ):
                 min_fragment_end, max_fragment_end = select_outer_positions(
-                    side=side, pos_list=pos
+                    pos_list=pos
                 )
                 is_valid = True
                 next_pos = pos
@@ -157,7 +161,7 @@ class SkeletonBuilder:
                 carry_over_mass = 0.0
             else:
                 logger.warning(
-                    f"Skipping {side} fragment {fragment_index} with observed mass {mass} because no "
+                    f"Skipping fragment {fragment_index} with observed mass {mass} because no "
                     "explanations are found for the mass difference."
                 )
                 carry_over_mass = diff
@@ -188,7 +192,7 @@ class SkeletonBuilder:
 
         return skeleton_seq
 
-    def explain_difference(self, diff, prev_mass, modification_rate, side):
+    def explain_difference(self, diff, prev_mass, modification_rate):
         if diff in self.explanations:
             return self.explanations.get(diff, [])
         else:
@@ -205,33 +209,21 @@ class SkeletonBuilder:
         self,
         explanations: List[Explanation],
         pos: Set[int],
-        side: Side,
         skeleton_seq: List[Set[str]]
     ):
-        # Set factor based on considered sequence end
-        factor = 1 if side == Side.START else -1
-
         next_pos = set()
-        min_p, max_p = select_outer_positions(
-            side=side, pos_list=pos
-        )
+        min_p, max_p = select_outer_positions(pos_list=pos)
 
         is_valid = True
         min_fragment_end = None
         max_fragment_end = None
 
         def get_possible_nucleosides(pos: int, i: int) -> Set[str]:
-            return skeleton_seq[pos + factor * i]
+            return skeleton_seq[pos + i]
 
         def is_valid_pos(pos: int, ext: int) -> bool:
-            pos = pos + factor * ext
-            return (
-                # 0 <= pos <= self.seq_len
-                0 <= pos < self.seq_len
-                if side == Side.START
-                # else -(self.seq_len + 1) <= pos < 0
-                else -self.seq_len <= pos < 0
-            )
+            pos = pos + ext
+            return 0 <= pos < self.seq_len
 
         for p in pos:
             p_specific_explanations = [
@@ -242,13 +234,23 @@ class SkeletonBuilder:
                 for expl_len, expls in groupby(p_specific_explanations, len)
             }
 
+            # alphabet_per_expl_len = {
+            #     expl_len: set(chain(*expls))
+            #     for expl_len, expls in groupby(
+            #         [
+            #             expl for expl in explanations
+            #             if is_valid_pos(p, len(expl))
+            #         ], len)
+            # }
+            #
+            # if alphabet_per_expl_len:
             if p_specific_explanations:
                 if p == min_p:
-                    min_fragment_end = min_p + factor * min(
+                    min_fragment_end = min_p + min(
                         expl_len for expl_len in alphabet_per_expl_len
                     )
                 elif p == max_p:
-                    max_fragment_end = max_p + factor * max(
+                    max_fragment_end = max_p + max(
                         expl_len for expl_len in alphabet_per_expl_len
                     )
 
@@ -269,10 +271,8 @@ class SkeletonBuilder:
                         # Instead of adding just the letters, we somehow need to keep a track of the possibilities to be able to constrain the LP!
                         # We also then probably need part of the code immediately below!
 
-            # add possible follow up positions
-            next_pos.update(
-                p + factor * expl_len for expl_len in alphabet_per_expl_len
-            )
+            # Update possible follow-up positions
+            next_pos.update(p + expl_len for expl_len in alphabet_per_expl_len)
         if max_fragment_end is None:
             max_fragment_end = min_fragment_end
         if min_fragment_end is None:
@@ -285,11 +285,13 @@ class SkeletonBuilder:
         return is_valid, min_fragment_end, max_fragment_end, next_pos, skeleton_seq
 
 
-def select_outer_positions(pos_list, side):
-    match side:
-        case Side.START:
-            return min(pos_list), max(pos_list)
-        case Side.END:
-            return max(pos_list), min(pos_list)
-        case _:
-            raise ValueError(f"Side {side} does not exist.")
+def adjust_end_fragment_info(fragments):
+    return [
+        TerminalFragment(
+            fragment.index, -1-fragment.max_end, -1-fragment.min_end
+        ) for fragment in fragments
+    ]
+
+
+def select_outer_positions(pos_list):
+    return min(pos_list), max(pos_list)
