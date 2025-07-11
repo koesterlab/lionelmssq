@@ -37,14 +37,13 @@ class Predictor:
         self.mass_tags = {Side.START: mass_tag_start, Side.END: mass_tag_end}
         self.dp_table = dp_table
 
-
     def predict(
-            self,
-            fragments: pl.DataFrame,
-            seq_len: int,
-            solver_params: dict,
-            modification_rate: float = 0.5,
-        ) -> Prediction:
+        self,
+        fragments: pl.DataFrame,
+        seq_len: int,
+        solver_params: dict,
+        modification_rate: float = 0.5,
+    ) -> Prediction:
         # Adapt individual modification rates to universal one
         self.dp_table.adapt_individual_modification_rates_by_universal_one(
             modification_rate
@@ -81,12 +80,8 @@ class Predictor:
 
         # Collect the fragments for the start and end side which also include the start_end fragments (entire sequences)
         fragments_side = {
-            Side.START: fragments.filter(
-                pl.col("is_start") | pl.col("is_start_end")
-            ),
-            Side.END: fragments.filter(
-                pl.col("is_end") | pl.col("is_start_end")
-            )
+            Side.START: fragments.filter(pl.col("is_start") | pl.col("is_start_end")),
+            Side.END: fragments.filter(pl.col("is_end") | pl.col("is_start_end")),
         }
 
         # Collect the masses of these fragments (subtract the appropriate tag masses)
@@ -98,7 +93,7 @@ class Predictor:
             Side.END: self._collect_fragment_side_masses(
                 fragments=fragments,
                 side=Side.END,
-            )
+            ),
         }
 
         # Roughly estimate the differences as a first step with all fragments marked as start and then as end
@@ -109,17 +104,17 @@ class Predictor:
             Side.START: self._collect_diffs(
                 fragment_masses[Side.START], side=Side.START
             ),
-            Side.END: self._collect_diffs(
-                fragment_masses[Side.END], side=Side.END
-            ),
+            Side.END: self._collect_diffs(fragment_masses[Side.END], side=Side.END),
         }
         mass_diffs_errors = {
             Side.START: self._collect_diff_errors(
-                fragment_masses[Side.START], Side.START,
+                fragment_masses[Side.START],
+                Side.START,
             ),
             Side.END: self._collect_diff_errors(
-                fragment_masses[Side.END], Side.END,
-            )
+                fragment_masses[Side.END],
+                Side.END,
+            ),
         }
         explanations = self._collect_diff_explanations(
             mass_diffs=mass_diffs,
@@ -209,7 +204,8 @@ class Predictor:
                     .map_elements(
                         lambda x: x - self.mass_tags[Side.START],
                         return_dtype=float,
-                    ).alias("observed_mass")
+                    )
+                    .alias("observed_mass")
                 ),
                 fragments.filter(~pl.col("true_start")),
             ]
@@ -217,10 +213,12 @@ class Predictor:
         fragments = pl.concat(
             [
                 fragments.filter(pl.col("true_end")).with_columns(
-                    pl.col("observed_mass").map_elements(
+                    pl.col("observed_mass")
+                    .map_elements(
                         lambda x: x - self.mass_tags[Side.END],
                         return_dtype=float,
-                    ).alias("observed_mass")
+                    )
+                    .alias("observed_mass")
                 ),
                 fragments.filter(~pl.col("true_end")),
             ]
@@ -232,8 +230,11 @@ class Predictor:
             len(fragments.filter(pl.col("true_internal"))),
         )
         fragments = self.filter_with_lp(
-            fragments=fragments, masses=masses, skeleton_seq=skeleton_seq,
-            modification_rate=modification_rate, solver_params=solver_params
+            fragments=fragments,
+            masses=masses,
+            skeleton_seq=skeleton_seq,
+            modification_rate=modification_rate,
+            solver_params=solver_params,
         )
         print(
             "Number of internal fragments after filtering: ",
@@ -271,17 +272,16 @@ class Predictor:
 
         return Prediction(*lp_instance.evaluate(solver_params))
 
-
-    def _collect_fragment_side_masses(
-        self, fragments, side: Side
-    ):
+    def _collect_fragment_side_masses(self, fragments, side: Side):
         """
         Collect the fragment masses for the given side (also including the
         start_end fragments, i.e. the entire sequence).
         """
 
         # Collect masses of terminal fragments for the given side
-        side_fragments = fragments.filter(pl.col(f"is_{side}")).get_column("observed_mass").to_list()
+        side_fragments = (
+            fragments.filter(pl.col(f"is_{side}")).get_column("observed_mass").to_list()
+        )
 
         # Collect masses of complete fragments (opposing tag subtracted)
         start_end_fragments = self._get_terminal_fragments_without_opposing_tag(
@@ -290,11 +290,10 @@ class Predictor:
 
         return side_fragments + start_end_fragments
 
-
     def _get_terminal_fragments_without_opposing_tag(
-            self, side: Side, fragments: pl.DataFrame
+        self, side: Side, fragments: pl.DataFrame
     ):
-        other_side = Side.END if side==Side.START else Side.START
+        other_side = Side.END if side == Side.START else Side.START
         return [
             i - self.mass_tags[other_side]
             for i in fragments.filter(pl.col("is_start_end"))
@@ -302,38 +301,39 @@ class Predictor:
             .to_list()
         ]
 
-
     def _collect_diffs(self, masses: list, side: Side) -> list:
-        return (
-            [masses[0] - self.mass_tags[side]] +
-            [masses[i] - masses[i - 1] for i in range(1, len(masses))]
-        )
-
+        return [masses[0] - self.mass_tags[side]] + [
+            masses[i] - masses[i - 1] for i in range(1, len(masses))
+        ]
 
     def _collect_diff_errors(self, masses: list, side: Side) -> list:
-        return (
-            [calculate_diff_errors(
-                self.mass_tags[side], masses[0], self.dp_table.tolerance,
-            )] +
-            [calculate_diff_errors(
-                masses[i], masses[i - 1], self.dp_table.tolerance,
-            ) for i in range(1, len(masses))]
-        )
-
+        return [
+            calculate_diff_errors(
+                self.mass_tags[side],
+                masses[0],
+                self.dp_table.tolerance,
+            )
+        ] + [
+            calculate_diff_errors(
+                masses[i],
+                masses[i - 1],
+                self.dp_table.tolerance,
+            )
+            for i in range(1, len(masses))
+        ]
 
     def _collect_diff_explanations(
-            self, mass_diffs, mass_diff_errors, modification_rate,
-            fragments, seq_len
+        self, mass_diffs, mass_diff_errors, modification_rate, fragments, seq_len
     ) -> dict:
         # Collect singleton masses
-        singleton_masses = set(fragments.filter(pl.col("single_nucleoside")).get_column(
-                    "observed_mass"
-                ))
+        singleton_masses = set(
+            fragments.filter(pl.col("single_nucleoside")).get_column("observed_mass")
+        )
 
         explanations = {}
         for diff, diff_error in zip(
-                mass_diffs[Side.START] + mass_diffs[Side.END],
-                mass_diff_errors[Side.START] + mass_diff_errors[Side.END],
+            mass_diffs[Side.START] + mass_diffs[Side.END],
+            mass_diff_errors[Side.START] + mass_diff_errors[Side.END],
         ):
             explanations[diff] = calculate_diff_dp(
                 diff, diff_error, modification_rate, seq_len, self.dp_table
@@ -341,20 +341,15 @@ class Predictor:
 
         for diff in singleton_masses:
             explanations[diff] = calculate_diff_dp(
-                diff, self.dp_table.tolerance, modification_rate,
-                seq_len, self.dp_table
+                diff, self.dp_table.tolerance, modification_rate, seq_len, self.dp_table
             )
 
         return explanations
         # TODO: Can make it simpler here by rejecting diff which cannot be explained instead of doing it in the _predict_skeleton function!
 
-
     def _reduce_alphabet(self, explanations) -> pl.DataFrame:
         observed_nucleosides = {
-            nuc
-            for expls in explanations.values()
-            for expl in expls
-            for nuc in expl
+            nuc for expls in explanations.values() for expl in expls for nuc in expl
         }
         reduced = self.explanation_masses.filter(
             pl.col("nucleoside").is_in(observed_nucleosides)
@@ -367,14 +362,13 @@ class Predictor:
 
         return reduced
 
-
     def filter_with_lp(
-            self,
-            fragments: pl.DataFrame,
-            masses: list,
-            skeleton_seq: list,
-            modification_rate: float,
-            solver_params: dict
+        self,
+        fragments: pl.DataFrame,
+        masses: list,
+        skeleton_seq: list,
+        modification_rate: float,
+        solver_params: dict,
     ):
         is_valid_fragment = []
         for frag in fragments.filter(pl.col("true_internal")).rows():

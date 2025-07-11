@@ -141,11 +141,7 @@ def test_testcase(testcase):
         explanation_masses=explanation_masses,
         mass_tag_start=label_mass_5T,
         mass_tag_end=label_mass_3T,
-    ).predict(
-        fragments=fragments,
-        seq_len=len(true_seq),
-        solver_params=solver_params
-    )
+    ).predict(fragments=fragments, seq_len=len(true_seq), solver_params=solver_params)
 
     fragment_masses = pl.Series(
         prediction.fragments.select(pl.col("observed_mass"))

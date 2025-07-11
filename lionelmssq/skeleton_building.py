@@ -29,7 +29,6 @@ class SkeletonBuilder:
     matching_threshold: float
     dp_table: DynamicProgrammingTable
 
-
     def build_skeleton(
         self, modification_rate: float
     ) -> Tuple[
@@ -40,15 +39,14 @@ class SkeletonBuilder:
         List[int],
     ]:
         # Build skeleton sequence from 5'-end
-        start_skeleton, start_fragments, non_start_fragments = (
-            self._predict_skeleton(
-                modification_rate=modification_rate,
-                fragment_masses=self.fragment_masses[Side.START],
-                candidate_fragments=self.fragments_side[Side.START].get_column(
-                    "index").to_list(),
-                mass_diffs=self.mass_diffs[Side.START],
-                skeleton_seq=[set() for _ in range(self.seq_len)],
-            )
+        start_skeleton, start_fragments, non_start_fragments = self._predict_skeleton(
+            modification_rate=modification_rate,
+            fragment_masses=self.fragment_masses[Side.START],
+            candidate_fragments=self.fragments_side[Side.START]
+            .get_column("index")
+            .to_list(),
+            mass_diffs=self.mass_diffs[Side.START],
+            skeleton_seq=[set() for _ in range(self.seq_len)],
         )
         print("Skeleton sequence start = ", start_skeleton)
 
@@ -56,8 +54,9 @@ class SkeletonBuilder:
         end_skeleton, end_fragments, non_end_fragments = self._predict_skeleton(
             modification_rate=modification_rate,
             fragment_masses=self.fragment_masses[Side.END],
-            candidate_fragments=self.fragments_side[Side.END].get_column(
-                "index").to_list(),
+            candidate_fragments=self.fragments_side[Side.END]
+            .get_column("index")
+            .to_list(),
             mass_diffs=self.mass_diffs[Side.END],
             skeleton_seq=[set() for _ in range(self.seq_len)],
         )
@@ -77,7 +76,6 @@ class SkeletonBuilder:
             non_start_fragments,
             non_end_fragments,
         )
-
 
     def _predict_skeleton(
         self,
@@ -102,9 +100,7 @@ class SkeletonBuilder:
 
         fragments_valid = []
         fragments_invalid = []
-        for fragment_index, (diff, mass) in enumerate(
-            zip(mass_diffs, fragment_masses)
-        ):
+        for fragment_index, (diff, mass) in enumerate(zip(mass_diffs, fragment_masses)):
             diff += carry_over_mass
             assert pos
 
@@ -115,14 +111,12 @@ class SkeletonBuilder:
             )
 
             if explanations:
-                next_pos, skeleton_seq = (
-                    self.update_skeleton_for_given_explanations(
-                        explanations=explanations,
-                        pos=pos,
-                        skeleton_seq=skeleton_seq,
-                    )
+                next_pos, skeleton_seq = self.update_skeleton_for_given_explanations(
+                    explanations=explanations,
+                    pos=pos,
+                    skeleton_seq=skeleton_seq,
                 )
-                is_valid = (len(next_pos) != 0)
+                is_valid = len(next_pos) != 0
             elif (
                 # LCK: Is this case relevant at all? Can it even occur?
                 # Would it not be covered in the explanations already?
@@ -161,10 +155,8 @@ class SkeletonBuilder:
 
         return skeleton_seq, fragments_valid, fragments_invalid
 
-
-
     def _align_skeletons(
-            self, start_skeleton: List[Set[str]], end_skeleton: List[Set[str]]
+        self, start_skeleton: List[Set[str]], end_skeleton: List[Set[str]]
     ) -> List[Set[str]]:
         skeleton_seq = [set() for _ in range(self.seq_len)]
         for i in range(self.seq_len):
@@ -180,25 +172,24 @@ class SkeletonBuilder:
 
         return skeleton_seq
 
-
     def explain_difference(self, diff, prev_mass, modification_rate):
         if diff in self.explanations:
             return self.explanations.get(diff, [])
         else:
             threshold = calculate_diff_errors(
-                prev_mass, prev_mass + diff, self.matching_threshold,
+                prev_mass,
+                prev_mass + diff,
+                self.matching_threshold,
             )
             return calculate_diff_dp(
-                diff, threshold, modification_rate, self.seq_len,
-                self.dp_table
+                diff, threshold, modification_rate, self.seq_len, self.dp_table
             )
-
 
     def update_skeleton_for_given_explanations(
         self,
         explanations: List[Explanation],
         pos: Set[int],
-        skeleton_seq: List[Set[str]]
+        skeleton_seq: List[Set[str]],
     ):
         next_pos = set()
         for p in pos:
@@ -207,10 +198,11 @@ class SkeletonBuilder:
                 expl_len: set(chain(*expls))
                 for expl_len, expls in groupby(
                     [
-                        expl for expl in explanations
+                        expl
+                        for expl in explanations
                         if 0 <= p + len(expl) < self.seq_len
                     ],
-                    len
+                    len,
                 )
             }
 
@@ -238,7 +230,6 @@ class SkeletonBuilder:
 
 def adjust_end_fragment_info(fragments):
     return [
-        TerminalFragment(
-            fragment.index, -1-fragment.max_end, -1-fragment.min_end
-        ) for fragment in fragments
+        TerminalFragment(fragment.index, -1 - fragment.max_end, -1 - fragment.min_end)
+        for fragment in fragments
     ]

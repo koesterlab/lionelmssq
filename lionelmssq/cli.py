@@ -38,7 +38,7 @@ def main():
     solver_params = {
         "solver": select_solver(settings.solver),
         "threads": settings.threads,
-        "msg": False
+        "msg": False,
     }
 
     fragments = pl.read_csv(settings.fragments, separator="\t")
@@ -94,7 +94,7 @@ def main():
         fragments=fragments,
         seq_len=settings.seq_len,
         solver_params=solver_params,
-        modification_rate=settings.modification_rate
+        modification_rate=settings.modification_rate,
     )
 
     # save fragment predictions
@@ -113,6 +113,4 @@ def select_solver(solver: str):
         case "cbc":
             return "PULP_CBC_CMD"
         case _:
-            raise NotImplementedError(
-                f"Support for '{solver}' is currently not given."
-            )
+            raise NotImplementedError(f"Support for '{solver}' is currently not given.")

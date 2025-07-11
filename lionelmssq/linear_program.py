@@ -142,9 +142,7 @@ class LinearProgramInstance:
         ]
         return z
 
-    def _set_predicted_mass_difference(
-            self, fragment_masses, valid_fragment_range
-    ):
+    def _set_predicted_mass_difference(self, fragment_masses, valid_fragment_range):
         return [
             fragment_masses[j]
             - lpSum(
