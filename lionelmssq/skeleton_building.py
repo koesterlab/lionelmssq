@@ -128,8 +128,13 @@ class SkeletonBuilder:
                     )
                 )
             elif (
+                # LCK: Is this case relevant at all? Can it even occur?
+                # Would it not be covered in the explanations already?
                 abs(diff) <= self.matching_threshold * abs(mass)
                 # Problem! The above approach might blow up if the masses are very close, i.e. diff is very close to zero!
+                # LCK: If the problem stems from the small diff, would it
+                # not be better to consider this case first? How would it
+                # even come to pass?
             ):
                 min_fragment_end, max_fragment_end = select_outer_positions(
                     side=side, pos_list=pos
