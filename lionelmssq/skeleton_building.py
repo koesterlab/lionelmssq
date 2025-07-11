@@ -14,9 +14,9 @@ from lionelmssq.mass_table import DynamicProgrammingTable
 
 @dataclass
 class TerminalFragment:
-    index: int  # fragment index
-    min_end: int  # minimum length of fragment (negative for end fragments)
-    max_end: int  # maximum length of fragment (negative for end fragments)
+    index: int  # Fragment index
+    min_end: int  # Minimum length of fragment (negative for end fragments)
+    max_end: int  # Maximum length of fragment (negative for end fragments)
 
 
 @dataclass
@@ -91,15 +91,13 @@ class SkeletonBuilder:
         if skeleton_seq is None:
             skeleton_seq = [set() for _ in range(self.seq_len)]
 
+        # METHOD: Reject fragments which are not explained well by mass
+        # differences. While iterating through the fragments,
+        # the "carry_over_mass" keeps a track of the rejected mass
+        # difference (to add to the next considered difference) and
+        # "last_valid_mass" keeps a track of the last not-rejected mass
         pos = {0}
-
-        # We reject some masses/some fragments which are not explained well by mass differences.
-        # While iterating through the fragments, the "carry_over_mass" keeps a track of the rejected mass difference.
-        # This is added to "diff" to get the next mass_difference.
         carry_over_mass = 0.0
-
-        # "last_valid_mass" keeps a track of the last mass which was NOT rejected.
-        # This is useful for calculating the difference threshold
         last_valid_mass = 0.0
 
         fragments_valid = []
@@ -116,12 +114,6 @@ class SkeletonBuilder:
                 modification_rate=modification_rate,
             )
 
-            # METHOD: if there is only one single nucleoside explanation, we can
-            # directly assign the nucleoside if there are tuples, we have to assign a
-            # possibility to the current and next position
-            # and take care of expressing that both permutations are possible
-            # Further, we consider multiple possible start positions, depending on
-            # whether the previous explanations had different lengths.
             if explanations:
                 next_pos, skeleton_seq = (
                     self.update_skeleton_for_given_explanations(
@@ -176,8 +168,7 @@ class SkeletonBuilder:
     ) -> List[Set[str]]:
         skeleton_seq = [set() for _ in range(self.seq_len)]
         for i in range(self.seq_len):
-            # Wherever there is agreement between start and end sequence,
-            # those nucleotides are preferentially considered
+            # Preferentially consider nucleotides where start and end agree
             skeleton_seq[i] = start_skeleton[i].intersection(end_skeleton[i])
             # If the intersection is empty, use the union instead
             if not skeleton_seq[i]:
@@ -211,6 +202,7 @@ class SkeletonBuilder:
     ):
         next_pos = set()
         for p in pos:
+            # Group explanations by length in dict
             alphabet_per_expl_len = {
                 expl_len: set(chain(*expls))
                 for expl_len, expls in groupby(
@@ -222,22 +214,22 @@ class SkeletonBuilder:
                 )
             }
 
-            # constrain already existing sets in the range of the expl
-            # by the nucs that are given in the explanations
+            # Constrain current sets in range of explanation by the new nucleotides
             for expl_len, alphabet in alphabet_per_expl_len.items():
                 for i in range(expl_len):
-                    possible_nucleosides = skeleton_seq[p + i]
+                    possible_nucleotides = skeleton_seq[p + i]
 
-                    if possible_nucleosides.issuperset(alphabet):
-                        # If the current explanation sharpens the list of possibilities, clear all
-                        # prior possibilities before the new explanation will add the sharpened ones below
-                        possible_nucleosides.clear()
+                    if possible_nucleotides.issuperset(alphabet):
+                        # Clear nucleotide set if the new explanation sharpens it
+                        possible_nucleotides.clear()
 
+                    # Add all nucleotides in current explanation to set
                     for j in alphabet:
-                        possible_nucleosides.add(j)
+                        possible_nucleotides.add(j)
                         # TODO: We need to do this better.
-                        # Instead of adding just the letters, we somehow need to keep a track of the possibilities to be able to constrain the LP!
-                        # We also then probably need part of the code immediately below!
+                        #  Instead of adding just the letters, we somehow
+                        #  need to keep a track of the possibilities to be
+                        #  able to constrain the LP!
 
             # Update possible follow-up positions
             next_pos.update(p + expl_len for expl_len in alphabet_per_expl_len)
