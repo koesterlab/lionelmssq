@@ -123,14 +123,14 @@ class SkeletonBuilder:
             # Further, we consider multiple possible start positions, depending on
             # whether the previous explanations had different lengths.
             if explanations:
-                (is_valid, min_fragment_end, max_fragment_end, next_pos,
-                 skeleton_seq) = (
+                next_pos, skeleton_seq = (
                     self.update_skeleton_for_given_explanations(
                         explanations=explanations,
                         pos=pos,
                         skeleton_seq=skeleton_seq,
                     )
                 )
+                is_valid = (len(next_pos) != 0)
             elif (
                 # LCK: Is this case relevant at all? Can it even occur?
                 # Would it not be covered in the explanations already?
@@ -140,9 +140,6 @@ class SkeletonBuilder:
                 # not be better to consider this case first? How would it
                 # even come to pass?
             ):
-                min_fragment_end, max_fragment_end = select_outer_positions(
-                    pos_list=pos
-                )
                 is_valid = True
                 next_pos = pos
             else:
@@ -152,8 +149,8 @@ class SkeletonBuilder:
                 fragments_valid.append(
                     TerminalFragment(
                         index=candidate_fragments[fragment_index],
-                        min_end=min_fragment_end,
-                        max_end=max_fragment_end,
+                        min_end=min(next_pos, default=None),
+                        max_end=max(next_pos, default=None),
                     )
                 )
                 pos = next_pos
@@ -192,6 +189,7 @@ class SkeletonBuilder:
 
         return skeleton_seq
 
+
     def explain_difference(self, diff, prev_mass, modification_rate):
         if diff in self.explanations:
             return self.explanations.get(diff, [])
@@ -212,53 +210,23 @@ class SkeletonBuilder:
         skeleton_seq: List[Set[str]]
     ):
         next_pos = set()
-        min_p, max_p = select_outer_positions(pos_list=pos)
-
-        is_valid = True
-        min_fragment_end = None
-        max_fragment_end = None
-
-        def get_possible_nucleosides(pos: int, i: int) -> Set[str]:
-            return skeleton_seq[pos + i]
-
-        def is_valid_pos(pos: int, ext: int) -> bool:
-            pos = pos + ext
-            return 0 <= pos < self.seq_len
-
         for p in pos:
-            p_specific_explanations = [
-                expl for expl in explanations if is_valid_pos(p, len(expl))
-            ]
             alphabet_per_expl_len = {
                 expl_len: set(chain(*expls))
-                for expl_len, expls in groupby(p_specific_explanations, len)
+                for expl_len, expls in groupby(
+                    [
+                        expl for expl in explanations
+                        if 0 <= p + len(expl) < self.seq_len
+                    ],
+                    len
+                )
             }
-
-            # alphabet_per_expl_len = {
-            #     expl_len: set(chain(*expls))
-            #     for expl_len, expls in groupby(
-            #         [
-            #             expl for expl in explanations
-            #             if is_valid_pos(p, len(expl))
-            #         ], len)
-            # }
-            #
-            # if alphabet_per_expl_len:
-            if p_specific_explanations:
-                if p == min_p:
-                    min_fragment_end = min_p + min(
-                        expl_len for expl_len in alphabet_per_expl_len
-                    )
-                elif p == max_p:
-                    max_fragment_end = max_p + max(
-                        expl_len for expl_len in alphabet_per_expl_len
-                    )
 
             # constrain already existing sets in the range of the expl
             # by the nucs that are given in the explanations
             for expl_len, alphabet in alphabet_per_expl_len.items():
                 for i in range(expl_len):
-                    possible_nucleosides = get_possible_nucleosides(p, i)
+                    possible_nucleosides = skeleton_seq[p + i]
 
                     if possible_nucleosides.issuperset(alphabet):
                         # If the current explanation sharpens the list of possibilities, clear all
@@ -273,16 +241,7 @@ class SkeletonBuilder:
 
             # Update possible follow-up positions
             next_pos.update(p + expl_len for expl_len in alphabet_per_expl_len)
-        if max_fragment_end is None:
-            max_fragment_end = min_fragment_end
-        if min_fragment_end is None:
-            min_fragment_end = max_fragment_end
-        if min_fragment_end is None:
-            # still None => both are None
-            # TODO can we stop early in building the ladder?
-            is_valid = False
-
-        return is_valid, min_fragment_end, max_fragment_end, next_pos, skeleton_seq
+        return next_pos, skeleton_seq
 
 
 def adjust_end_fragment_info(fragments):
@@ -291,7 +250,3 @@ def adjust_end_fragment_info(fragments):
             fragment.index, -1-fragment.max_end, -1-fragment.min_end
         ) for fragment in fragments
     ]
-
-
-def select_outer_positions(pos_list):
-    return min(pos_list), max(pos_list)
