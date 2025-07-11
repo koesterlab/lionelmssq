@@ -137,7 +137,6 @@ class Predictor:
             mass_diffs=mass_diffs,
             explanations=explanations,
             seq_len=seq_len,
-            matching_threshold=self.dp_table.tolerance,
             dp_table=self.dp_table,
         )
 

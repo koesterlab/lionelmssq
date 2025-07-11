@@ -26,7 +26,6 @@ class SkeletonBuilder:
     mass_diffs: dict
     explanations: list[Explanation]
     seq_len: int
-    matching_threshold: float
     dp_table: DynamicProgrammingTable
 
     def build_skeleton(
@@ -120,7 +119,7 @@ class SkeletonBuilder:
             elif (
                 # LCK: Is this case relevant at all? Can it even occur?
                 # Would it not be covered in the explanations already?
-                abs(diff) <= self.matching_threshold * abs(mass)
+                abs(diff) <= self.dp_table.tolerance * abs(mass)
                 # Problem! The above approach might blow up if the masses are very close, i.e. diff is very close to zero!
                 # LCK: If the problem stems from the small diff, would it
                 # not be better to consider this case first? How would it
@@ -179,7 +178,7 @@ class SkeletonBuilder:
             threshold = calculate_diff_errors(
                 prev_mass,
                 prev_mass + diff,
-                self.matching_threshold,
+                self.dp_table.tolerance,
             )
             return calculate_diff_dp(
                 diff, threshold, modification_rate, self.seq_len, self.dp_table
