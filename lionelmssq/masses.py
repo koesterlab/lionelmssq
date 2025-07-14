@@ -4,6 +4,12 @@ from itertools import product
 
 _COLS = ["nucleoside", "monoisotopic_mass", "modification_rate"]
 
+
+# TODO: Currently, the list of unmodified bases is only defined for RNA;
+#  make it universally applicable
+UNMODIFIED_BASES = ["A", "C", "G", "U"]
+
+
 REDUCE_TABLE = True
 REDUCE_SET = False
 COMPRESSION_RATE = 32

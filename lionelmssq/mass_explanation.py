@@ -6,12 +6,14 @@ import polars as pl
 import numpy as np
 
 from lionelmssq.mass_table import DynamicProgrammingTable
-from lionelmssq.masses import EXPLANATION_MASSES
-from lionelmssq.masses import TOLERANCE
-from lionelmssq.masses import MATCHING_THRESHOLD
-from lionelmssq.masses import BREAKAGES
-from lionelmssq.masses import COMPRESSION_RATE
-from lionelmssq.linear_program import UNMODIFIED_BASES
+from lionelmssq.masses import (
+    EXPLANATION_MASSES,
+    TOLERANCE,
+    MATCHING_THRESHOLD,
+    BREAKAGES,
+    COMPRESSION_RATE,
+    UNMODIFIED_BASES,
+)
 
 
 @dataclass
@@ -281,9 +283,12 @@ def explain_mass_with_dp(
     # Convert the DP table masses to their respective nucleoside names
     explanations = []
     for breakage in solution_tolerated_integer_masses.keys():
+        # Return None if no explanation is found
+        if len(solution_tolerated_integer_masses[breakage]) == 0:
+            solution_names = None
         # Store the nucleoside names (as tuples) for the given tolerated_integer_masses in the set solution_names
-        solution_names = set()
-        if len(solution_tolerated_integer_masses[breakage]) > 0:
+        else:
+            solution_names = set()
             for combo in solution_tolerated_integer_masses[breakage]:
                 if len(combo) == 0:
                     continue
@@ -402,9 +407,12 @@ def explain_mass(
     # Convert the tolerated_integer_masses to the respective nucleoside names
     explanations = []
     for breakage in solution_tolerated_integer_masses.keys():
+        # Return None if no explanation is found
+        if len(solution_tolerated_integer_masses[breakage]) == 0:
+            solution_names = None
         # Store the nucleoside names (as tuples) for the given tolerated_integer_masses in the set solution_names
-        solution_names = set()
-        if len(solution_tolerated_integer_masses[breakage]) > 0:
+        else:
+            solution_names = set()
             for combo in solution_tolerated_integer_masses[breakage]:
                 if len(combo) == 0:
                     continue

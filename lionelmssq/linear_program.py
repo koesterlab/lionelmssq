@@ -12,9 +12,7 @@ from itertools import combinations
 import polars as pl
 import numpy as np
 
-# TODO: Currently, the list of unmodified bases is only defined for RNA;
-#  make it universally applicable
-UNMODIFIED_BASES = ["A", "C", "G", "U"]
+from lionelmssq.masses import UNMODIFIED_BASES
 
 
 class LinearProgramInstance:
@@ -24,13 +22,14 @@ class LinearProgramInstance:
         # i = 1,...,n: positions in the sequence
         # j = 1,...,m: fragments
         # b = 1,...,k: (modified) bases
-        self.fragment_masses = fragments.get_column("observed_mass").to_list()
+        self.fragments = fragments
         self.seq_len = len(skeleton_seq)
         self.nucleoside_names = nucleosides.get_column("nucleoside").to_list()
         self.nucleoside_masses = dict(
             nucleosides.select(["nucleoside", "monoisotopic_mass"]).iter_rows()
         )
-        valid_fragment_range = list(range(len(self.fragment_masses)))
+        fragment_masses = self.fragments.get_column("observed_mass").to_list()
+        valid_fragment_range = list(range(len(fragment_masses)))
         # x: binary variables indicating fragment j presence at position i
         self.x = self._set_x(valid_fragment_range, fragments)
         # y: binary variables indicating base b at position i
@@ -39,7 +38,7 @@ class LinearProgramInstance:
         self.z = self._set_z(valid_fragment_range)
         # weight_diff: difference between fragment monoisotopic mass and sum of masses of bases in fragment as estimated in the MILP
         self.predicted_mass_diff = self._set_predicted_mass_difference(
-            valid_fragment_range
+            fragment_masses, valid_fragment_range
         )
 
         self.problem = self._define_lp_problem(
@@ -143,9 +142,9 @@ class LinearProgramInstance:
         ]
         return z
 
-    def _set_predicted_mass_difference(self, valid_fragment_range):
+    def _set_predicted_mass_difference(self, fragment_masses, valid_fragment_range):
         return [
-            self.fragment_masses[j]
+            fragment_masses[j]
             - lpSum(
                 [
                     self.z[i][j][b] * self.nucleoside_masses[b]
@@ -219,13 +218,13 @@ class LinearProgramInstance:
 
         return problem
 
-    def check_feasibility(self, solver_name, num_threads, threshold):
-        solver = getSolver(solver_name, threads=num_threads, msg=False)
+    def check_feasibility(self, solver_params, threshold):
+        solver = getSolver(**solver_params)
         _ = self.problem.solve(solver)
         return self.problem.objective.value() <= threshold
 
-    def evaluate(self, solver_name, num_threads):
-        solver = getSolver(solver_name, threads=num_threads, msg=False)
+    def evaluate(self, solver_params):
+        solver = getSolver(**solver_params)
         # gurobi.msg = False
         # TODO the returned value resembles the accuracy of the prediction
         _ = self.problem.solve(solver)
@@ -237,6 +236,8 @@ class LinearProgramInstance:
             "".join([val if val is not None else "-" for val in seq]),
         )
 
+        fragment_masses = self.fragments.get_column("observed_mass").to_list()
+
         # Get the sequence corresponding to each of the fragments!
         fragment_seq = [
             "".join(
@@ -246,7 +247,7 @@ class LinearProgramInstance:
                     if self._get_base_fragmentwise(i, j) is not None
                 ]
             )
-            for j in list(range(len(self.fragment_masses)))
+            for j in list(range(len(fragment_masses)))
         ]
 
         # Get the mass corresponding to each of the fragments!
@@ -258,7 +259,7 @@ class LinearProgramInstance:
                     if self._get_base_fragmentwise(i, j) is not None
                 ]
             )
-            for j in list(range(len(self.fragment_masses)))
+            for j in list(range(len(fragment_masses)))
         ]
 
         fragment_predictions = pl.from_dicts(
@@ -276,12 +277,20 @@ class LinearProgramInstance:
                     + 1,  # right bound shall be exclusive, hence add 1
                     "predicted_fragment_seq": fragment_seq[j],
                     "predicted_fragment_mass": predicted_fragment_mass[j],
-                    "observed_mass": self.fragment_masses[j],
+                    "observed_mass": fragment_masses[j],
                     "predicted_mass_diff": self.predicted_mass_diff[j].value(),
                 }
-                for j in list(range(len(self.fragment_masses)))
+                for j in list(range(len(fragment_masses)))
             ]
         )
+
+        fragment_predictions = pl.concat(
+            [fragment_predictions, self.fragments.select(pl.col("orig_index"))],
+            how="horizontal",
+        )
+
+        # reorder fragment predictions so that they match the original order again
+        fragment_predictions = fragment_predictions.sort("orig_index")
 
         return seq, fragment_predictions
 

@@ -88,8 +88,8 @@ def test_testcase(testcase, threshold):
     explanations = [
         tuple(solution)
         for expl in predicted_mass_explanations
-        for solution in expl.explanations
         if expl.breakage == breakage
+        for solution in expl.explanations
     ]
 
     assert tuple(testcase[1][breakage]) in explanations
@@ -127,8 +127,8 @@ def test_testcase_with_dp(testcase, compression, memo, threshold):
     explanations = [
         tuple(solution)
         for expl in predicted_mass_explanations
-        for solution in expl.explanations
         if expl.breakage == breakage
+        for solution in expl.explanations
     ]
 
     assert tuple(testcase[1][breakage]) in explanations

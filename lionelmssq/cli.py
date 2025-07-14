@@ -34,6 +34,13 @@ class Settings(Tap):
 
 def main():
     settings = Settings(underscores_to_dashes=True).parse_args()
+
+    solver_params = {
+        "solver": select_solver(settings.solver),
+        "threads": settings.threads,
+        "msg": False,
+    }
+
     fragments = pl.read_csv(settings.fragments, separator="\t")
 
     simulation = False
@@ -79,16 +86,16 @@ def main():
         )
 
     prediction = Predictor(
-        fragments=fragments,
-        seq_len=settings.seq_len,
-        solver=settings.solver,
-        threads=settings.threads,
         dp_table=dp_table,
-        unique_masses=unique_masses,
         explanation_masses=explanation_masses,
         mass_tag_start=start_tag,
         mass_tag_end=end_tag,
-    ).predict(settings.modification_rate)
+    ).predict(
+        fragments=fragments,
+        seq_len=settings.seq_len,
+        solver_params=solver_params,
+        modification_rate=settings.modification_rate,
+    )
 
     # save fragment predictions
     prediction.fragments.write_csv(settings.fragment_predictions, separator="\t")
@@ -97,3 +104,13 @@ def main():
     with open(settings.sequence_prediction, "w") as f:
         print(f">{settings.sequence_name}", file=f)
         print("".join(prediction.sequence), file=f)
+
+
+def select_solver(solver: str):
+    match solver:
+        case "gurobi":
+            return "GUROBI_CMD"
+        case "cbc":
+            return "PULP_CBC_CMD"
+        case _:
+            raise NotImplementedError(f"Support for '{solver}' is currently not given.")
