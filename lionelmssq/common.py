@@ -61,23 +61,22 @@ def calculate_diff_errors(mass1, mass2, threshold) -> float:
 
 def calculate_diff_dp(diff, threshold, modification_rate, seq_len, dp_table):
     # TODO: Add support for other breakages than 'c/y_c/y'
-    explanation_list = list(
-        [
-            entry
-            for entry in explain_mass(
-                diff,
-                dp_table=dp_table,
-                seq_len=seq_len,
-                max_modifications=round(modification_rate * seq_len),
-                threshold=threshold,
-            )
-            if entry.breakage == "c/y_c/y"
-        ][0].explanations
-    )
-    if len(explanation_list) > 0:
-        retval = [
-            Explanation(*explanation_list[i]) for i in range(len(explanation_list))
-        ]
-    else:
-        retval = []
-    return retval
+    explanation_list = [
+        entry
+        for entry in explain_mass(
+            diff,
+            dp_table=dp_table,
+            seq_len=seq_len,
+            max_modifications=round(modification_rate * seq_len),
+            threshold=threshold,
+        )
+        if entry.breakage == "c/y_c/y"
+    ][0].explanations
+
+    # Return None if no explanation was found
+    if explanation_list is None:
+        return None
+
+    # Return all found explanations
+    explanation_list = list(explanation_list)
+    return [Explanation(*explanation_list[i]) for i in range(len(explanation_list))]

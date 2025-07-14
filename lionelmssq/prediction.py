@@ -348,7 +348,11 @@ class Predictor:
 
     def _reduce_alphabet(self, explanations) -> pl.DataFrame:
         observed_nucleosides = {
-            nuc for expls in explanations.values() for expl in expls for nuc in expl
+            nuc
+            for expls in explanations.values()
+            if expls is not None
+            for expl in expls
+            for nuc in expl
         }
         reduced = self.explanation_masses.filter(
             pl.col("nucleoside").is_in(observed_nucleosides)

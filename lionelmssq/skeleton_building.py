@@ -109,26 +109,15 @@ class SkeletonBuilder:
                 modification_rate=modification_rate,
             )
 
-            if explanations:
+            if explanations is None:
+                is_valid = False
+            else:
                 next_pos, skeleton_seq = self.update_skeleton_for_given_explanations(
                     explanations=explanations,
                     pos=pos,
                     skeleton_seq=skeleton_seq,
                 )
                 is_valid = len(next_pos) != 0
-            elif (
-                # LCK: Is this case relevant at all? Can it even occur?
-                # Would it not be covered in the explanations already?
-                abs(diff) <= self.dp_table.tolerance * abs(mass)
-                # Problem! The above approach might blow up if the masses are very close, i.e. diff is very close to zero!
-                # LCK: If the problem stems from the small diff, would it
-                # not be better to consider this case first? How would it
-                # even come to pass?
-            ):
-                is_valid = True
-                next_pos = pos
-            else:
-                is_valid = False
 
             if is_valid:
                 fragments_valid.append(
@@ -210,8 +199,8 @@ class SkeletonBuilder:
                 for i in range(expl_len):
                     possible_nucleotides = skeleton_seq[p + i]
 
+                    # Clear nucleotide set if the new explanation sharpens it
                     if possible_nucleotides.issuperset(alphabet):
-                        # Clear nucleotide set if the new explanation sharpens it
                         possible_nucleotides.clear()
 
                     # Add all nucleotides in current explanation to set
