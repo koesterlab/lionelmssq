@@ -9,7 +9,10 @@ from lionelmssq.prediction import Predictor
 from lionelmssq.common import parse_nucleosides
 from lionelmssq.plotting import plot_prediction
 from lionelmssq.utils import estimate_MS_error_matching_threshold
-from lionelmssq.fragment_classification import mark_terminal_fragment_candidates
+from lionelmssq.fragment_classification import (
+    classify_fragments,
+    mark_terminal_fragment_candidates,
+)
 
 import polars as pl
 import yaml
@@ -128,6 +131,13 @@ def test_testcase(testcase):
             print(fragments)
 
     # fragment_masses = pl.Series(fragments.select(pl.col("observed_mass"))).to_list()
+
+    fragments = classify_fragments(
+        fragments,
+        dp_table=dp_table,
+        output_file_path=base_path / "standard_unit_fragments.tsv",
+        intensity_cutoff=intensity_cutoff,
+    )
 
     solver_params = {
         "solver": select_solver(os.environ.get("SOLVER", "cbc")),

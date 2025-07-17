@@ -50,6 +50,46 @@ IS_MOD = {
 }
 
 
+def is_valid_su_mass(
+    mass: float,
+    dp_table: DynamicProgrammingTable,
+    threshold: float,
+) -> bool:
+    # Convert the target to an integer for easy operations
+    target = int(round(mass / TOLERANCE, 0))
+
+    compression_rate = dp_table.compression_per_cell
+
+    current_idx = len(dp_table.table) - 1
+    for value in range(target - threshold, target + threshold + 1):
+        # Skip non-positive masses
+        if value <= 0:
+            continue
+
+        # Raise error if mass is not in table (due to its size)
+        if value >= len(dp_table.table[0]) * compression_rate:
+            raise NotImplementedError(
+                f"The value {value} is not in the DP table. Extend its "
+                f"size if you want to compute larger masses."
+            )
+
+        current_value = (
+            dp_table.table[current_idx, value]
+            if compression_rate == 1
+            else dp_table.table[current_idx, value // compression_rate]
+            >> 2 * (compression_rate - 1 - value % compression_rate)
+        )
+
+        # Skip unreachable cells
+        if compression_rate != 1 and current_value % compression_rate == 0.0:
+            continue
+
+        # Return True when mass corresponds to valid entry in table
+        if current_value % 2 == 1 or (current_value >> 1) % 2 == 1:
+            return True
+    return False
+
+
 def is_valid_mass(
     mass: float,
     dp_table,
