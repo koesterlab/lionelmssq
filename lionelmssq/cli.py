@@ -1,7 +1,10 @@
 from pathlib import Path
 from typing import Literal
 
-from lionelmssq.fragment_classification import mark_terminal_fragment_candidates
+from lionelmssq.fragment_classification import (
+    classify_fragments,
+    mark_terminal_fragment_candidates,
+)
 from lionelmssq.mass_table import DynamicProgrammingTable
 from lionelmssq.masses import (
     COMPRESSION_RATE,
@@ -66,24 +69,33 @@ def main():
         reduced_set=reduce_set,
     )
 
+    fragment_dir = settings.fragments.parent
+    intensity_cutoff = 1e4
+
     if not simulation:
-        fragment_dir = settings.fragments.parent
         with open(fragment_dir / "meta.yaml", "r") as f:
             meta = yaml.safe_load(f)
 
         start_tag = meta["label_mass_5T"]
         end_tag = meta["label_mass_3T"]
 
+        if "intensity_cutoff" in meta:
+            intensity_cutoff = meta["intensity_cutoff"]
+
         fragments = mark_terminal_fragment_candidates(
             fragments,
             dp_table=dp_table,
             output_file_path=fragment_dir / "fragments_with_classification_marked.tsv",
-            # matching_threshold=matching_threshold,
-            intensity_cutoff=meta["intensity_cutoff"]
-            if "intensity_cutoff" in meta
-            else 1e4,
+            intensity_cutoff=intensity_cutoff,
             ms1_mass=meta["sequence_mass"] if "sequence_mass" in meta else None,
         )
+
+    fragments = classify_fragments(
+        fragment_masses=fragments,
+        dp_table=dp_table,
+        output_file_path=fragment_dir / "standard_unit_fragments.tsv",
+        intensity_cutoff=intensity_cutoff,
+    )
 
     prediction = Predictor(
         dp_table=dp_table,
