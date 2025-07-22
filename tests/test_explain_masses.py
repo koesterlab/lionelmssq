@@ -4,6 +4,7 @@ import polars as pl
 from lionelmssq.mass_explanation import (
     explain_mass,
     explain_mass_with_dp,
+    explain_mass_without_breakage,
 )
 from lionelmssq.masses import (
     EXPLANATION_MASSES,
@@ -130,5 +131,34 @@ def test_testcase_with_dp(testcase, compression, memo, threshold):
         if expl.breakage == breakage
         for solution in expl.explanations
     ]
+
+    assert tuple(testcase[1][breakage]) in explanations
+
+
+@pytest.mark.parametrize("testcase", MASS_SEQ_DICT.items())
+@pytest.mark.parametrize("compression", COMPRESSION_RATES)
+@pytest.mark.parametrize("threshold", THRESHOLDS)
+def test_testcase_without_breakage(testcase, compression, threshold):
+    breakage = list(testcase[1].keys())[0]
+
+    dp_table = DynamicProgrammingTable(
+        EXPLANATION_MASSES,
+        reduced_table=True,
+        reduced_set=False,
+        compression_rate=compression,
+        tolerance=threshold,
+        precision=TOLERANCE,
+    )
+
+    predicted_mass_explanations = explain_mass_without_breakage(
+        testcase[0],
+        dp_table=dp_table,
+        seq_len=len(testcase[1][breakage]),
+        max_modifications=round(MOD_RATE * len(tuple(testcase[1][breakage]))),
+    ).explanations
+
+    assert predicted_mass_explanations is not None
+
+    explanations = [tuple(expl) for expl in predicted_mass_explanations]
 
     assert tuple(testcase[1][breakage]) in explanations
