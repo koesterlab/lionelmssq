@@ -111,7 +111,6 @@ class SkeletonBuilder:
                 modification_rate=modification_rate,
                 breakage_dict=breakage_dict,
             )
-            print(diff, explanations, frag)
 
             if explanations is None:
                 is_valid = False
@@ -137,7 +136,7 @@ class SkeletonBuilder:
             else:
                 logger.warning(
                     f"Skipping {frag[idx_breakage]} fragment {frag[idx_index]} "
-                    f"with observed mass {frag[idx_observed_mass]} and SU mass "
+                    f"with observed mass {frag[idx_observed_mass]}/SU mass "
                     f"{frag[idx_su_mass]} because no explanations were found."
                 )
                 carry_over_mass = diff
@@ -177,11 +176,12 @@ class SkeletonBuilder:
             )
             return calculate_diff_dp(
                 diff,
-                threshold,
+                threshold,  # * diff,
                 modification_rate,
                 self.seq_len,
                 self.dp_table,
                 breakage_dict,
+                # su_mode=True,
             )
 
     def update_skeleton_for_given_explanations(

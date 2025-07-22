@@ -7,6 +7,7 @@ from loguru import logger
 from lionelmssq.common import Side, calculate_diff_dp, calculate_diff_errors
 from lionelmssq.linear_program import LinearProgramInstance
 from lionelmssq.mass_table import DynamicProgrammingTable
+from lionelmssq.masses import PHOSPHATE_LINK_MASS
 from lionelmssq.skeleton_building import SkeletonBuilder
 
 
@@ -331,6 +332,7 @@ class Predictor:
                 seq_len,
                 self.dp_table,
                 breakage_dict=breakage_dict,
+                # su_mode=True,
             )
 
         for diff, diff_error in zip(
@@ -344,6 +346,7 @@ class Predictor:
                 seq_len,
                 self.dp_table,
                 breakage_dict=breakage_dict,
+                # su_mode=True,
             )
         return explanations
         # TODO: Can make it simpler here by rejecting diff which cannot be explained instead of doing it in the _predict_skeleton function!
