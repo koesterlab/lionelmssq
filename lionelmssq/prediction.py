@@ -440,26 +440,6 @@ class Predictor:
             .otherwise(False)
         )
 
-    # def determine_differences(self, fragments):
-    #     mass_diffs = [fragments.item(0, "standard_unit_mass")] + [
-    #         fragments.item(i, "standard_unit_mass")
-    #         - fragments.item(i - 1, "standard_unit_mass")
-    #         for i in range(1, len(fragments))
-    #     ]
-    #
-    #     mass_diffs_errors = [
-    #         fragments.item(0, "observed_mass") * self.dp_table.tolerance
-    #     ] + [
-    #         calculate_diff_errors(
-    #             fragments.item(i, "observed_mass"),
-    #             fragments.item(i - 1, "observed_mass"),
-    #             self.dp_table.tolerance,
-    #         )
-    #         for i in range(1, len(fragments))
-    #     ]
-    #
-    #     return mass_diffs, mass_diffs_errors
-
     def collect_diff_explanations_for_su(
         self,
         modification_rate,
