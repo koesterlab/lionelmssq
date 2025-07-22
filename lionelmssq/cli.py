@@ -10,6 +10,7 @@ from lionelmssq.masses import (
     COMPRESSION_RATE,
     MATCHING_THRESHOLD,
     TOLERANCE,
+    build_breakage_dict,
     initialize_nucleotide_df,
 )
 from lionelmssq.prediction import Predictor
@@ -44,13 +45,24 @@ def main():
         "msg": False,
     }
 
+    # Read fragments
     fragments = pl.read_csv(settings.fragments, separator="\t")
+
+    # Read additional parameter from meta file
+    fragment_dir = settings.fragments.parent
+    if "observed_mass" not in fragments.columns:
+        with open(fragment_dir / "meta.yaml", "r") as f:
+            meta = yaml.safe_load(f)
+    else:
+        meta = {}
+
+    intensity_cutoff = meta["intensity_cutoff"] if "intensity_cutoff" in meta else 1e4
+    start_tag = meta["label_mass_5T"] if "label_mass_5T" in meta else 555.1294
+    end_tag = meta["label_mass_3T"] if "label_mass_3T" in meta else 455.1491
 
     simulation = False
     reduce_table = False
     reduce_set = True
-    start_tag = 0.0
-    end_tag = 0.0
     if "observed_mass" in fragments.columns:
         simulation = True
         reduce_table = True
@@ -69,19 +81,7 @@ def main():
         reduced_set=reduce_set,
     )
 
-    fragment_dir = settings.fragments.parent
-    intensity_cutoff = 1e4
-
     if not simulation:
-        with open(fragment_dir / "meta.yaml", "r") as f:
-            meta = yaml.safe_load(f)
-
-        start_tag = meta["label_mass_5T"]
-        end_tag = meta["label_mass_3T"]
-
-        if "intensity_cutoff" in meta:
-            intensity_cutoff = meta["intensity_cutoff"]
-
         fragments = mark_terminal_fragment_candidates(
             fragments,
             dp_table=dp_table,
@@ -90,9 +90,16 @@ def main():
             ms1_mass=meta["sequence_mass"] if "sequence_mass" in meta else None,
         )
 
+    # Build breakage dict
+    breakages = build_breakage_dict(
+        mass_5_prime=start_tag,
+        mass_3_prime=end_tag,
+    )
+
     fragments = classify_fragments(
         fragment_masses=fragments,
         dp_table=dp_table,
+        breakage_dict=breakages,
         output_file_path=fragment_dir / "standard_unit_fragments.tsv",
         intensity_cutoff=intensity_cutoff,
     )
@@ -100,13 +107,20 @@ def main():
     prediction = Predictor(
         dp_table=dp_table,
         explanation_masses=explanation_masses,
-        mass_tag_start=start_tag,
-        mass_tag_end=end_tag,
+        mass_tag_start=[
+            val for val in breakage_dict if "START_c/y" in breakage_dict[val]
+        ][0]
+        * TOLERANCE,
+        mass_tag_end=[val for val in breakage_dict if "c/y_END" in breakage_dict[val]][
+            0
+        ]
+        * TOLERANCE,
     ).predict(
         fragments=fragments,
         seq_len=settings.seq_len,
         solver_params=solver_params,
         modification_rate=settings.modification_rate,
+        breakage_dict=breakages,
     )
 
     # save fragment predictions

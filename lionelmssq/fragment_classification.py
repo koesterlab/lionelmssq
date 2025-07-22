@@ -270,6 +270,7 @@ def mark_terminal_fragment_candidates(
 def classify_fragments(
     fragment_masses,
     dp_table: DynamicProgrammingTable,
+    breakage_dict=BREAKAGES,
     output_file_path=None,
     intensity_cutoff=0.5e6,
     mass_cutoff=50000,
@@ -299,7 +300,7 @@ def classify_fragments(
                 ),
                 pl.lit(breakages[0]).alias("breakage"),
             )
-            for (breakage_weight, breakages) in BREAKAGES.items()
+            for (breakage_weight, breakages) in breakage_dict.items()
         ]
     )
 

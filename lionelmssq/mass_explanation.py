@@ -152,6 +152,7 @@ def explain_mass_with_dp(
     max_modifications=np.inf,
     compression_rate=None,
     threshold=None,
+    breakage_dict=BREAKAGES,
 ) -> list[MassExplanations]:
     """
     Return all possible combinations of nucleosides that could sum up to the given mass.
@@ -293,7 +294,7 @@ def explain_mass_with_dp(
         return solutions
 
     solution_tolerated_integer_masses = {}
-    for breakage_weight in BREAKAGES:
+    for breakage_weight in breakage_dict:
         # Compute all valid solutions within the threshold interval
         solutions = []
         for value in range(
@@ -317,7 +318,7 @@ def explain_mass_with_dp(
             )
 
         # Add valid solutions to dictionary of breakpoint options
-        for breakage in BREAKAGES[breakage_weight]:
+        for breakage in breakage_dict[breakage_weight]:
             solution_tolerated_integer_masses[breakage] = solutions
 
     # Convert the DP table masses to their respective nucleoside names
@@ -368,6 +369,7 @@ def explain_mass(
     seq_len: int,
     max_modifications=np.inf,
     threshold=None,
+    breakage_dict=BREAKAGES,
 ) -> MassExplanations:
     """
     Returns all the possible combinations of nucleosides that could sum up to the given mass.
@@ -438,10 +440,10 @@ def explain_mass(
         return combinations
 
     solution_tolerated_integer_masses = {}
-    for breakage_weight in BREAKAGES:
+    for breakage_weight in breakage_dict:
         # Start with the full target and all tolerated_integer_masses (except 0.0)
         solutions = dp(target - breakage_weight, 1, 0, 0)
-        for breakage in BREAKAGES[breakage_weight]:
+        for breakage in breakage_dict[breakage_weight]:
             solution_tolerated_integer_masses[breakage] = solutions
 
     # Convert the tolerated_integer_masses to the respective nucleoside names

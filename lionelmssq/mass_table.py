@@ -12,7 +12,7 @@ from lionelmssq.masses import UNMODIFIED_BASES
 
 # Set OS-independent cache directory for DP tables
 TABLE_DIR = user_cache_dir(
-    appname="lionelmssq/dp_table", version="1.0", ensure_exists=True
+    appname="lionelmssq/dp_table", version="1.1", ensure_exists=True
 )
 
 

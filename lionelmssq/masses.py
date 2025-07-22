@@ -20,7 +20,23 @@ ROUND_DECIMAL = 5  # The precision (after decimal points) to which to consider t
 TOLERANCE = 1e-3  # For perfect matching, the TOLERANCE should be the
 # precision (digits after decimal) to which the masses of nucleosides and sequences are reported, i.e. 1e-(ROUND_DECIMAL)
 
-PHOSPHATE_LINK_MASS = 61.95577  # P(30.97389) + 2*O(2*15.99491) + H(1.00783)
+
+# Build dict with elemental masses
+ELEMENTAL_MASSES = pl.read_csv(
+    importlib.resources.files(__package__) / "assets" / "element_masses.tsv",
+    separator="\t",
+)
+ELEMENT_MASSES = {
+    row[ELEMENTAL_MASSES.get_column_index("symbol")]: row[
+        ELEMENTAL_MASSES.get_column_index("mass")
+    ]
+    for row in ELEMENTAL_MASSES.iter_rows()
+}
+
+# PHOSPHATE_LINK_MASS = 61.95577  # P(30.97389) + 2*O(2*15.99491) - H(1.00783)
+PHOSPHATE_LINK_MASS = (
+    ELEMENT_MASSES["P"] + 2 * ELEMENT_MASSES["O"] - ELEMENT_MASSES["H+"]
+)
 
 
 # This dictates a relative matching threshold such that we consider abs(sum(masses)/target_mass - 1) < MATCHING_THRESHOLD to be matched!
@@ -101,3 +117,35 @@ def initialize_nucleotide_df(reduce_set):
 
 
 MASSES, UNIQUE_MASSES, EXPLANATION_MASSES = initialize_nucleotide_df(REDUCE_SET)
+
+
+def build_breakage_dict(mass_5_prime, mass_3_prime):
+    element_masses = ELEMENT_MASSES
+
+    # Initialize dict with masses for 5'-end of fragments
+    start_dict = {
+        # Remove O from SU and add START tag (without H)
+        "START": mass_5_prime - element_masses["O"] - element_masses["H+"],
+        # Add H to SU to achieve neutral charge
+        "c/y": element_masses["H+"],
+    }
+
+    # Initialize dict with masses for 3'-end of fragments
+    end_dict = {
+        # Remove PO3H from SU and add END tag (without H)
+        "END": mass_3_prime
+        - element_masses["P"]
+        - 3 * element_masses["O"]
+        - 2 * element_masses["H+"],
+        # Remove H from SU to achieve neutral charge
+        "c/y": -element_masses["H+"],
+    }
+
+    breakage_dict = {}
+    for start, end in list(product(start_dict.keys(), end_dict.keys())):
+        val = int((start_dict[start] + end_dict[end]) / TOLERANCE)
+        if val not in breakage_dict:
+            breakage_dict[val] = []
+        breakage_dict[val] += [f"{start}_{end}"]
+
+    return breakage_dict

@@ -21,6 +21,7 @@ from lionelmssq.masses import (
     COMPRESSION_RATE,
     TOLERANCE,
     MATCHING_THRESHOLD,
+    build_breakage_dict,
     initialize_nucleotide_df,
 )
 
@@ -132,9 +133,14 @@ def test_testcase(testcase):
 
     # fragment_masses = pl.Series(fragments.select(pl.col("observed_mass"))).to_list()
 
+    breakage_dict = build_breakage_dict(
+        mass_5_prime=label_mass_5T, mass_3_prime=label_mass_3T
+    )
+
     fragments = classify_fragments(
         fragments,
         dp_table=dp_table,
+        breakage_dict=breakage_dict,
         output_file_path=base_path / "standard_unit_fragments.tsv",
         intensity_cutoff=intensity_cutoff,
     )
@@ -149,9 +155,20 @@ def test_testcase(testcase):
     prediction = Predictor(
         dp_table=dp_table,
         explanation_masses=explanation_masses,
-        mass_tag_start=label_mass_5T,
-        mass_tag_end=label_mass_3T,
-    ).predict(fragments=fragments, seq_len=len(true_seq), solver_params=solver_params)
+        mass_tag_start=[
+            val for val in breakage_dict if "START_c/y" in breakage_dict[val]
+        ][0]
+        * TOLERANCE,
+        mass_tag_end=[val for val in breakage_dict if "c/y_END" in breakage_dict[val]][
+            0
+        ]
+        * TOLERANCE,
+    ).predict(
+        fragments=fragments,
+        seq_len=len(true_seq),
+        solver_params=solver_params,
+        breakage_dict=breakage_dict,
+    )
 
     fragment_masses = pl.Series(
         prediction.fragments.select(pl.col("observed_mass"))

@@ -40,6 +40,7 @@ class Predictor:
     def predict(
         self,
         fragments: pl.DataFrame,
+        breakage_dict,
         seq_len: int,
         solver_params: dict,
         modification_rate: float = 0.5,
@@ -86,14 +87,8 @@ class Predictor:
 
         # Collect the masses of these fragments (subtract the appropriate tag masses)
         fragment_masses = {
-            Side.START: self._collect_fragment_side_masses(
-                fragments=fragments,
-                side=Side.START,
-            ),
-            Side.END: self._collect_fragment_side_masses(
-                fragments=fragments,
-                side=Side.END,
-            ),
+            side: self._collect_fragment_side_masses(fragments=fragments, side=side)
+            for side in fragments_side
         }
 
         # Roughly estimate the differences as a first step with all fragments marked as start and then as end
@@ -101,20 +96,12 @@ class Predictor:
         # since the difference may be quite large and explained by lots of combinations
         # Note that there may be faulty mass fragments which will lead to bad (not truly existent) differences here!
         mass_diffs = {
-            Side.START: self._collect_diffs(
-                fragment_masses[Side.START], side=Side.START
-            ),
-            Side.END: self._collect_diffs(fragment_masses[Side.END], side=Side.END),
+            side: self._collect_diffs(fragment_masses[side], side=side)
+            for side in fragments_side
         }
         mass_diffs_errors = {
-            Side.START: self._collect_diff_errors(
-                fragment_masses[Side.START],
-                Side.START,
-            ),
-            Side.END: self._collect_diff_errors(
-                fragment_masses[Side.END],
-                Side.END,
-            ),
+            side: self._collect_diff_errors(fragment_masses[side], side=side)
+            for side in fragments_side
         }
         explanations = self._collect_diff_explanations(
             mass_diffs=mass_diffs,
@@ -122,6 +109,7 @@ class Predictor:
             modification_rate=modification_rate,
             fragments=fragments,
             seq_len=seq_len,
+            breakage_dict=breakage_dict,
         )
 
         # TODO: Also consider that the observations are not complete and that
@@ -147,7 +135,7 @@ class Predictor:
             end_fragments,
             invalid_start_fragments,
             invalid_end_fragments,
-        ) = skeleton_builder.build_skeleton(modification_rate)
+        ) = skeleton_builder.build_skeleton(modification_rate, breakage_dict)
 
         # TODO: If the tags are considered in the LP at the end, then most of the following code will become obsolete!
 
@@ -322,7 +310,13 @@ class Predictor:
         ]
 
     def _collect_diff_explanations(
-        self, mass_diffs, mass_diff_errors, modification_rate, fragments, seq_len
+        self,
+        mass_diffs,
+        mass_diff_errors,
+        modification_rate,
+        fragments,
+        seq_len,
+        breakage_dict,
     ) -> dict:
         # Collect singleton masses
         singleton_masses = set(
@@ -335,12 +329,22 @@ class Predictor:
             mass_diff_errors[Side.START] + mass_diff_errors[Side.END],
         ):
             explanations[diff] = calculate_diff_dp(
-                diff, diff_error, modification_rate, seq_len, self.dp_table
+                diff,
+                diff_error,
+                modification_rate,
+                seq_len,
+                self.dp_table,
+                breakage_dict=breakage_dict,
             )
 
         for diff in singleton_masses:
             explanations[diff] = calculate_diff_dp(
-                diff, self.dp_table.tolerance, modification_rate, seq_len, self.dp_table
+                diff,
+                self.dp_table.tolerance,
+                modification_rate,
+                seq_len,
+                self.dp_table,
+                breakage_dict=breakage_dict,
             )
 
         return explanations

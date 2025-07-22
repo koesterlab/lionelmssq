@@ -61,7 +61,9 @@ def calculate_diff_errors(mass1, mass2, threshold) -> float:
     return retval
 
 
-def calculate_diff_dp(diff, threshold, modification_rate, seq_len, dp_table):
+def calculate_diff_dp(
+    diff, threshold, modification_rate, seq_len, dp_table, breakage_dict
+):
     # TODO: Add support for other breakages than 'c/y_c/y'
     explanation_list = [
         entry
@@ -71,6 +73,7 @@ def calculate_diff_dp(diff, threshold, modification_rate, seq_len, dp_table):
             seq_len=seq_len,
             max_modifications=round(modification_rate * seq_len),
             threshold=threshold,
+            breakage_dict=breakage_dict,
         )
         if entry.breakage == "c/y_c/y"
     ][0].explanations

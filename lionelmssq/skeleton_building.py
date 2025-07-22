@@ -29,7 +29,7 @@ class SkeletonBuilder:
     dp_table: DynamicProgrammingTable
 
     def build_skeleton(
-        self, modification_rate: float
+        self, modification_rate: float, breakage_dict: dict
     ) -> Tuple[
         List[Set[str]],
         List[TerminalFragment],
@@ -40,6 +40,7 @@ class SkeletonBuilder:
         # Build skeleton sequence from 5'-end
         start_skeleton, start_fragments, non_start_fragments = self._predict_skeleton(
             modification_rate=modification_rate,
+            breakage_dict=breakage_dict,
             fragment_masses=self.fragment_masses[Side.START],
             candidate_fragments=self.fragments_side[Side.START]
             .get_column("index")
@@ -52,6 +53,7 @@ class SkeletonBuilder:
         # Build skeleton sequence from 3'-end
         end_skeleton, end_fragments, non_end_fragments = self._predict_skeleton(
             modification_rate=modification_rate,
+            breakage_dict=breakage_dict,
             fragment_masses=self.fragment_masses[Side.END],
             candidate_fragments=self.fragments_side[Side.END]
             .get_column("index")
@@ -79,6 +81,7 @@ class SkeletonBuilder:
     def _predict_skeleton(
         self,
         modification_rate,
+        breakage_dict,
         fragment_masses,
         candidate_fragments,
         mass_diffs,
@@ -107,6 +110,7 @@ class SkeletonBuilder:
                 diff=diff,
                 prev_mass=last_valid_mass,
                 modification_rate=modification_rate,
+                breakage_dict=breakage_dict,
             )
 
             if explanations is None:
@@ -160,7 +164,7 @@ class SkeletonBuilder:
 
         return skeleton_seq
 
-    def explain_difference(self, diff, prev_mass, modification_rate):
+    def explain_difference(self, diff, prev_mass, modification_rate, breakage_dict):
         if diff in self.explanations:
             return self.explanations.get(diff, [])
         else:
@@ -170,7 +174,12 @@ class SkeletonBuilder:
                 self.dp_table.tolerance,
             )
             return calculate_diff_dp(
-                diff, threshold, modification_rate, self.seq_len, self.dp_table
+                diff,
+                threshold,
+                modification_rate,
+                self.seq_len,
+                self.dp_table,
+                breakage_dict,
             )
 
     def update_skeleton_for_given_explanations(
