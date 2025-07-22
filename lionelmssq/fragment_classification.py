@@ -333,7 +333,7 @@ def classify_fragments(
             ),
             return_dtype=bool,
         )
-        .alias("single_nucleoside")
+        .alias("is_singleton")
     )
 
     # Filter out fragments that have a too high mass or too low intensity

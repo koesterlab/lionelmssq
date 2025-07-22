@@ -120,7 +120,6 @@ class Predictor:
         masses = self._reduce_alphabet(explanations=explanations)
 
         skeleton_builder = SkeletonBuilder(
-            fragment_masses=fragment_masses,
             fragments_side=fragments_side,
             mass_diffs=mass_diffs,
             explanations=explanations,
@@ -320,10 +319,20 @@ class Predictor:
     ) -> dict:
         # Collect singleton masses
         singleton_masses = set(
-            fragments.filter(pl.col("single_nucleoside")).get_column("observed_mass")
+            fragments.filter(pl.col("is_singleton")).get_column("observed_mass")
         )
 
         explanations = {}
+        for diff in singleton_masses:
+            explanations[diff] = calculate_diff_dp(
+                diff,
+                self.dp_table.tolerance,
+                modification_rate,
+                seq_len,
+                self.dp_table,
+                breakage_dict=breakage_dict,
+            )
+
         for diff, diff_error in zip(
             mass_diffs[Side.START] + mass_diffs[Side.END],
             mass_diff_errors[Side.START] + mass_diff_errors[Side.END],
@@ -336,17 +345,6 @@ class Predictor:
                 self.dp_table,
                 breakage_dict=breakage_dict,
             )
-
-        for diff in singleton_masses:
-            explanations[diff] = calculate_diff_dp(
-                diff,
-                self.dp_table.tolerance,
-                modification_rate,
-                seq_len,
-                self.dp_table,
-                breakage_dict=breakage_dict,
-            )
-
         return explanations
         # TODO: Can make it simpler here by rejecting diff which cannot be explained instead of doing it in the _predict_skeleton function!
 

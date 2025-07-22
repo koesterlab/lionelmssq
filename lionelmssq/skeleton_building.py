@@ -21,7 +21,6 @@ class TerminalFragment:
 
 @dataclass
 class SkeletonBuilder:
-    fragment_masses: dict
     fragments_side: dict
     mass_diffs: dict
     explanations: list[Explanation]
@@ -41,10 +40,7 @@ class SkeletonBuilder:
         start_skeleton, start_fragments, non_start_fragments = self._predict_skeleton(
             modification_rate=modification_rate,
             breakage_dict=breakage_dict,
-            fragment_masses=self.fragment_masses[Side.START],
-            candidate_fragments=self.fragments_side[Side.START]
-            .get_column("index")
-            .to_list(),
+            fragments=self.fragments_side[Side.START],
             mass_diffs=self.mass_diffs[Side.START],
             skeleton_seq=[set() for _ in range(self.seq_len)],
         )
@@ -54,10 +50,7 @@ class SkeletonBuilder:
         end_skeleton, end_fragments, non_end_fragments = self._predict_skeleton(
             modification_rate=modification_rate,
             breakage_dict=breakage_dict,
-            fragment_masses=self.fragment_masses[Side.END],
-            candidate_fragments=self.fragments_side[Side.END]
-            .get_column("index")
-            .to_list(),
+            fragments=self.fragments_side[Side.END],
             mass_diffs=self.mass_diffs[Side.END],
             skeleton_seq=[set() for _ in range(self.seq_len)],
         )
@@ -82,8 +75,7 @@ class SkeletonBuilder:
         self,
         modification_rate,
         breakage_dict,
-        fragment_masses,
-        candidate_fragments,
+        fragments,
         mass_diffs,
         skeleton_seq: Optional[List[Set[str]]] = None,
     ) -> Tuple[List[Set[str]], List[TerminalFragment], List[int]]:
@@ -100,18 +92,26 @@ class SkeletonBuilder:
         carry_over_mass = 0.0
         last_valid_mass = 0.0
 
+        # Get indices from fragments dataframe
+        idx_observed_mass = fragments.get_column_index("observed_mass")
+        idx_su_mass = fragments.get_column_index("standard_unit_mass")
+        idx_breakage = fragments.get_column_index("breakage")
+        idx_index = fragments.get_column_index("index")
+
         fragments_valid = []
         fragments_invalid = []
-        for fragment_index, (diff, mass) in enumerate(zip(mass_diffs, fragment_masses)):
+        for diff, frag in zip(mass_diffs, fragments.rows()):
             diff += carry_over_mass
             assert pos
 
             explanations = self.explain_difference(
                 diff=diff,
                 prev_mass=last_valid_mass,
+                current_mass=frag[idx_observed_mass],
                 modification_rate=modification_rate,
                 breakage_dict=breakage_dict,
             )
+            print(diff, explanations, frag)
 
             if explanations is None:
                 is_valid = False
@@ -126,24 +126,24 @@ class SkeletonBuilder:
             if is_valid:
                 fragments_valid.append(
                     TerminalFragment(
-                        index=candidate_fragments[fragment_index],
+                        index=frag[idx_index],
                         min_end=min(next_pos, default=None),
                         max_end=max(next_pos, default=None),
                     )
                 )
                 pos = next_pos
-                last_valid_mass = mass
+                last_valid_mass = frag[idx_observed_mass]
                 carry_over_mass = 0.0
             else:
                 logger.warning(
-                    f"Skipping fragment {fragment_index} with observed mass {mass} because no "
-                    "explanations are found for the mass difference."
+                    f"Skipping {frag[idx_breakage]} fragment {frag[idx_index]} "
+                    f"with observed mass {frag[idx_observed_mass]} and SU mass "
+                    f"{frag[idx_su_mass]} because no explanations were found."
                 )
                 carry_over_mass = diff
 
                 # Consider the skipped fragments as internal fragments! Add back the terminal mass to this fragments!
-                if fragment_index and candidate_fragments:
-                    fragments_invalid.append(candidate_fragments[fragment_index])
+                fragments_invalid.append(frag[idx_index])
 
         return skeleton_seq, fragments_valid, fragments_invalid
 
@@ -164,13 +164,15 @@ class SkeletonBuilder:
 
         return skeleton_seq
 
-    def explain_difference(self, diff, prev_mass, modification_rate, breakage_dict):
+    def explain_difference(
+        self, diff, prev_mass, current_mass, modification_rate, breakage_dict
+    ):
         if diff in self.explanations:
             return self.explanations.get(diff, [])
         else:
             threshold = calculate_diff_errors(
                 prev_mass,
-                prev_mass + diff,
+                current_mass,
                 self.dp_table.tolerance,
             )
             return calculate_diff_dp(
