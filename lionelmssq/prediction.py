@@ -51,6 +51,8 @@ class Predictor:
             modification_rate
         )
 
+        fragments2 = fragments
+
         fragments = (
             fragments.with_row_index(name="orig_index")
             .sort("observed_mass")
@@ -109,6 +111,38 @@ class Predictor:
             mass_diff_errors=mass_diffs_errors,
             modification_rate=modification_rate,
             fragments=fragments,
+            seq_len=seq_len,
+            breakage_dict=breakage_dict,
+        )
+
+        fragments2 = (
+            fragments2.with_row_index(name="orig_index")
+            .sort("standard_unit_mass")
+            .with_row_index(name="index")
+        )
+        print(len(fragments2))
+
+        # Collect the fragments for the start and end side which also include the start_end fragments (entire sequences)
+        fragments_side2 = {
+            Side.START: fragments2.filter(pl.col("breakage").str.contains("START")),
+            Side.END: fragments2.filter(pl.col("breakage").str.contains("END")),
+        }
+
+        # Roughly estimate the differences as a first step with all fragments marked as start and then as end
+        # Note that there may be faulty mass fragments which will lead to bad (not truly existent) differences here!
+        mass_diffs2 = {
+            side: [fragments_side2[side].item(0, "standard_unit_mass")]
+            + [
+                fragments_side2[side].item(i, "standard_unit_mass")
+                - fragments_side2[side].item(i - 1, "standard_unit_mass")
+                for i in range(1, len(fragments_side2[side]))
+            ]
+            for side in fragments_side2
+        }
+
+        explanations2 = self.collect_diff_explanations_for_su(
+            modification_rate=modification_rate,
+            fragments=fragments2,
             seq_len=seq_len,
             breakage_dict=breakage_dict,
         )
@@ -405,3 +439,113 @@ class Predictor:
             .then(pl.col("true_internal"))
             .otherwise(False)
         )
+
+    # def determine_differences(self, fragments):
+    #     mass_diffs = [fragments.item(0, "standard_unit_mass")] + [
+    #         fragments.item(i, "standard_unit_mass")
+    #         - fragments.item(i - 1, "standard_unit_mass")
+    #         for i in range(1, len(fragments))
+    #     ]
+    #
+    #     mass_diffs_errors = [
+    #         fragments.item(0, "observed_mass") * self.dp_table.tolerance
+    #     ] + [
+    #         calculate_diff_errors(
+    #             fragments.item(i, "observed_mass"),
+    #             fragments.item(i - 1, "observed_mass"),
+    #             self.dp_table.tolerance,
+    #         )
+    #         for i in range(1, len(fragments))
+    #     ]
+    #
+    #     return mass_diffs, mass_diffs_errors
+
+    def collect_diff_explanations_for_su(
+        self,
+        modification_rate,
+        fragments,
+        seq_len,
+        breakage_dict,
+    ) -> dict:
+        # Collect explanation for all reasonable mass differences for each side
+        explanations = {
+            **self.collect_explanations_per_side(
+                fragments=fragments.filter(pl.col("breakage").str.contains("START")),
+                modification_rate=modification_rate,
+                seq_len=seq_len,
+                breakage_dict=breakage_dict,
+            ),
+            **self.collect_explanations_per_side(
+                fragments=fragments.filter(pl.col("breakage").str.contains("END")),
+                modification_rate=modification_rate,
+                seq_len=seq_len,
+                breakage_dict=breakage_dict,
+            ),
+        }
+
+        # Collect singleton masses
+        singleton_list = fragments.filter(pl.col("is_singleton"))
+
+        idx_observed_mass = fragments.get_column_index("observed_mass")
+        idx_su_mass = fragments.get_column_index("standard_unit_mass")
+        for singleton in singleton_list.rows():
+            explanations[singleton[idx_su_mass]] = calculate_diff_dp(
+                diff=singleton[idx_su_mass],
+                threshold=self.dp_table.tolerance
+                * (singleton[idx_observed_mass] / singleton[idx_su_mass]),
+                modification_rate=modification_rate,
+                seq_len=seq_len,
+                dp_table=self.dp_table,
+                breakage_dict=breakage_dict,
+                su_mode=True,
+            )
+
+        return explanations
+
+    def collect_explanations_per_side(
+        self, fragments, modification_rate, seq_len, breakage_dict
+    ):
+        max_weight = (
+            max(self.explanation_masses.get_column("monoisotopic_mass").to_list())
+            + PHOSPHATE_LINK_MASS
+        )
+        su_masses = fragments.get_column("standard_unit_mass").to_list()
+        observed_masses = fragments.get_column("observed_mass").to_list()
+        start = 0
+        end = 1
+
+        explanations = {}
+        while end < len(fragments):
+            # Skip singletons
+            if (end - start) <= 0:
+                end += 1
+                continue
+
+            # Determine mass difference between fragments
+            diff = su_masses[end] - su_masses[start]
+
+            # If mass difference > any nucleotide mass, drop 1st fragment in window
+            if diff > max_weight:
+                start += 1
+                end = start + 1
+                continue
+
+            diff_error = calculate_diff_errors(
+                observed_masses[start],
+                observed_masses[end],
+                self.dp_table.tolerance,
+            )
+            expl = calculate_diff_dp(
+                diff=diff,
+                threshold=diff_error,  # * diff,
+                modification_rate=modification_rate,
+                seq_len=seq_len,
+                dp_table=self.dp_table,
+                breakage_dict=breakage_dict,
+                # su_mode=True,
+            )
+            if expl is not None and len(expl) >= 1:
+                explanations[diff] = expl
+            end += 1
+
+        return explanations
