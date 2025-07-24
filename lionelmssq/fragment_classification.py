@@ -2,7 +2,6 @@ import polars as pl
 import numpy as np
 
 from lionelmssq.masses import (
-    MATCHING_THRESHOLD,
     TOLERANCE,
     BREAKAGES,
 )
@@ -71,7 +70,7 @@ def is_complete_fragment_candidate(mass, dp_table):
         for breakage_weight in BREAKAGES
     }
     # Return flag whether the mass is valid with any remaining breakage options
-    return is_valid_mass(mass, dp_table, breakages)
+    return is_valid_mass(mass, dp_table.table, dp_table.tolerance, breakages)
 
 
 def is_start_fragment_candidate(mass, dp_table):
@@ -85,7 +84,7 @@ def is_start_fragment_candidate(mass, dp_table):
         for breakage_weight in BREAKAGES
     }
     # Return flag whether the mass is valid with any remaining breakage options
-    return is_valid_mass(mass, dp_table, breakages)
+    return is_valid_mass(mass, dp_table.table, dp_table.tolerance, breakages)
 
 
 def is_end_fragment_candidate(mass, dp_table):
@@ -99,7 +98,7 @@ def is_end_fragment_candidate(mass, dp_table):
         for breakage_weight in BREAKAGES
     }
     # Return flag whether the mass is valid with any remaining breakage options
-    return is_valid_mass(mass, dp_table, breakages)
+    return is_valid_mass(mass, dp_table.table, dp_table.tolerance, breakages)
 
 
 def is_internal_fragment_candidate(mass, dp_table):
@@ -113,10 +112,10 @@ def is_internal_fragment_candidate(mass, dp_table):
         for breakage_weight in BREAKAGES
     }
     # Return flag whether the mass is valid with any remaining breakage options
-    return is_valid_mass(mass, dp_table, breakages)
+    return is_valid_mass(mass, dp_table.table, dp_table.tolerance, breakages)
 
 
-def is_singleton_candidate(mass, integer_masses, threshold=MATCHING_THRESHOLD):
+def is_singleton_candidate(mass, integer_masses, threshold):
     # Convert the target to an integer for easy operations
     target = int(round(mass / TOLERANCE, 0))
 
@@ -140,7 +139,6 @@ def mark_terminal_fragment_candidates(
     output_mass_column_name="observed_mass",
     intensity_cutoff=0.5e6,
     mass_cutoff=50000,
-    # threshold=MATCHING_THRESHOLD,
     # ms1_mass_deviations_allowed=0.01,
 ):
     neutral_masses = (
@@ -186,7 +184,7 @@ def mark_terminal_fragment_candidates(
     fragments = fragments.with_columns(
         pl.col(mass_column_name)
         .map_elements(
-            lambda x: is_start_fragment_candidate(x, dp_table=dp_table.table),
+            lambda x: is_start_fragment_candidate(x, dp_table=dp_table),
             return_dtype=bool,
         )
         .alias("is_start")
@@ -196,7 +194,7 @@ def mark_terminal_fragment_candidates(
     fragments = fragments.with_columns(
         pl.col(mass_column_name)
         .map_elements(
-            lambda x: is_end_fragment_candidate(x, dp_table=dp_table.table),
+            lambda x: is_end_fragment_candidate(x, dp_table=dp_table),
             return_dtype=bool,
         )
         .alias("is_end")
@@ -206,7 +204,9 @@ def mark_terminal_fragment_candidates(
     fragments = fragments.with_columns(
         pl.col(mass_column_name)
         .map_elements(
-            lambda x: is_singleton_candidate(x, integer_masses=integer_masses),
+            lambda x: is_singleton_candidate(
+                x, integer_masses=integer_masses, threshold=dp_table.tolerance
+            ),
             return_dtype=bool,
         )
         .alias("single_nucleoside")
@@ -216,7 +216,7 @@ def mark_terminal_fragment_candidates(
     fragments = fragments.with_columns(
         pl.col(mass_column_name)
         .map_elements(
-            lambda x: is_complete_fragment_candidate(x, dp_table=dp_table.table),
+            lambda x: is_complete_fragment_candidate(x, dp_table=dp_table),
             return_dtype=bool,
         )
         .alias("is_start_end")
@@ -226,7 +226,7 @@ def mark_terminal_fragment_candidates(
     fragments = fragments.with_columns(
         pl.col(mass_column_name)
         .map_elements(
-            lambda x: is_internal_fragment_candidate(x, dp_table=dp_table.table),
+            lambda x: is_internal_fragment_candidate(x, dp_table=dp_table),
             return_dtype=bool,
         )
         .alias("is_internal")

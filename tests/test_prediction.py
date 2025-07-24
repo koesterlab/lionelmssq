@@ -8,7 +8,6 @@ from lionelmssq.mass_table import DynamicProgrammingTable
 from lionelmssq.prediction import Predictor
 from lionelmssq.common import parse_nucleosides
 from lionelmssq.plotting import plot_prediction
-from lionelmssq.utils import estimate_MS_error_matching_threshold
 from lionelmssq.fragment_classification import (
     classify_fragments,
     mark_terminal_fragment_candidates,
@@ -58,6 +57,8 @@ def test_testcase(testcase):
     else:
         ms1_mass = None
 
+    matching_threshold = MATCHING_THRESHOLD
+
     # If the left and right columns exist, means that the input file is from a simulation with the sequence of each fragment known!
     if "left" in input_file.columns or "right" in input_file.columns:
         simulation = True
@@ -76,12 +77,11 @@ def test_testcase(testcase):
         )
 
         # TODO: Discuss why it doesn't work with the estimated error!
-        matching_threshold, _, _ = estimate_MS_error_matching_threshold(
-            fragments, unique_masses=unique_masses, simulation=simulation
-        )
-        matching_threshold = MATCHING_THRESHOLD
+        # matching_threshold, _, _ = estimate_MS_error_matching_threshold(
+        #     fragments, unique_masses=unique_masses, simulation=simulation
+        # )
         # print(
-        #     "Matching threshold (rel errror) estimated from singleton masses = ",
+        #     "Matching threshold (rel error) estimated from singleton masses = ",
         #     matching_threshold,
         # )
 
@@ -90,7 +90,7 @@ def test_testcase(testcase):
             reduced_table=True,
             reduced_set=False,
             compression_rate=COMPRESSION_RATE,
-            tolerance=MATCHING_THRESHOLD,
+            tolerance=matching_threshold,
             precision=TOLERANCE,
         )
 
@@ -99,13 +99,12 @@ def test_testcase(testcase):
 
         fragment_masses_read = pl.read_csv(base_path / "fragments.tsv", separator="\t")
 
-        matching_threshold = MATCHING_THRESHOLD
         # TODO: Discuss why it doesn't work with the estimated error!
         # matching_threshold, _, _ = estimate_MS_error_MATCHING_THRESHOLD(
         #     fragment_masses_read, unique_masses=unique_masses, simulation=simulation
         # )
         # print(
-        #     "Matching threshold (rel errror) estimated from singleton masses = ",
+        #     "Matching threshold (rel error) estimated from singleton masses = ",
         #     matching_threshold,
         # )
 
@@ -116,7 +115,7 @@ def test_testcase(testcase):
             reduced_table=False,
             reduced_set=True,
             compression_rate=COMPRESSION_RATE,
-            tolerance=MATCHING_THRESHOLD,
+            tolerance=matching_threshold,
             precision=TOLERANCE,
         )
 
@@ -124,7 +123,6 @@ def test_testcase(testcase):
             fragment_masses_read,
             dp_table=dp_table,
             output_file_path=base_path / "fragments_with_classification_marked.tsv",
-            # matching_threshold=matching_threshold,
             intensity_cutoff=intensity_cutoff,
             ms1_mass=ms1_mass,
         )

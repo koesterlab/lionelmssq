@@ -9,7 +9,6 @@ from lionelmssq.mass_table import DynamicProgrammingTable
 from lionelmssq.masses import (
     EXPLANATION_MASSES,
     TOLERANCE,
-    MATCHING_THRESHOLD,
     BREAKAGES,
     COMPRESSION_RATE,
     UNMODIFIED_BASES,
@@ -98,9 +97,9 @@ def is_valid_su_mass(
 def is_valid_mass(
     mass: float,
     dp_table,
+    threshold,
     breakages=BREAKAGES,
     compression_rate=COMPRESSION_RATE,
-    threshold=MATCHING_THRESHOLD,
 ) -> bool:
     # Ensure that all breakage weights have a associated breakage
     breakages = {
