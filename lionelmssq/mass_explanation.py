@@ -632,3 +632,116 @@ def explain_mass_without_breakage(
 
     # Return list of explanations
     return MassExplanation(solution_names)
+
+
+def explain_mass_recursively_without_breakage(
+    mass: float,
+    dp_table: DynamicProgrammingTable,
+    seq_len: int,
+    max_modifications=np.inf,
+    threshold=None,
+) -> MassExplanation:
+    """
+    Returns all the possible combinations of nucleosides that could sum up to the given mass.
+    """
+    if threshold is None:
+        threshold = dp_table.tolerance
+
+    tolerated_integer_masses = [mass.mass for mass in dp_table.masses]
+
+    # Convert the target to an integer for easy operations
+    target = int(round(mass / TOLERANCE, 0))
+
+    # Set matching threshold based on target mass
+    threshold = int(np.ceil(threshold * target))
+
+    # Memoization dictionary to store results for a given target
+    memo = {}
+
+    def dp(remaining, start, used_mods_all, used_mods_ind):
+        # If too many modifications are used, return empty list
+        if used_mods_all > max_modifications or used_mods_ind > round(
+            seq_len * dp_table.masses[start].modification_rate
+        ):
+            return []
+
+        # If the result for this state is already computed, return it
+        if (remaining, start) in memo:
+            return memo[(remaining, start)]
+
+        # Base case: if abs(target) is less than threshold, return a list with one empty combination
+        if abs(remaining) <= threshold:
+            return [[]]
+
+        # Base case: if target is zero, return a list with one empty combination
+        if remaining == 0:
+            return [[]]
+
+        # Base case: if target is negative, no combinations possible
+        if remaining < 0:
+            return []
+
+        # List to store all combinations for this state
+        combinations = []
+
+        # Try each tolerated_integer_mass starting from the current position to avoid duplicates
+        for i in range(start, len(tolerated_integer_masses)):
+            tolerated_integer_mass = tolerated_integer_masses[i]
+            # Recurse with reduced target and the current tolerated_integer_mass
+            sub_combinations = dp(
+                remaining - tolerated_integer_mass,
+                i,
+                used_mods_all + 1 if IS_MOD[tolerated_integer_mass] else used_mods_all,
+                0
+                if i != start
+                else (
+                    used_mods_ind + 1
+                    if IS_MOD[tolerated_integer_mass]
+                    else used_mods_ind
+                ),
+            )
+            # Add current tolerated_integer_mass to all sub-combinations
+            for combo in sub_combinations:
+                combinations.append([tolerated_integer_mass] + combo)
+
+        # Store result in memo
+        memo[(remaining, start)] = combinations
+
+        return combinations
+
+    # Start with the full target and all tolerated_integer_masses (except 0.0)
+    solutions = dp(target, 1, 0, 0)
+
+    # Store the nucleoside names (as tuples) for the given tolerated_integer_masses in the set solution_names
+    solution_names = set()
+    # Return None if no explanation is found
+    if len(solutions) == 0:
+        return MassExplanation(None)
+    # Convert the DP table masses to their respective nucleoside names
+    for solution in solutions:
+        if len(solution) == 0:
+            continue
+        solution_names.update(
+            [
+                tuple(chain.from_iterable(entry))
+                for entry in list(
+                    product(
+                        *[
+                            list(
+                                combinations_with_replacement(
+                                    MASS_NAMES[mass], solution.count(mass)
+                                )
+                            )
+                            for mass in [
+                                solution[idx]
+                                for idx in range(len(solution))
+                                if idx == 0 or solution[idx - 1] != solution[idx]
+                            ]
+                        ]
+                    )
+                )
+            ]
+        )
+
+    # Return list of explanations
+    return MassExplanation(solution_names)
