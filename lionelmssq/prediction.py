@@ -526,6 +526,9 @@ class Predictor:
             )
             if expl is not None and len(expl) >= 1:
                 explanations[diff] = expl
-            end += 1
+            if end == len(fragments) - 1:
+                start += 1
+            else:
+                end += 1
 
         return explanations
