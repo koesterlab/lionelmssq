@@ -8,7 +8,6 @@ import numpy as np
 from lionelmssq.mass_table import DynamicProgrammingTable
 from lionelmssq.masses import (
     EXPLANATION_MASSES,
-    TOLERANCE,
     BREAKAGES,
     COMPRESSION_RATE,
     UNMODIFIED_BASES,
@@ -57,10 +56,17 @@ IS_MOD = {
 def is_valid_su_mass(
     mass: float,
     dp_table: DynamicProgrammingTable,
-    threshold: float,
+    threshold: float = None,
 ) -> bool:
     # Convert the target to an integer for easy operations
-    target = int(round(mass / TOLERANCE, 0))
+    target = int(round(mass / dp_table.precision, 0))
+
+    # Set relative threshold if not given
+    if threshold is None:
+        threshold = dp_table.tolerance * mass
+
+    # Convert the threshold to integer
+    threshold = int(np.ceil(threshold / dp_table.precision))
 
     compression_rate = dp_table.compression_per_cell
 
@@ -96,8 +102,8 @@ def is_valid_su_mass(
 
 def is_valid_mass(
     mass: float,
-    dp_table,
-    threshold,
+    dp_table: DynamicProgrammingTable,
+    threshold=None,
     breakages=BREAKAGES,
     compression_rate=COMPRESSION_RATE,
 ) -> bool:
@@ -109,12 +115,16 @@ def is_valid_mass(
     }
 
     # Convert the target to an integer for easy operations
-    target = int(round(mass / TOLERANCE, 0))
+    target = int(round(mass / dp_table.precision, 0))
 
-    # Set matching threshold based on target mass
-    threshold = int(np.ceil(threshold * target))
+    # Set relative threshold if not given
+    if threshold is None:
+        threshold = dp_table.tolerance * mass
 
-    current_idx = len(dp_table) - 1
+    # Convert the threshold to integer
+    threshold = int(np.ceil(threshold / dp_table.precision))
+
+    current_idx = len(dp_table.table) - 1
     for breakage_weight in breakages:
         for value in range(
             target - breakage_weight - threshold,
@@ -125,16 +135,16 @@ def is_valid_mass(
                 continue
 
             # Raise error if mass is not in table (due to its size)
-            if value >= len(dp_table[0]) * compression_rate:
+            if value >= len(dp_table.table[0]) * compression_rate:
                 raise NotImplementedError(
                     f"The value {value} is not in the DP table. Extend its "
                     f"size if you want to compute larger masses."
                 )
 
             current_value = (
-                dp_table[current_idx, value]
+                dp_table.table[current_idx, value]
                 if compression_rate == 1
-                else dp_table[current_idx, value // compression_rate]
+                else dp_table.table[current_idx, value // compression_rate]
                 >> 2 * (compression_rate - 1 - value % compression_rate)
             )
 
@@ -378,16 +388,17 @@ def explain_mass(
     """
     Returns all the possible combinations of nucleosides that could sum up to the given mass.
     """
-    if threshold is None:
-        threshold = dp_table.tolerance
-
     tolerated_integer_masses = [mass.mass for mass in dp_table.masses]
 
     # Convert the target to an integer for easy operations
-    target = int(round(mass / TOLERANCE, 0))
+    target = int(round(mass / dp_table.precision, 0))
 
-    # Set matching threshold based on target mass
-    threshold = int(np.ceil(threshold * target))
+    # Set relative threshold if not given
+    if threshold is None:
+        threshold = dp_table.tolerance * mass
+
+    # Convert the threshold to integer
+    threshold = int(np.ceil(threshold / dp_table.precision))
 
     # Memoization dictionary to store results for a given target
     memo = {}
@@ -503,17 +514,18 @@ def explain_mass_without_breakage(
     """
     Return all possible combinations of nucleosides that could sum up to the given mass.
     """
-    if threshold is None:
-        threshold = dp_table.tolerance
-
     if compression_rate is None:
         compression_rate = dp_table.compression_per_cell
 
     # Convert the target to an integer for easy operations
     target = int(round(mass / dp_table.precision, 0))
 
-    # Set matching threshold based on target mass
-    threshold = int(np.ceil(threshold * target))
+    # Set relative threshold if not given
+    if threshold is None:
+        threshold = dp_table.tolerance * mass
+
+    # Convert the threshold to integer
+    threshold = int(np.ceil(threshold / dp_table.precision))
 
     memo = {}
 
@@ -643,16 +655,17 @@ def explain_mass_recursively_without_breakage(
     """
     Returns all the possible combinations of nucleosides that could sum up to the given mass.
     """
-    if threshold is None:
-        threshold = dp_table.tolerance
-
     tolerated_integer_masses = [mass.mass for mass in dp_table.masses]
 
     # Convert the target to an integer for easy operations
-    target = int(round(mass / TOLERANCE, 0))
+    target = int(round(mass / dp_table.precision, 0))
 
-    # Set matching threshold based on target mass
-    threshold = int(np.ceil(threshold * target))
+    # Set relative threshold if not given
+    if threshold is None:
+        threshold = dp_table.tolerance * mass
+
+    # Convert the threshold to integer
+    threshold = int(np.ceil(threshold / dp_table.precision))
 
     # Memoization dictionary to store results for a given target
     memo = {}

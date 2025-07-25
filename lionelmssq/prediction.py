@@ -361,7 +361,7 @@ class Predictor:
         for diff in singleton_masses:
             explanations[diff] = calculate_diff_dp(
                 diff,
-                self.dp_table.tolerance,
+                self.dp_table.tolerance * diff,
                 modification_rate,
                 seq_len,
                 self.dp_table,
@@ -471,8 +471,7 @@ class Predictor:
         for singleton in singleton_list.rows():
             explanations[singleton[idx_su_mass]] = calculate_diff_dp(
                 diff=singleton[idx_su_mass],
-                threshold=self.dp_table.tolerance
-                * (singleton[idx_observed_mass] / singleton[idx_su_mass]),
+                threshold=self.dp_table.tolerance * singleton[idx_observed_mass],
                 modification_rate=modification_rate,
                 seq_len=seq_len,
                 dp_table=self.dp_table,

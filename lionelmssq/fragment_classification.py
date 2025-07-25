@@ -2,7 +2,6 @@ import polars as pl
 import numpy as np
 
 from lionelmssq.masses import (
-    TOLERANCE,
     BREAKAGES,
 )
 from lionelmssq.mass_explanation import (
@@ -70,7 +69,7 @@ def is_complete_fragment_candidate(mass, dp_table):
         for breakage_weight in BREAKAGES
     }
     # Return flag whether the mass is valid with any remaining breakage options
-    return is_valid_mass(mass, dp_table.table, dp_table.tolerance, breakages)
+    return is_valid_mass(mass=mass, dp_table=dp_table, breakages=breakages)
 
 
 def is_start_fragment_candidate(mass, dp_table):
@@ -84,7 +83,7 @@ def is_start_fragment_candidate(mass, dp_table):
         for breakage_weight in BREAKAGES
     }
     # Return flag whether the mass is valid with any remaining breakage options
-    return is_valid_mass(mass, dp_table.table, dp_table.tolerance, breakages)
+    return is_valid_mass(mass=mass, dp_table=dp_table, breakages=breakages)
 
 
 def is_end_fragment_candidate(mass, dp_table):
@@ -98,7 +97,7 @@ def is_end_fragment_candidate(mass, dp_table):
         for breakage_weight in BREAKAGES
     }
     # Return flag whether the mass is valid with any remaining breakage options
-    return is_valid_mass(mass, dp_table.table, dp_table.tolerance, breakages)
+    return is_valid_mass(mass=mass, dp_table=dp_table, breakages=breakages)
 
 
 def is_internal_fragment_candidate(mass, dp_table):
@@ -112,15 +111,19 @@ def is_internal_fragment_candidate(mass, dp_table):
         for breakage_weight in BREAKAGES
     }
     # Return flag whether the mass is valid with any remaining breakage options
-    return is_valid_mass(mass, dp_table.table, dp_table.tolerance, breakages)
+    return is_valid_mass(mass=mass, dp_table=dp_table, breakages=breakages)
 
 
-def is_singleton_candidate(mass, integer_masses, threshold):
+def is_singleton_candidate(mass, integer_masses, dp_table, threshold=None):
     # Convert the target to an integer for easy operations
-    target = int(round(mass / TOLERANCE, 0))
+    target = int(round(mass / dp_table.precision, 0))
 
-    # Set matching threshold based on target mass
-    threshold = int(np.ceil(threshold * target))
+    # Set relative threshold if not given
+    if threshold is None:
+        threshold = dp_table.tolerance * mass
+
+    # Convert the threshold to integer
+    threshold = int(np.ceil(threshold / dp_table.precision))
 
     # Check for each breakage whether a singleton mass could be found
     for breakage_weight in BREAKAGES:
@@ -205,7 +208,7 @@ def mark_terminal_fragment_candidates(
         pl.col(mass_column_name)
         .map_elements(
             lambda x: is_singleton_candidate(
-                x, integer_masses=integer_masses, threshold=dp_table.tolerance
+                x, integer_masses=integer_masses, dp_table=dp_table
             ),
             return_dtype=bool,
         )
@@ -281,21 +284,11 @@ def classify_fragments(
             pl.lit(intensity_cutoff * 1.1).alias("intensity"),
         )
 
-    # Add integer mass to dataframe
-    fragments = fragment_masses.with_row_index(name="fragment_idx").with_columns(
-        pl.col("neutral_mass")
-        .map_elements(
-            lambda x: int(round(x / TOLERANCE, 0)),
-            return_dtype=int,
-        )
-        .alias("int_mass"),
-    )
-
     # Copy each fragment for each unique breakage weights
     fragments = pl.concat(
         [
-            fragments.with_columns(
-                (pl.col("neutral_mass") - (breakage_weight * TOLERANCE)).alias(
+            fragment_masses.with_columns(
+                (pl.col("neutral_mass") - (breakage_weight * dp_table.precision)).alias(
                     "standard_unit_mass"
                 ),
                 pl.lit(breakages[0]).alias("breakage"),
@@ -307,12 +300,12 @@ def classify_fragments(
     # Filter out all fragments without any explanations
     fragments = (
         fragments.with_columns(
-            pl.struct("int_mass", "standard_unit_mass")
+            pl.struct("neutral_mass", "standard_unit_mass")
             .map_elements(
                 lambda x: is_valid_su_mass(
                     mass=x["standard_unit_mass"],
                     dp_table=dp_table,
-                    threshold=int(np.ceil(dp_table.tolerance * x["int_mass"])),
+                    threshold=dp_table.tolerance * x["neutral_mass"],
                 ),
                 return_dtype=bool,
             )
@@ -324,12 +317,13 @@ def classify_fragments(
 
     # Determine all fragments that may be singletons
     fragments = fragments.with_columns(
-        pl.struct("int_mass", "standard_unit_mass")
+        pl.struct("neutral_mass", "standard_unit_mass")
         .map_elements(
             lambda x: is_singleton(
                 mass=x["standard_unit_mass"],
                 integer_masses=[mass.mass for mass in dp_table.masses],
-                threshold=int(np.ceil(dp_table.tolerance * x["int_mass"])),
+                dp_table=dp_table,
+                threshold=dp_table.tolerance * x["neutral_mass"],
             ),
             return_dtype=bool,
         )
@@ -339,7 +333,6 @@ def classify_fragments(
     # Filter out fragments that have a too high mass or too low intensity
     fragments = (
         fragments.sort(pl.col("standard_unit_mass"))
-        # .sort(pl.col("neutral_mass"))
         .filter(pl.col("intensity") > intensity_cutoff)
         .filter(pl.col("neutral_mass") < mass_cutoff)
     )
@@ -351,9 +344,16 @@ def classify_fragments(
     return fragments
 
 
-def is_singleton(mass, integer_masses, threshold):
+def is_singleton(mass, integer_masses, dp_table, threshold=None):
     # Convert the target to an integer for easy operations
-    target = int(round(mass / TOLERANCE, 0))
+    target = int(round(mass / dp_table.precision, 0))
+
+    # Set relative threshold if not given
+    if threshold is None:
+        threshold = dp_table.tolerance * mass
+
+    # Convert the threshold to integer
+    threshold = int(np.ceil(threshold / dp_table.precision))
 
     # Check whether a singleton mass could be found
     for value in range(target - threshold, target + threshold + 1):

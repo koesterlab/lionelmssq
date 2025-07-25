@@ -51,14 +51,7 @@ class Explanation:
 
 
 def calculate_diff_errors(mass1, mass2, threshold) -> float:
-    if mass1 == mass2:
-        return 1.0
-    retval = threshold * ((mass1**2 + mass2**2) ** 0.5) / abs(mass1 - mass2)
-    # Constrain the maximum relative error to 1!
-    # For mass difference very close to zero, the relative error can be very high!
-    if retval > 1:
-        retval = 1.0
-    return retval
+    return threshold * ((mass1**2 + mass2**2) ** 0.5)
 
 
 def calculate_diff_dp(
