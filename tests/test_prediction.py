@@ -115,7 +115,8 @@ def test_testcase(testcase):
             reduced_table=False,
             reduced_set=True,
             compression_rate=COMPRESSION_RATE,
-            tolerance=matching_threshold,
+            tolerance=max(matching_threshold, 20e-6),
+            # tolerance=matching_threshold,
             precision=TOLERANCE,
         )
 

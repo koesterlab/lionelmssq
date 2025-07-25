@@ -71,11 +71,12 @@ def main():
     _, unique_masses, explanation_masses = initialize_nucleotide_df(
         reduce_set=reduce_set
     )
+    threshold = MATCHING_THRESHOLD if simulation else max(MATCHING_THRESHOLD, 20e-6)
 
     dp_table = DynamicProgrammingTable(
         nucleotide_df=explanation_masses,
         compression_rate=int(COMPRESSION_RATE),
-        tolerance=MATCHING_THRESHOLD,
+        tolerance=threshold,
         precision=TOLERANCE,
         reduced_table=reduce_table,
         reduced_set=reduce_set,
