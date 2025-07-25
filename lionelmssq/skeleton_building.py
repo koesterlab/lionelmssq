@@ -181,7 +181,7 @@ class SkeletonBuilder:
                 self.seq_len,
                 self.dp_table,
                 breakage_dict,
-                # su_mode=True,
+                su_mode=True,
             )
 
     def update_skeleton_for_given_explanations(

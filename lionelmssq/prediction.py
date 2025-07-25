@@ -152,12 +152,12 @@ class Predictor:
         #  Hence, maybe do the following: Solve first with the reduced
         #  alphabet, and if the optimization does not yield a sufficiently
         #  good result, then try again with an extended alphabet.
-        masses = self._reduce_alphabet(explanations=explanations)
+        masses = self._reduce_alphabet(explanations=explanations2)
 
         skeleton_builder = SkeletonBuilder(
-            fragments_side=fragments_side,
-            mass_diffs=mass_diffs,
-            explanations=explanations,
+            fragments_side=fragments_side2,
+            mass_diffs=mass_diffs2,
+            explanations=explanations2,
             seq_len=seq_len,
             dp_table=self.dp_table,
         )
@@ -366,7 +366,7 @@ class Predictor:
                 seq_len,
                 self.dp_table,
                 breakage_dict=breakage_dict,
-                # su_mode=True,
+                su_mode=True,
             )
 
         for diff, diff_error in zip(
@@ -380,7 +380,7 @@ class Predictor:
                 seq_len,
                 self.dp_table,
                 breakage_dict=breakage_dict,
-                # su_mode=True,
+                su_mode=True,
             )
         return explanations
         # TODO: Can make it simpler here by rejecting diff which cannot be explained instead of doing it in the _predict_skeleton function!
@@ -522,7 +522,7 @@ class Predictor:
                 seq_len=seq_len,
                 dp_table=self.dp_table,
                 breakage_dict=breakage_dict,
-                # su_mode=True,
+                su_mode=True,
             )
             if expl is not None and len(expl) >= 1:
                 explanations[diff] = expl
