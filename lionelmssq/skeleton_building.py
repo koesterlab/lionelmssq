@@ -92,22 +92,16 @@ class SkeletonBuilder:
         carry_over_mass = 0.0
         last_valid_mass = 0.0
 
-        # Get indices from fragments dataframe
-        idx_observed_mass = fragments.get_column_index("observed_mass")
-        idx_su_mass = fragments.get_column_index("standard_unit_mass")
-        idx_breakage = fragments.get_column_index("breakage")
-        idx_index = fragments.get_column_index("index")
-
         fragments_valid = []
         fragments_invalid = []
-        for diff, frag in zip(mass_diffs, fragments.rows()):
+        for frag_idx, diff in enumerate(mass_diffs):
             diff += carry_over_mass
             assert pos
 
             explanations = self.explain_difference(
                 diff=diff,
                 prev_mass=last_valid_mass,
-                current_mass=frag[idx_observed_mass],
+                current_mass=fragments.item(frag_idx, "observed_mass"),
                 modification_rate=modification_rate,
                 breakage_dict=breakage_dict,
             )
@@ -125,24 +119,26 @@ class SkeletonBuilder:
             if is_valid:
                 fragments_valid.append(
                     TerminalFragment(
-                        index=frag[idx_index],
+                        index=fragments.item(frag_idx, "index"),
                         min_end=min(next_pos, default=None),
                         max_end=max(next_pos, default=None),
                     )
                 )
                 pos = next_pos
-                last_valid_mass = frag[idx_observed_mass]
+                last_valid_mass = fragments.item(frag_idx, "observed_mass")
                 carry_over_mass = 0.0
             else:
                 logger.warning(
-                    f"Skipping {frag[idx_breakage]} fragment {frag[idx_index]} "
-                    f"with observed mass {frag[idx_observed_mass]}/SU mass "
-                    f"{frag[idx_su_mass]} because no explanations were found."
+                    f"Skipping {fragments.item(frag_idx, 'breakage')} fragment "
+                    f"{fragments.item(frag_idx, 'index')} with observed mass "
+                    f"{fragments.item(frag_idx, 'observed_mass')}/SU mass "
+                    f"{fragments.item(frag_idx, 'standard_unit_mass')} "
+                    f"because no explanations were found."
                 )
                 carry_over_mass = diff
 
-                # Consider the skipped fragments as internal fragments! Add back the terminal mass to this fragments!
-                fragments_invalid.append(frag[idx_index])
+                # Consider the skipped fragments as internal fragments!
+                fragments_invalid.append(fragments.item(frag_idx, "index"))
 
         return skeleton_seq, fragments_valid, fragments_invalid
 
