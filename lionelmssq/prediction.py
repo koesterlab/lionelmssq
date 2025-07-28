@@ -81,12 +81,7 @@ class Predictor:
             pl.lit(-1, dtype=pl.Int64).alias("max_end"),
         )
 
-        # Collect the fragments for the start and end side which also include the start_end fragments (entire sequences)
-        fragments_side = {
-            Side.START: fragments.filter(pl.col("breakage").str.contains("START")),
-            Side.END: fragments.filter(pl.col("breakage").str.contains("END")),
-        }
-
+        # Collect internal fragments
         frag_internal = fragments.filter(
             ~pl.col("breakage").str.contains("START")
             & ~pl.col("breakage").str.contains("END")
@@ -109,7 +104,6 @@ class Predictor:
         masses = self._reduce_alphabet(explanations=explanations)
 
         skeleton_builder = SkeletonBuilder(
-            fragments_side=fragments_side,
             explanations=explanations,
             seq_len=seq_len,
             dp_table=self.dp_table,
@@ -117,7 +111,7 @@ class Predictor:
 
         # Build skeleton sequence from both sides and align them into final sequence
         skeleton_seq, frag_terminal = skeleton_builder.build_skeleton(
-            modification_rate, breakage_dict
+            modification_rate, breakage_dict, fragments
         )
 
         # Remove all "internal" fragment duplicates that are truly terminal fragments
