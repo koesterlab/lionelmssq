@@ -136,17 +136,20 @@ class SkeletonBuilder:
                     pos=pos,
                     skeleton_seq=skeleton_seq,
                 )
-                is_valid = len(next_pos) != 0
+                is_valid = True
 
             if is_valid:
                 fragments_valid.append(
                     TerminalFragment(
                         index=fragments.item(frag_idx, "index"),
-                        min_end=min(next_pos, default=None),
-                        max_end=max(next_pos, default=None),
+                        min_end=min(next_pos, default=0),
+                        max_end=max(next_pos, default=-1),
                     )
                 )
-                pos = next_pos
+                fragments[frag_idx, "min_end"] = min(next_pos, default=0)
+                fragments[frag_idx, "max_end"] = max(next_pos, default=-1)
+                if len(next_pos) > 0:
+                    pos = next_pos
                 last_valid_mass = fragments.item(frag_idx, "observed_mass")
                 carry_over_mass = 0.0
             else:
