@@ -118,7 +118,10 @@ class SkeletonBuilder:
         fragments_invalid = []
         for frag_idx, diff in enumerate(mass_diffs):
             diff += carry_over_mass
-            assert pos
+
+            # Stop if no positions are left to fill
+            if len(pos) == 0:
+                continue
 
             explanations = self.explain_difference(
                 diff=diff,
@@ -128,31 +131,9 @@ class SkeletonBuilder:
                 breakage_dict=breakage_dict,
             )
 
+            # Skip fragments without any explanation
             if explanations is None:
-                is_valid = False
-            else:
-                next_pos, skeleton_seq = self.update_skeleton_for_given_explanations(
-                    explanations=explanations,
-                    pos=pos,
-                    skeleton_seq=skeleton_seq,
-                )
-                is_valid = True
-
-            if is_valid:
-                fragments_valid.append(
-                    TerminalFragment(
-                        index=fragments.item(frag_idx, "index"),
-                        min_end=min(next_pos, default=0),
-                        max_end=max(next_pos, default=-1),
-                    )
-                )
-                fragments[frag_idx, "min_end"] = min(next_pos, default=0)
-                fragments[frag_idx, "max_end"] = max(next_pos, default=-1)
-                if len(next_pos) > 0:
-                    pos = next_pos
-                last_valid_mass = fragments.item(frag_idx, "observed_mass")
-                carry_over_mass = 0.0
-            else:
+                # Add a warning in the log for the skipped fragment
                 logger.warning(
                     f"Skipping {fragments.item(frag_idx, 'breakage')} fragment "
                     f"{fragments.item(frag_idx, 'index')} with observed mass "
@@ -161,11 +142,35 @@ class SkeletonBuilder:
                     f"{fragments.item(frag_idx, 'standard_unit_mass'):.4f} "
                     f"because no explanations were found."
                 )
+                # Save the current mass as carry-over
                 carry_over_mass = diff
 
-                # Consider the skipped fragments as internal fragments!
                 fragments_invalid.append(fragments.item(frag_idx, "index"))
+            else:
+                # Continue skeleton building if a non-empty explanation exists
+                if len(explanations) > 0:
+                    pos, skeleton_seq = self.update_skeleton_for_given_explanations(
+                        explanations=explanations,
+                        pos=pos,
+                        skeleton_seq=skeleton_seq,
+                    )
 
+                fragments_valid.append(
+                    TerminalFragment(
+                        index=fragments.item(frag_idx, "index"),
+                        min_end=min(pos, default=0),
+                        max_end=max(pos, default=-1),
+                    )
+                )
+                # Adapt information on end index for given fragment
+                fragments[frag_idx, "min_end"] = min(pos, default=0)
+                fragments[frag_idx, "max_end"] = max(pos, default=-1)
+
+                # Update carry-over information for next fragment
+                last_valid_mass = fragments.item(frag_idx, "observed_mass")
+                carry_over_mass = 0.0
+
+        # Filter out all invalid fragments
         fragments = fragments.filter(~pl.col("index").is_in(fragments_invalid))
 
         return skeleton_seq, fragments_valid, fragments_invalid, fragments
