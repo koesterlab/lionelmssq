@@ -153,8 +153,9 @@ class SkeletonBuilder:
                 logger.warning(
                     f"Skipping {fragments.item(frag_idx, 'breakage')} fragment "
                     f"{fragments.item(frag_idx, 'index')} with observed mass "
-                    f"{fragments.item(frag_idx, 'observed_mass')}/SU mass "
-                    f"{fragments.item(frag_idx, 'standard_unit_mass')} "
+                    f"{fragments.item(frag_idx, 'observed_mass'):.4f} and SU "
+                    f"mass "
+                    f"{fragments.item(frag_idx, 'standard_unit_mass'):.4f} "
                     f"because no explanations were found."
                 )
                 carry_over_mass = diff
