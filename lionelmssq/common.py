@@ -1,4 +1,3 @@
-from enum import Enum
 import re
 from typing import Any, Set
 
@@ -19,14 +18,6 @@ def milp_is_one(var, threshold=MILP_QUASI_ONE_THRESHOLD):
 
 def parse_nucleosides(sequence: str):
     return _NUCLEOSIDE_RE.findall(sequence)
-
-
-class Side(Enum):
-    START = "start"
-    END = "end"
-
-    def __str__(self):
-        return self.value
 
 
 def get_singleton_set_item(set_: Set[Any]) -> Any:

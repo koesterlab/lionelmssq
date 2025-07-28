@@ -44,9 +44,6 @@ def test_testcase(testcase):
 
     input_file = pl.read_csv(base_path / "fragments.tsv", separator="\t")
 
-    label_mass_3T = meta["label_mass_3T"]
-    label_mass_5T = meta["label_mass_5T"]
-
     if "intensity_cutoff" in meta:
         intensity_cutoff = meta["intensity_cutoff"]
     else:
@@ -133,7 +130,7 @@ def test_testcase(testcase):
     # fragment_masses = pl.Series(fragments.select(pl.col("observed_mass"))).to_list()
 
     breakage_dict = build_breakage_dict(
-        mass_5_prime=label_mass_5T, mass_3_prime=label_mass_3T
+        mass_5_prime=meta["label_mass_5T"], mass_3_prime=meta["label_mass_3T"]
     )
 
     fragments = classify_fragments(
@@ -154,14 +151,6 @@ def test_testcase(testcase):
     prediction = Predictor(
         dp_table=dp_table,
         explanation_masses=explanation_masses,
-        mass_tag_start=[
-            val for val in breakage_dict if "START_c/y" in breakage_dict[val]
-        ][0]
-        * TOLERANCE,
-        mass_tag_end=[val for val in breakage_dict if "c/y_END" in breakage_dict[val]][
-            0
-        ]
-        * TOLERANCE,
     ).predict(
         fragments=fragments,
         seq_len=len(true_seq),

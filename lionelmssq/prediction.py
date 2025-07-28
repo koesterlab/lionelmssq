@@ -4,7 +4,7 @@ from typing import List, Self
 import polars as pl
 from loguru import logger
 
-from lionelmssq.common import Side, calculate_diff_dp, calculate_diff_errors
+from lionelmssq.common import calculate_diff_dp, calculate_diff_errors
 from lionelmssq.linear_program import LinearProgramInstance
 from lionelmssq.mass_table import DynamicProgrammingTable
 from lionelmssq.masses import PHOSPHATE_LINK_MASS
@@ -31,11 +31,8 @@ class Predictor:
         self,
         dp_table: DynamicProgrammingTable,
         explanation_masses: pl.DataFrame,
-        mass_tag_start: float = 0.0,
-        mass_tag_end: float = 0.0,
     ):
         self.explanation_masses = explanation_masses
-        self.mass_tags = {Side.START: mass_tag_start, Side.END: mass_tag_end}
         self.dp_table = dp_table
 
     def predict(

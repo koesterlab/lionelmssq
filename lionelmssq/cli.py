@@ -108,10 +108,6 @@ def main():
     prediction = Predictor(
         dp_table=dp_table,
         explanation_masses=explanation_masses,
-        mass_tag_start=[val for val in breakages if "START_c/y" in breakages[val]][0]
-        * TOLERANCE,
-        mass_tag_end=[val for val in breakages if "c/y_END" in breakages[val]][0]
-        * TOLERANCE,
     ).predict(
         fragments=fragments,
         seq_len=settings.seq_len,
