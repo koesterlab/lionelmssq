@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from itertools import chain, groupby
 from typing import List, Optional, Set, Tuple
 from loguru import logger
+import polars as pl
 
 from lionelmssq.common import (
     Explanation,
@@ -37,17 +38,20 @@ class SkeletonBuilder:
         List[int],
     ]:
         # Build skeleton sequence from 5'-end
-        start_skeleton, start_fragments, non_start_fragments = self._predict_skeleton(
+        start_skeleton, start_fragments, non_start_fragments, fragments = \
+            self._predict_skeleton(
             modification_rate=modification_rate,
             breakage_dict=breakage_dict,
             fragments=self.fragments_side[Side.START],
             mass_diffs=self.mass_diffs[Side.START],
             skeleton_seq=[set() for _ in range(self.seq_len)],
         )
+        self.fragments_side[Side.START] = fragments
         print("Skeleton sequence start = ", start_skeleton)
 
         # Build skeleton sequence from 3'-end
-        end_skeleton, end_fragments, non_end_fragments = self._predict_skeleton(
+        end_skeleton, end_fragments, non_end_fragments, fragments = \
+            self._predict_skeleton(
             modification_rate=modification_rate,
             breakage_dict=breakage_dict,
             fragments=self.fragments_side[Side.END],
@@ -56,6 +60,22 @@ class SkeletonBuilder:
         )
         end_skeleton = end_skeleton[::-1]
         end_fragments = adjust_end_fragment_info(end_fragments)
+
+        fragments = fragments.with_columns(
+            pl.struct("min_end", "max_end").map_elements(
+                lambda x: -1-x["max_end"],
+                return_dtype=int
+            ).alias("min_end"),
+            pl.struct("min_end", "max_end").map_elements(
+                lambda x: -1-x["min_end"],
+                return_dtype=int
+            ).alias("max_end"),
+        )
+        fragments = fragments.filter(~pl.col("index").is_in(
+            self.fragments_side[Side.START].get_column(
+            "index").to_list()))
+        self.fragments_side[Side.END] = fragments
+
         print("Skeleton sequence end = ", end_skeleton)
 
         # Combine both skeleton sequences
@@ -69,6 +89,8 @@ class SkeletonBuilder:
             end_fragments,
             non_start_fragments,
             non_end_fragments,
+            pl.concat([self.fragments_side[side] for side in
+            self.fragments_side]).sort("index"),
         )
 
     def _predict_skeleton(
@@ -140,7 +162,9 @@ class SkeletonBuilder:
                 # Consider the skipped fragments as internal fragments!
                 fragments_invalid.append(fragments.item(frag_idx, "index"))
 
-        return skeleton_seq, fragments_valid, fragments_invalid
+        fragments = fragments.filter(~pl.col("index").is_in(fragments_invalid))
+
+        return skeleton_seq, fragments_valid, fragments_invalid, fragments
 
     def _align_skeletons(
         self, start_skeleton: List[Set[str]], end_skeleton: List[Set[str]]

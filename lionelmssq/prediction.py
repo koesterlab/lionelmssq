@@ -122,11 +122,19 @@ class Predictor:
         )
         print(len(fragments2))
 
+        fragments2 = fragments2.with_columns(
+            pl.lit(0, dtype=pl.Int64).alias("min_end"),
+            pl.lit(-1, dtype=pl.Int64).alias("max_end"),
+        )
+
         # Collect the fragments for the start and end side which also include the start_end fragments (entire sequences)
         fragments_side2 = {
             Side.START: fragments2.filter(pl.col("breakage").str.contains("START")),
             Side.END: fragments2.filter(pl.col("breakage").str.contains("END")),
         }
+
+        frag_int = fragments2.filter(~pl.col("breakage").str.contains(
+            "START") & ~pl.col("breakage").str.contains("END"))
 
         # Roughly estimate the differences as a first step with all fragments marked as start and then as end
         # Note that there may be faulty mass fragments which will lead to bad (not truly existent) differences here!
@@ -169,6 +177,7 @@ class Predictor:
             end_fragments,
             invalid_start_fragments,
             invalid_end_fragments,
+            frag_term,
         ) = skeleton_builder.build_skeleton(modification_rate, breakage_dict)
 
         # TODO: If the tags are considered in the LP at the end, then most of the following code will become obsolete!
@@ -244,6 +253,10 @@ class Predictor:
                 fragments.filter(~pl.col("true_end")),
             ]
         )
+
+        frag_int = frag_int.filter(~pl.col("fragment_index").is_in(
+            frag_term.get_column(
+            "fragment_index").to_list()))
 
         # Filter out all internal fragments that do not fit anywhere in skeleton
         print(
