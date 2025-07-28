@@ -92,18 +92,8 @@ class Predictor:
             & ~pl.col("breakage").str.contains("END")
         )
 
-        # Roughly estimate the differences as a first step with all fragments marked as start and then as end
-        # Note that there may be faulty mass fragments which will lead to bad (not truly existent) differences here!
-        mass_diffs = {
-            side: [fragments_side[side].item(0, "standard_unit_mass")]
-            + [
-                fragments_side[side].item(i, "standard_unit_mass")
-                - fragments_side[side].item(i - 1, "standard_unit_mass")
-                for i in range(1, len(fragments_side[side]))
-            ]
-            for side in fragments_side
-        }
-
+        # Roughly explain the mass differences (to reduce the alphabet)
+        # Note there may be faulty mass fragments leading to not truly existent values
         explanations = self.collect_diff_explanations_for_su(
             modification_rate=modification_rate,
             fragments=fragments,
@@ -120,7 +110,6 @@ class Predictor:
 
         skeleton_builder = SkeletonBuilder(
             fragments_side=fragments_side,
-            mass_diffs=mass_diffs,
             explanations=explanations,
             seq_len=seq_len,
             dp_table=self.dp_table,

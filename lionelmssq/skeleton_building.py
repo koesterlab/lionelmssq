@@ -23,7 +23,6 @@ class TerminalFragment:
 @dataclass
 class SkeletonBuilder:
     fragments_side: dict
-    mass_diffs: dict
     explanations: list[Explanation]
     seq_len: int
     dp_table: DynamicProgrammingTable
@@ -42,7 +41,6 @@ class SkeletonBuilder:
             modification_rate=modification_rate,
             breakage_dict=breakage_dict,
             fragments=self.fragments_side[Side.START],
-            mass_diffs=self.mass_diffs[Side.START],
             skeleton_seq=[set() for _ in range(self.seq_len)],
         )
         self.fragments_side[Side.START] = fragments
@@ -53,7 +51,6 @@ class SkeletonBuilder:
             modification_rate=modification_rate,
             breakage_dict=breakage_dict,
             fragments=self.fragments_side[Side.END],
-            mass_diffs=self.mass_diffs[Side.END],
             skeleton_seq=[set() for _ in range(self.seq_len)],
         )
         # Reverse skeleton from END fragments
@@ -96,7 +93,6 @@ class SkeletonBuilder:
         modification_rate,
         breakage_dict,
         fragments,
-        mass_diffs,
         skeleton_seq: Optional[List[Set[str]]] = None,
     ) -> Tuple[List[Set[str]], List[TerminalFragment], List[int]]:
         # Initialize skeleton sequence (if not already given)
@@ -113,7 +109,16 @@ class SkeletonBuilder:
         last_valid_mass = 0.0
 
         invalid_list = []
-        for frag_idx, diff in enumerate(mass_diffs):
+        for frag_idx in range(len(fragments)):
+            # Define mass difference to last fragment
+            diff = (
+                fragments.item(frag_idx, "standard_unit_mass")
+                - fragments.item(frag_idx - 1, "standard_unit_mass")
+                if frag_idx > 0
+                else fragments.item(0, "standard_unit_mass")
+            )
+
+            # Add carry-over mass (in case the last fragment was rejected)
             diff += carry_over_mass
 
             # Stop if no positions are left to fill
