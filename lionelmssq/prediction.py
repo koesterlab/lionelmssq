@@ -184,6 +184,11 @@ class Predictor:
         reduced = self.explanation_masses.filter(
             pl.col("nucleoside").is_in(observed_nucleosides)
         )
+        reduced = reduced.with_columns(
+            (pl.col("monoisotopic_mass") + PHOSPHATE_LINK_MASS).alias(
+                "standard_unit_mass"
+            )
+        )
         print("Nucleosides considered for fitting after alphabet reduction:", reduced)
 
         self.dp_table.adapt_individual_modification_rates_by_alphabet_reduction(

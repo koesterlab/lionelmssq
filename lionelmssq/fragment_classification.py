@@ -284,6 +284,13 @@ def classify_fragments(
             pl.lit(intensity_cutoff * 1.1).alias("intensity"),
         )
 
+    fragment_masses = fragment_masses.with_row_index("fragment_index")
+    print(
+        fragment_masses.filter(pl.col("is_internal"))
+        .get_column("fragment_index")
+        .to_list()
+    )
+
     # Copy each fragment for each unique breakage weights
     fragments = pl.concat(
         [

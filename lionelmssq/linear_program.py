@@ -26,9 +26,9 @@ class LinearProgramInstance:
         self.seq_len = len(skeleton_seq)
         self.nucleoside_names = nucleosides.get_column("nucleoside").to_list()
         self.nucleoside_masses = dict(
-            nucleosides.select(["nucleoside", "monoisotopic_mass"]).iter_rows()
+            nucleosides.select(["nucleoside", "standard_unit_mass"]).iter_rows()
         )
-        fragment_masses = self.fragments.get_column("observed_mass").to_list()
+        fragment_masses = self.fragments.get_column("standard_unit_mass").to_list()
         valid_fragment_range = list(range(len(fragment_masses)))
         # x: binary variables indicating fragment j presence at position i
         self.x = self._set_x(valid_fragment_range, fragments)
@@ -236,7 +236,7 @@ class LinearProgramInstance:
             "".join([val if val is not None else "-" for val in seq]),
         )
 
-        fragment_masses = self.fragments.get_column("observed_mass").to_list()
+        fragment_masses = self.fragments.get_column("standard_unit_mass").to_list()
 
         # Get the sequence corresponding to each of the fragments!
         fragment_seq = [
