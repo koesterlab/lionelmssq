@@ -13,13 +13,6 @@ from lionelmssq.mass_table import DynamicProgrammingTable
 
 
 @dataclass
-class TerminalFragment:
-    index: int  # Fragment index
-    min_end: int  # Minimum length of fragment (negative for end fragments)
-    max_end: int  # Maximum length of fragment (negative for end fragments)
-
-
-@dataclass
 class SkeletonBuilder:
     explanations: list[Explanation]
     seq_len: int
@@ -27,13 +20,7 @@ class SkeletonBuilder:
 
     def build_skeleton(
         self, modification_rate: float, breakage_dict: dict, fragments: pl.DataFrame
-    ) -> Tuple[
-        List[Set[str]],
-        List[TerminalFragment],
-        List[TerminalFragment],
-        List[int],
-        List[int],
-    ]:
+    ) -> Tuple[List[Set[str]], pl.DataFrame]:
         # Build skeleton sequence from 5'-end
         start_skeleton, start_fragments = self._predict_skeleton(
             modification_rate=modification_rate,
@@ -86,7 +73,7 @@ class SkeletonBuilder:
         breakage_dict,
         fragments,
         skeleton_seq: Optional[List[Set[str]]] = None,
-    ) -> Tuple[List[Set[str]], List[TerminalFragment], List[int]]:
+    ) -> Tuple[List[Set[str]], pl.DataFrame]:
         # Initialize skeleton sequence (if not already given)
         if skeleton_seq is None:
             skeleton_seq = [set() for _ in range(self.seq_len)]
