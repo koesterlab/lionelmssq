@@ -61,20 +61,20 @@ class SkeletonBuilder:
 
         # Adapt end indices to reverse indexation of END fragments
         fragments = fragments.with_columns(
-            pl.struct("min_end", "max_end").map_elements(
-                lambda x: -1-x["max_end"],
-                return_dtype=int
-            ).alias("min_end"),
-            pl.struct("min_end", "max_end").map_elements(
-                lambda x: -1-x["min_end"],
-                return_dtype=int
-            ).alias("max_end"),
+            pl.struct("min_end", "max_end")
+            .map_elements(lambda x: -1 - x["max_end"], return_dtype=int)
+            .alias("min_end"),
+            pl.struct("min_end", "max_end")
+            .map_elements(lambda x: -1 - x["min_end"], return_dtype=int)
+            .alias("max_end"),
         )
 
         # Ensure fragments only occur once
-        fragments = fragments.filter(~pl.col("index").is_in(
-            self.fragments_side[Side.START].get_column(
-            "index").to_list()))
+        fragments = fragments.filter(
+            ~pl.col("index").is_in(
+                self.fragments_side[Side.START].get_column("index").to_list()
+            )
+        )
         self.fragments_side[Side.END] = fragments
 
         print("Skeleton sequence end = ", end_skeleton)
@@ -86,8 +86,9 @@ class SkeletonBuilder:
         # Return skeleton and valid terminal fragments
         return (
             skeleton_seq,
-            pl.concat([self.fragments_side[side] for side in
-            self.fragments_side]).sort("index"),
+            pl.concat([self.fragments_side[side] for side in self.fragments_side]).sort(
+                "index"
+            ),
         )
 
     def _predict_skeleton(

@@ -87,8 +87,10 @@ class Predictor:
             Side.END: fragments.filter(pl.col("breakage").str.contains("END")),
         }
 
-        frag_internal = fragments.filter(~pl.col("breakage").str.contains(
-            "START") & ~pl.col("breakage").str.contains("END"))
+        frag_internal = fragments.filter(
+            ~pl.col("breakage").str.contains("START")
+            & ~pl.col("breakage").str.contains("END")
+        )
 
         # Roughly estimate the differences as a first step with all fragments marked as start and then as end
         # Note that there may be faulty mass fragments which will lead to bad (not truly existent) differences here!
@@ -143,8 +145,10 @@ class Predictor:
         fragments = fragments.with_columns(
             pl.col("breakage").str.contains("START").alias("true_start"),
             pl.col("breakage").str.contains("END").alias("true_end"),
-            (~pl.col("breakage").str.contains("START") & ~pl.col(
-            "breakage").str.contains("END")).alias("true_internal"),
+            (
+                ~pl.col("breakage").str.contains("START")
+                & ~pl.col("breakage").str.contains("END")
+            ).alias("true_internal"),
         )
 
         # Filter out all internal fragments that do not fit anywhere in skeleton
@@ -169,12 +173,12 @@ class Predictor:
             len(fragments.get_column("observed_mass").to_list()),
         )
 
-        if len(fragments.filter(pl.col("true_start")))==0:
+        if len(fragments.filter(pl.col("true_start"))) == 0:
             logger.warning(
                 "No start fragments provided, this will likely lead to suboptimal results."
             )
 
-        if len(fragments.filter(pl.col("true_end")))==0:
+        if len(fragments.filter(pl.col("true_end"))) == 0:
             logger.warning(
                 "No end fragments provided, this will likely lead to suboptimal results."
             )
