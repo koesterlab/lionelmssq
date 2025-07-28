@@ -133,7 +133,7 @@ class Predictor:
             Side.END: fragments2.filter(pl.col("breakage").str.contains("END")),
         }
 
-        frag_int = fragments2.filter(~pl.col("breakage").str.contains(
+        frag_internal = fragments2.filter(~pl.col("breakage").str.contains(
             "START") & ~pl.col("breakage").str.contains("END"))
 
         # Roughly estimate the differences as a first step with all fragments marked as start and then as end
@@ -170,93 +170,28 @@ class Predictor:
             dp_table=self.dp_table,
         )
 
-        # Now we build the skeleton sequence from both sides and align them to get the final skeleton sequence!
-        (
-            skeleton_seq,
-            start_fragments,
-            end_fragments,
-            invalid_start_fragments,
-            invalid_end_fragments,
-            frag_term,
-        ) = skeleton_builder.build_skeleton(modification_rate, breakage_dict)
-
-        # TODO: If the tags are considered in the LP at the end, then most of the following code will become obsolete!
-
-        # Filter out incorrectly flagged terminal fragments and reject also all END fragments that are also START fragments
-        fragments_side[Side.START] = fragments_side[Side.START].filter(
-            ~pl.col("index").is_in(invalid_start_fragments)
-        )
-        fragments_side[Side.END] = (
-            fragments_side[Side.END]
-            .filter(~pl.col("index").is_in(invalid_end_fragments))
-            .filter(~pl.col("index").is_in([i.index for i in start_fragments]))
+        # Build skeleton sequence from both sides and align them into final sequence
+        skeleton_seq, frag_terminal = skeleton_builder.build_skeleton(
+            modification_rate, breakage_dict
         )
 
-        def select_ends(fragments, idx):
-            selected_fragments = [frag for frag in fragments if frag.index == idx]
-            if len(selected_fragments) == 0:
-                return 0, -1
-            return selected_fragments[0].min_end, selected_fragments[0].max_end
+        # Remove all "internal" fragment duplicates that are truly terminal fragments
+        frag_internal = frag_internal.filter(
+            ~pl.col("fragment_index").is_in(
+                frag_terminal.get_column("fragment_index").to_list()
+            )
+        )
+
+        # Rebuild fragment dataframe from internal and terminal fragments
+        fragments = frag_internal.vstack(frag_terminal).sort("index")
 
         # Add new information from skeleton building to dataframe
         fragments = fragments.with_columns(
-            (pl.col("index").is_in([frag.index for frag in start_fragments])).alias(
-                "true_start"
-            ),
-            (pl.col("index").is_in([frag.index for frag in end_fragments])).alias(
-                "true_end"
-            ),
-            (
-                pl.col("is_internal")
-                & ~pl.col("index").is_in(
-                    [frag.index for frag in start_fragments + end_fragments]
-                )
-            ).alias("true_internal"),
-            (
-                pl.col("index").map_elements(
-                    lambda x: select_ends(start_fragments + end_fragments, x)[0],
-                    return_dtype=int,
-                )
-            ).alias("min_end"),
-            (
-                pl.col("index").map_elements(
-                    lambda x: select_ends(start_fragments + end_fragments, x)[1],
-                    return_dtype=int,
-                )
-            ).alias("max_end"),
+            pl.col("breakage").str.contains("START").alias("true_start"),
+            pl.col("breakage").str.contains("END").alias("true_end"),
+            (~pl.col("breakage").str.contains("START") & ~pl.col(
+            "breakage").str.contains("END")).alias("true_internal"),
         )
-
-        # Subtract tags from "observed_mass" column for true terminal fragments
-        fragments = pl.concat(
-            [
-                fragments.filter(pl.col("true_start")).with_columns(
-                    pl.col("observed_mass")
-                    .map_elements(
-                        lambda x: x - self.mass_tags[Side.START],
-                        return_dtype=float,
-                    )
-                    .alias("observed_mass")
-                ),
-                fragments.filter(~pl.col("true_start")),
-            ]
-        )
-        fragments = pl.concat(
-            [
-                fragments.filter(pl.col("true_end")).with_columns(
-                    pl.col("observed_mass")
-                    .map_elements(
-                        lambda x: x - self.mass_tags[Side.END],
-                        return_dtype=float,
-                    )
-                    .alias("observed_mass")
-                ),
-                fragments.filter(~pl.col("true_end")),
-            ]
-        )
-
-        frag_int = frag_int.filter(~pl.col("fragment_index").is_in(
-            frag_term.get_column(
-            "fragment_index").to_list()))
 
         # Filter out all internal fragments that do not fit anywhere in skeleton
         print(
@@ -275,23 +210,17 @@ class Predictor:
             len(fragments.filter(pl.col("true_internal"))),
         )
 
-        fragments = (
-            fragments.filter(pl.col("true_start"))
-            .vstack(fragments.filter(pl.col("true_end")))
-            .vstack(fragments.filter(pl.col("true_internal")))
-        )
-
         print(
             "Fragments considered for fitting, n_fragments = ",
             len(fragments.get_column("observed_mass").to_list()),
         )
 
-        if not start_fragments:
+        if len(fragments.filter(pl.col("true_start")))==0:
             logger.warning(
                 "No start fragments provided, this will likely lead to suboptimal results."
             )
 
-        if not end_fragments:
+        if len(fragments.filter(pl.col("true_end")))==0:
             logger.warning(
                 "No end fragments provided, this will likely lead to suboptimal results."
             )

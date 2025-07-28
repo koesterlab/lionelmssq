@@ -38,8 +38,7 @@ class SkeletonBuilder:
         List[int],
     ]:
         # Build skeleton sequence from 5'-end
-        start_skeleton, start_fragments, non_start_fragments, fragments = \
-            self._predict_skeleton(
+        start_skeleton, fragments = self._predict_skeleton(
             modification_rate=modification_rate,
             breakage_dict=breakage_dict,
             fragments=self.fragments_side[Side.START],
@@ -50,17 +49,17 @@ class SkeletonBuilder:
         print("Skeleton sequence start = ", start_skeleton)
 
         # Build skeleton sequence from 3'-end
-        end_skeleton, end_fragments, non_end_fragments, fragments = \
-            self._predict_skeleton(
+        end_skeleton, fragments = self._predict_skeleton(
             modification_rate=modification_rate,
             breakage_dict=breakage_dict,
             fragments=self.fragments_side[Side.END],
             mass_diffs=self.mass_diffs[Side.END],
             skeleton_seq=[set() for _ in range(self.seq_len)],
         )
+        # Reverse skeleton from END fragments
         end_skeleton = end_skeleton[::-1]
-        end_fragments = adjust_end_fragment_info(end_fragments)
 
+        # Adapt end indices to reverse indexation of END fragments
         fragments = fragments.with_columns(
             pl.struct("min_end", "max_end").map_elements(
                 lambda x: -1-x["max_end"],
@@ -71,6 +70,8 @@ class SkeletonBuilder:
                 return_dtype=int
             ).alias("max_end"),
         )
+
+        # Ensure fragments only occur once
         fragments = fragments.filter(~pl.col("index").is_in(
             self.fragments_side[Side.START].get_column(
             "index").to_list()))
@@ -82,13 +83,9 @@ class SkeletonBuilder:
         skeleton_seq = self._align_skeletons(start_skeleton, end_skeleton)
         print("Skeleton sequence = ", skeleton_seq)
 
-        # Return skeleton and fragments (divided by sequence end and validity)
+        # Return skeleton and valid terminal fragments
         return (
             skeleton_seq,
-            start_fragments,
-            end_fragments,
-            non_start_fragments,
-            non_end_fragments,
             pl.concat([self.fragments_side[side] for side in
             self.fragments_side]).sort("index"),
         )
@@ -114,14 +111,13 @@ class SkeletonBuilder:
         carry_over_mass = 0.0
         last_valid_mass = 0.0
 
-        fragments_valid = []
-        fragments_invalid = []
+        invalid_list = []
         for frag_idx, diff in enumerate(mass_diffs):
             diff += carry_over_mass
 
             # Stop if no positions are left to fill
             if len(pos) == 0:
-                continue
+                break
 
             explanations = self.explain_difference(
                 diff=diff,
@@ -145,7 +141,7 @@ class SkeletonBuilder:
                 # Save the current mass as carry-over
                 carry_over_mass = diff
 
-                fragments_invalid.append(fragments.item(frag_idx, "index"))
+                invalid_list.append(fragments.item(frag_idx, "index"))
             else:
                 # Continue skeleton building if a non-empty explanation exists
                 if len(explanations) > 0:
@@ -155,13 +151,6 @@ class SkeletonBuilder:
                         skeleton_seq=skeleton_seq,
                     )
 
-                fragments_valid.append(
-                    TerminalFragment(
-                        index=fragments.item(frag_idx, "index"),
-                        min_end=min(pos, default=0),
-                        max_end=max(pos, default=-1),
-                    )
-                )
                 # Adapt information on end index for given fragment
                 fragments[frag_idx, "min_end"] = min(pos, default=0)
                 fragments[frag_idx, "max_end"] = max(pos, default=-1)
@@ -171,9 +160,9 @@ class SkeletonBuilder:
                 carry_over_mass = 0.0
 
         # Filter out all invalid fragments
-        fragments = fragments.filter(~pl.col("index").is_in(fragments_invalid))
+        fragments = fragments.filter(~pl.col("index").is_in(invalid_list))
 
-        return skeleton_seq, fragments_valid, fragments_invalid, fragments
+        return skeleton_seq, fragments
 
     def _align_skeletons(
         self, start_skeleton: List[Set[str]], end_skeleton: List[Set[str]]
@@ -254,10 +243,3 @@ class SkeletonBuilder:
             # Update possible follow-up positions
             next_pos.update(p + expl_len for expl_len in alphabet_per_expl_len)
         return next_pos, skeleton_seq
-
-
-def adjust_end_fragment_info(fragments):
-    return [
-        TerminalFragment(fragment.index, -1 - fragment.max_end, -1 - fragment.min_end)
-        for fragment in fragments
-    ]
