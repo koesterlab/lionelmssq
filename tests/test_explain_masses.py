@@ -7,21 +7,11 @@ from lionelmssq.mass_explanation import (
 )
 from lionelmssq.masses import (
     EXPLANATION_MASSES,
-    START_OPTIONS,
-    END_OPTIONS,
     PHOSPHATE_LINK_MASS,
     MASSES,
     TOLERANCE,
 )
 from lionelmssq.mass_table import DynamicProgrammingTable
-
-
-def get_breakage_weight(breakage: str) -> float:
-    start, end = breakage.split("_")[:2]
-    return (
-        START_OPTIONS.filter(pl.col("name") == start).select("weight").item()
-        + END_OPTIONS.filter(pl.col("name") == end).select("weight").item()
-    )
 
 
 def get_seq_weight(seq: tuple) -> float:
@@ -41,22 +31,18 @@ def get_seq_weight(seq: tuple) -> float:
 
 
 TEST_SEQ = [
-    {"c/y_c/y": ("A")},
-    {"c/y_c/y": ("A", "A")},
-    {"c/y_c/y": ("G", "G")},
-    {"c/y_c/y": ("C", "C")},
-    {"c/y_c/y": ("U", "U")},
-    {"c/y_c/y": ("C", "U", "A", "G")},
-    # {"c/y_c/y": ("C", "C", "U", "A", "G", "G")},
+    tuple("A"),
+    ("A", "A"),
+    ("G", "G"),
+    ("C", "C"),
+    ("U", "U"),
+    ("C", "U", "A", "G"),
+    ("C", "C", "U", "A", "G", "G"),
 ]
 
 MASS_SEQ_DICT = dict(
     zip(
-        [
-            get_breakage_weight(list(seq.keys())[0])
-            + get_seq_weight(seq[list(seq.keys())[0]])
-            for seq in TEST_SEQ
-        ],
+        [get_seq_weight(seq) for seq in TEST_SEQ],
         TEST_SEQ,
     )
 )
@@ -67,8 +53,6 @@ MOD_RATE = 0.5
 @pytest.mark.parametrize("testcase", MASS_SEQ_DICT.items())
 @pytest.mark.parametrize("threshold", THRESHOLDS)
 def test_testcase_with_recursion(testcase, threshold):
-    breakage = list(testcase[1].keys())[0]
-
     dp_table = DynamicProgrammingTable(
         EXPLANATION_MASSES,
         reduced_table=True,
@@ -81,15 +65,15 @@ def test_testcase_with_recursion(testcase, threshold):
     predicted_mass_explanations = explain_mass_with_recursion(
         testcase[0],
         dp_table=dp_table,
-        seq_len=len(testcase[1][breakage]),
-        max_modifications=round(MOD_RATE * len(tuple(testcase[1][breakage]))),
+        seq_len=len(testcase[1]),
+        max_modifications=round(MOD_RATE * len(testcase[1])),
     ).explanations
 
     assert predicted_mass_explanations is not None
 
     explanations = [tuple(expl) for expl in predicted_mass_explanations]
 
-    assert tuple(testcase[1][breakage]) in explanations
+    assert tuple(testcase[1]) in explanations
 
 
 WITH_MEMO = [True]
@@ -101,8 +85,6 @@ COMPRESSION_RATES = [32]
 @pytest.mark.parametrize("memo", WITH_MEMO)
 @pytest.mark.parametrize("threshold", THRESHOLDS)
 def test_testcase_with_table(testcase, compression, threshold, memo):
-    breakage = list(testcase[1].keys())[0]
-
     dp_table = DynamicProgrammingTable(
         EXPLANATION_MASSES,
         reduced_table=True,
@@ -115,8 +97,8 @@ def test_testcase_with_table(testcase, compression, threshold, memo):
     predicted_mass_explanations = explain_mass_with_table(
         testcase[0],
         dp_table=dp_table,
-        seq_len=len(testcase[1][breakage]),
-        max_modifications=round(MOD_RATE * len(tuple(testcase[1][breakage]))),
+        seq_len=len(testcase[1]),
+        max_modifications=round(MOD_RATE * len(testcase[1])),
         with_memo=memo,
     ).explanations
 
@@ -124,4 +106,4 @@ def test_testcase_with_table(testcase, compression, threshold, memo):
 
     explanations = [tuple(expl) for expl in predicted_mass_explanations]
 
-    assert tuple(testcase[1][breakage]) in explanations
+    assert tuple(testcase[1]) in explanations

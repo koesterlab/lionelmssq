@@ -1,7 +1,6 @@
 import polars as pl
 import numpy as np
 
-from lionelmssq.masses import BREAKAGES
 from lionelmssq.mass_explanation import is_valid_mass
 from lionelmssq.mass_table import DynamicProgrammingTable
 
@@ -9,7 +8,7 @@ from lionelmssq.mass_table import DynamicProgrammingTable
 def classify_fragments(
     fragment_masses,
     dp_table: DynamicProgrammingTable,
-    breakage_dict=BREAKAGES,
+    breakage_dict: dict,
     output_file_path=None,
     intensity_cutoff=0.5e6,
     mass_cutoff=50000,
