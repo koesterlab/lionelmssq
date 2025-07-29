@@ -5,6 +5,7 @@ from lionelmssq.mass_explanation import (
     explain_mass,
     explain_mass_with_dp,
     explain_mass_without_breakage,
+    explain_mass_recursively_without_breakage,
 )
 from lionelmssq.masses import (
     EXPLANATION_MASSES,
@@ -92,6 +93,34 @@ def test_testcase(testcase, threshold):
         if expl.breakage == breakage
         for solution in expl.explanations
     ]
+
+    assert tuple(testcase[1][breakage]) in explanations
+
+
+@pytest.mark.parametrize("testcase", MASS_SEQ_DICT.items())
+@pytest.mark.parametrize("threshold", THRESHOLDS)
+def test_testcase_recursively_without_breakage(testcase, threshold):
+    breakage = list(testcase[1].keys())[0]
+
+    dp_table = DynamicProgrammingTable(
+        EXPLANATION_MASSES,
+        reduced_table=True,
+        reduced_set=False,
+        compression_rate=32,
+        tolerance=threshold,
+        precision=TOLERANCE,
+    )
+
+    predicted_mass_explanations = explain_mass_recursively_without_breakage(
+        testcase[0],
+        dp_table=dp_table,
+        seq_len=len(testcase[1][breakage]),
+        max_modifications=round(MOD_RATE * len(tuple(testcase[1][breakage]))),
+    ).explanations
+
+    assert predicted_mass_explanations is not None
+
+    explanations = [tuple(expl) for expl in predicted_mass_explanations]
 
     assert tuple(testcase[1][breakage]) in explanations
 
