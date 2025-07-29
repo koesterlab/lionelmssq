@@ -131,10 +131,7 @@ class Predictor:
             len(fragments.filter(pl.col("true_internal"))),
         )
 
-        print(
-            "Fragments considered for fitting, n_fragments = ",
-            len(fragments.get_column("observed_mass").to_list()),
-        )
+        print("Fragments considered for fitting, n_fragments = ", len(fragments))
 
         if len(fragments.filter(pl.col("true_start"))) == 0:
             logger.warning(
@@ -187,14 +184,16 @@ class Predictor:
         skeleton_seq: list,
         modification_rate: float,
         solver_params: dict,
-    ):
-        is_valid_fragment = []
-        for frag in fragments.filter(pl.col("true_internal")).rows():
+    ) -> pl.DataFrame:
+        is_invalid = []
+        for idx in range(len(fragments)):
+            # Skip terminal (i.e. non-internal) fragments
+            if not fragments.item(idx, "true_internal"):
+                continue
+
             # Initialize LP instance for a singular fragment
             filter_instance = LinearProgramInstance(
-                fragments=fragments.filter(
-                    pl.col("index") == frag[fragments.get_column_index("index")]
-                ),
+                fragments=fragments[idx],
                 nucleosides=masses,
                 dp_table=self.dp_table,
                 skeleton_seq=skeleton_seq,
@@ -202,19 +201,15 @@ class Predictor:
             )
 
             # Check whether fragment can feasibly be aligned to skeleton
-            if filter_instance.check_feasibility(
+            if not filter_instance.check_feasibility(
                 solver_params=solver_params,
                 threshold=self.dp_table.tolerance
-                * frag[fragments.get_column_index("observed_mass")],
+                * fragments.item(idx, "observed_mass"),
             ):
-                is_valid_fragment.append(frag[fragments.get_column_index("index")])
+                is_invalid.append(fragments.item(idx, "index"))
 
         # Return only valid fragments
-        return fragments.with_columns(
-            true_internal=pl.when(pl.col("index").is_in(is_valid_fragment))
-            .then(pl.col("true_internal"))
-            .otherwise(False)
-        )
+        return fragments.filter(~pl.col("index").is_in(is_invalid))
 
     def collect_diff_explanations_for_su(
         self,
