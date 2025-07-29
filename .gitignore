@@ -1,10 +1,10 @@
 __pycache__
+.idea
 .pytest_cache
 poetry.lock
-tests/testcases/*/plot.html
 *.DS_Store
-lionelmssq/playground.ipynb
-tests/self_test.py
 *gurobi.log
 *.code-workspace
 tests/self_test*
+tests/testcases/*/plot.html
+tests/testcases/*/standard_unit_fragments.tsv
