@@ -1,10 +1,7 @@
 from pathlib import Path
 from typing import Literal
 
-from lionelmssq.fragment_classification import (
-    classify_fragments,
-    mark_terminal_fragment_candidates,
-)
+from lionelmssq.fragment_classification import classify_fragments
 from lionelmssq.mass_table import DynamicProgrammingTable
 from lionelmssq.masses import (
     COMPRESSION_RATE,
@@ -81,15 +78,6 @@ def main():
         reduced_table=reduce_table,
         reduced_set=reduce_set,
     )
-
-    if not simulation:
-        fragments = mark_terminal_fragment_candidates(
-            fragments,
-            dp_table=dp_table,
-            output_file_path=fragment_dir / "fragments_with_classification_marked.tsv",
-            intensity_cutoff=intensity_cutoff,
-            ms1_mass=meta["sequence_mass"] if "sequence_mass" in meta else None,
-        )
 
     # Build breakage dict
     breakages = build_breakage_dict(

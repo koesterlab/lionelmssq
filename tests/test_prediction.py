@@ -8,10 +8,7 @@ from lionelmssq.mass_table import DynamicProgrammingTable
 from lionelmssq.prediction import Predictor
 from lionelmssq.common import parse_nucleosides
 from lionelmssq.plotting import plot_prediction
-from lionelmssq.fragment_classification import (
-    classify_fragments,
-    mark_terminal_fragment_candidates,
-)
+from lionelmssq.fragment_classification import classify_fragments
 
 import polars as pl
 import yaml
@@ -49,10 +46,10 @@ def test_testcase(testcase):
     else:
         intensity_cutoff = 1e4
 
-    if "sequence_mass" in meta:
-        ms1_mass = meta["sequence_mass"]
-    else:
-        ms1_mass = None
+    # if "sequence_mass" in meta:
+    #     ms1_mass = meta["sequence_mass"]
+    # else:
+    #     ms1_mass = None
 
     matching_threshold = MATCHING_THRESHOLD
 
@@ -66,8 +63,6 @@ def test_testcase(testcase):
             (pl.col("observed_mass").alias("observed_mass")),
             (pl.col("true_mass_with_backbone").alias("true_mass")),
         )
-        with pl.Config(tbl_rows=30):
-            print(fragments)
 
         _, unique_masses, explanation_masses = initialize_nucleotide_df(
             reduce_set=False
@@ -94,7 +89,7 @@ def test_testcase(testcase):
     else:
         simulation = False
 
-        fragment_masses_read = pl.read_csv(base_path / "fragments.tsv", separator="\t")
+        fragments = pl.read_csv(base_path / "fragments.tsv", separator="\t")
 
         # TODO: Discuss why it doesn't work with the estimated error!
         # matching_threshold, _, _ = estimate_MS_error_MATCHING_THRESHOLD(
@@ -116,16 +111,6 @@ def test_testcase(testcase):
             # tolerance=matching_threshold,
             precision=TOLERANCE,
         )
-
-        fragments = mark_terminal_fragment_candidates(
-            fragment_masses_read,
-            dp_table=dp_table,
-            output_file_path=base_path / "fragments_with_classification_marked.tsv",
-            intensity_cutoff=intensity_cutoff,
-            ms1_mass=ms1_mass,
-        )
-        with pl.Config(tbl_rows=30):
-            print(fragments)
 
     # fragment_masses = pl.Series(fragments.select(pl.col("observed_mass"))).to_list()
 

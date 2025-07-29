@@ -6,12 +6,7 @@ import polars as pl
 import numpy as np
 
 from lionelmssq.mass_table import DynamicProgrammingTable
-from lionelmssq.masses import (
-    EXPLANATION_MASSES,
-    BREAKAGES,
-    COMPRESSION_RATE,
-    UNMODIFIED_BASES,
-)
+from lionelmssq.masses import EXPLANATION_MASSES, UNMODIFIED_BASES
 
 
 @dataclass
@@ -47,7 +42,7 @@ IS_MOD = {
 }
 
 
-def is_valid_su_mass(
+def is_valid_mass(
     mass: float,
     dp_table: DynamicProgrammingTable,
     threshold: float = None,
@@ -91,64 +86,6 @@ def is_valid_su_mass(
         # Return True when mass corresponds to valid entry in table
         if current_value % 2 == 1 or (current_value >> 1) % 2 == 1:
             return True
-    return False
-
-
-def is_valid_mass(
-    mass: float,
-    dp_table: DynamicProgrammingTable,
-    threshold=None,
-    breakages=BREAKAGES,
-    compression_rate=COMPRESSION_RATE,
-) -> bool:
-    # Ensure that all breakage weights have a associated breakage
-    breakages = {
-        breakage_weight: breakage
-        for breakage_weight, breakage in breakages.items()
-        if len(breakage) > 0
-    }
-
-    # Convert the target to an integer for easy operations
-    target = int(round(mass / dp_table.precision, 0))
-
-    # Set relative threshold if not given
-    if threshold is None:
-        threshold = dp_table.tolerance * mass
-
-    # Convert the threshold to integer
-    threshold = int(np.ceil(threshold / dp_table.precision))
-
-    current_idx = len(dp_table.table) - 1
-    for breakage_weight in breakages:
-        for value in range(
-            target - breakage_weight - threshold,
-            target - breakage_weight + threshold + 1,
-        ):
-            # Skip non-positive masses
-            if value <= 0:
-                continue
-
-            # Raise error if mass is not in table (due to its size)
-            if value >= len(dp_table.table[0]) * compression_rate:
-                raise NotImplementedError(
-                    f"The value {value} is not in the DP table. Extend its "
-                    f"size if you want to compute larger masses."
-                )
-
-            current_value = (
-                dp_table.table[current_idx, value]
-                if compression_rate == 1
-                else dp_table.table[current_idx, value // compression_rate]
-                >> 2 * (compression_rate - 1 - value % compression_rate)
-            )
-
-            # Skip unreachable cells
-            if compression_rate != 1 and current_value % compression_rate == 0.0:
-                continue
-
-            # Return True when mass corresponds to valid entry in table
-            if current_value % 2 == 1 or (current_value >> 1) % 2 == 1:
-                return True
     return False
 
 

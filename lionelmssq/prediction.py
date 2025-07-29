@@ -54,21 +54,6 @@ class Predictor:
         )
         print(len(fragments))
 
-        with pl.Config() as cfg:
-            cfg.set_tbl_rows(-1)
-            print(
-                fragments.select(
-                    pl.col("observed_mass"),
-                    pl.col("is_start"),
-                    pl.col("is_end"),
-                    pl.col("single_nucleoside"),
-                    pl.col("is_start_end"),
-                    pl.col("is_internal"),
-                    pl.col("index"),
-                    pl.col("orig_index"),
-                )
-            )
-
         # TODO: get rid of the requirement to pass the length of the sequence
         #  and instead infer it from the fragments
 
