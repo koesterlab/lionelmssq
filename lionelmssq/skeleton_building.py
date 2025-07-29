@@ -19,12 +19,11 @@ class SkeletonBuilder:
     dp_table: DynamicProgrammingTable
 
     def build_skeleton(
-        self, modification_rate: float, breakage_dict: dict, fragments: pl.DataFrame
+        self, modification_rate: float, fragments: pl.DataFrame
     ) -> Tuple[List[Set[str]], pl.DataFrame]:
         # Build skeleton sequence from 5'-end
         start_skeleton, start_fragments = self._predict_skeleton(
             modification_rate=modification_rate,
-            breakage_dict=breakage_dict,
             fragments=fragments.filter(pl.col("breakage").str.contains("START")),
             skeleton_seq=[set() for _ in range(self.seq_len)],
         )
@@ -33,7 +32,6 @@ class SkeletonBuilder:
         # Build skeleton sequence from 3'-end
         end_skeleton, end_fragments = self._predict_skeleton(
             modification_rate=modification_rate,
-            breakage_dict=breakage_dict,
             fragments=fragments.filter(pl.col("breakage").str.contains("END")),
             skeleton_seq=[set() for _ in range(self.seq_len)],
         )
@@ -70,7 +68,6 @@ class SkeletonBuilder:
     def _predict_skeleton(
         self,
         modification_rate,
-        breakage_dict,
         fragments,
         skeleton_seq: Optional[List[Set[str]]] = None,
     ) -> Tuple[List[Set[str]], pl.DataFrame]:
@@ -109,7 +106,6 @@ class SkeletonBuilder:
                 prev_mass=last_valid_mass,
                 current_mass=fragments.item(frag_idx, "observed_mass"),
                 modification_rate=modification_rate,
-                breakage_dict=breakage_dict,
             )
 
             # Skip fragments without any explanation
@@ -167,7 +163,11 @@ class SkeletonBuilder:
         return skeleton_seq
 
     def explain_difference(
-        self, diff, prev_mass, current_mass, modification_rate, breakage_dict
+        self,
+        diff,
+        prev_mass,
+        current_mass,
+        modification_rate,
     ):
         if diff in self.explanations:
             return self.explanations.get(diff, [])
@@ -183,8 +183,6 @@ class SkeletonBuilder:
                 modification_rate,
                 self.seq_len,
                 self.dp_table,
-                breakage_dict,
-                su_mode=True,
             )
 
     def update_skeleton_for_given_explanations(

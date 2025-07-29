@@ -155,7 +155,6 @@ def test_testcase(testcase):
         fragments=fragments,
         seq_len=len(true_seq),
         solver_params=solver_params,
-        breakage_dict=breakage_dict,
     )
 
     fragment_masses = pl.Series(

@@ -1,7 +1,7 @@
 import re
 from typing import Any, Set
 
-from lionelmssq.mass_explanation import explain_mass, explain_mass_without_breakage
+from lionelmssq.mass_explanation import explain_mass_with_table
 
 MILP_QUASI_ONE_THRESHOLD = 0.9
 
@@ -46,31 +46,19 @@ def calculate_diff_errors(mass1, mass2, threshold) -> float:
 
 
 def calculate_diff_dp(
-    diff, threshold, modification_rate, seq_len, dp_table, breakage_dict, su_mode=False
+    diff,
+    threshold,
+    modification_rate,
+    seq_len,
+    dp_table,
 ):
-    explanation_list = (
-        explain_mass_without_breakage(
-            diff,
-            dp_table=dp_table,
-            seq_len=seq_len,
-            max_modifications=round(modification_rate * seq_len),
-            threshold=threshold,
-        ).explanations
-        if su_mode
-        # TODO: Add support for other breakages than 'c/y_c/y'
-        else [
-            entry
-            for entry in explain_mass(
-                diff,
-                dp_table=dp_table,
-                seq_len=seq_len,
-                max_modifications=round(modification_rate * seq_len),
-                threshold=threshold,
-                breakage_dict=breakage_dict,
-            )
-            if entry.breakage == "c/y_c/y"
-        ][0].explanations
-    )
+    explanation_list = explain_mass_with_table(
+        diff,
+        dp_table=dp_table,
+        seq_len=seq_len,
+        max_modifications=round(modification_rate * seq_len),
+        threshold=threshold,
+    ).explanations
 
     # Return None if no explanation was found
     if explanation_list is None:

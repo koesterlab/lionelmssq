@@ -113,7 +113,6 @@ def main():
         seq_len=settings.seq_len,
         solver_params=solver_params,
         modification_rate=settings.modification_rate,
-        breakage_dict=breakages,
     )
 
     # save fragment predictions

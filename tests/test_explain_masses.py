@@ -2,10 +2,8 @@ import pytest
 import polars as pl
 
 from lionelmssq.mass_explanation import (
-    explain_mass,
-    explain_mass_with_dp,
-    explain_mass_without_breakage,
-    explain_mass_recursively_without_breakage,
+    explain_mass_with_recursion,
+    explain_mass_with_table,
 )
 from lionelmssq.masses import (
     EXPLANATION_MASSES,
@@ -68,7 +66,7 @@ MOD_RATE = 0.5
 
 @pytest.mark.parametrize("testcase", MASS_SEQ_DICT.items())
 @pytest.mark.parametrize("threshold", THRESHOLDS)
-def test_testcase(testcase, threshold):
+def test_testcase_with_recursion(testcase, threshold):
     breakage = list(testcase[1].keys())[0]
 
     dp_table = DynamicProgrammingTable(
@@ -80,38 +78,7 @@ def test_testcase(testcase, threshold):
         precision=TOLERANCE,
     )
 
-    predicted_mass_explanations = explain_mass(
-        testcase[0],
-        dp_table=dp_table,
-        seq_len=len(testcase[1][breakage]),
-        max_modifications=round(MOD_RATE * len(tuple(testcase[1][breakage]))),
-    )
-
-    explanations = [
-        tuple(solution)
-        for expl in predicted_mass_explanations
-        if expl.breakage == breakage
-        for solution in expl.explanations
-    ]
-
-    assert tuple(testcase[1][breakage]) in explanations
-
-
-@pytest.mark.parametrize("testcase", MASS_SEQ_DICT.items())
-@pytest.mark.parametrize("threshold", THRESHOLDS)
-def test_testcase_recursively_without_breakage(testcase, threshold):
-    breakage = list(testcase[1].keys())[0]
-
-    dp_table = DynamicProgrammingTable(
-        EXPLANATION_MASSES,
-        reduced_table=True,
-        reduced_set=False,
-        compression_rate=32,
-        tolerance=threshold,
-        precision=TOLERANCE,
-    )
-
-    predicted_mass_explanations = explain_mass_recursively_without_breakage(
+    predicted_mass_explanations = explain_mass_with_recursion(
         testcase[0],
         dp_table=dp_table,
         seq_len=len(testcase[1][breakage]),
@@ -133,7 +100,7 @@ COMPRESSION_RATES = [32]
 @pytest.mark.parametrize("compression", COMPRESSION_RATES)
 @pytest.mark.parametrize("memo", WITH_MEMO)
 @pytest.mark.parametrize("threshold", THRESHOLDS)
-def test_testcase_with_dp(testcase, compression, memo, threshold):
+def test_testcase_with_table(testcase, compression, threshold, memo):
     breakage = list(testcase[1].keys())[0]
 
     dp_table = DynamicProgrammingTable(
@@ -145,42 +112,7 @@ def test_testcase_with_dp(testcase, compression, memo, threshold):
         precision=TOLERANCE,
     )
 
-    predicted_mass_explanations = explain_mass_with_dp(
-        testcase[0],
-        with_memo=memo,
-        dp_table=dp_table,
-        seq_len=len(testcase[1][breakage]),
-        max_modifications=round(MOD_RATE * len(tuple(testcase[1][breakage]))),
-        compression_rate=compression,
-    )
-
-    explanations = [
-        tuple(solution)
-        for expl in predicted_mass_explanations
-        if expl.breakage == breakage
-        for solution in expl.explanations
-    ]
-
-    assert tuple(testcase[1][breakage]) in explanations
-
-
-@pytest.mark.parametrize("testcase", MASS_SEQ_DICT.items())
-@pytest.mark.parametrize("compression", COMPRESSION_RATES)
-@pytest.mark.parametrize("memo", WITH_MEMO)
-@pytest.mark.parametrize("threshold", THRESHOLDS)
-def test_testcase_without_breakage(testcase, compression, threshold, memo):
-    breakage = list(testcase[1].keys())[0]
-
-    dp_table = DynamicProgrammingTable(
-        EXPLANATION_MASSES,
-        reduced_table=True,
-        reduced_set=False,
-        compression_rate=compression,
-        tolerance=threshold,
-        precision=TOLERANCE,
-    )
-
-    predicted_mass_explanations = explain_mass_without_breakage(
+    predicted_mass_explanations = explain_mass_with_table(
         testcase[0],
         dp_table=dp_table,
         seq_len=len(testcase[1][breakage]),

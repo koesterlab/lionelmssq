@@ -38,7 +38,6 @@ class Predictor:
     def predict(
         self,
         fragments: pl.DataFrame,
-        breakage_dict,
         seq_len: int,
         solver_params: dict,
         modification_rate: float = 0.5,
@@ -90,7 +89,6 @@ class Predictor:
             modification_rate=modification_rate,
             fragments=fragments,
             seq_len=seq_len,
-            breakage_dict=breakage_dict,
         )
 
         # TODO: Also consider that the observations are not complete and that
@@ -108,7 +106,7 @@ class Predictor:
 
         # Build skeleton sequence from both sides and align them into final sequence
         skeleton_seq, frag_terminal = skeleton_builder.build_skeleton(
-            modification_rate, breakage_dict, fragments
+            modification_rate, fragments
         )
 
         # Remove all "internal" fragment duplicates that are truly terminal fragments
@@ -238,7 +236,6 @@ class Predictor:
         modification_rate,
         fragments,
         seq_len,
-        breakage_dict,
     ) -> dict:
         # Collect explanation for all reasonable mass differences for each side
         explanations = {
@@ -246,13 +243,11 @@ class Predictor:
                 fragments=fragments.filter(pl.col("breakage").str.contains("START")),
                 modification_rate=modification_rate,
                 seq_len=seq_len,
-                breakage_dict=breakage_dict,
             ),
             **self.collect_explanations_per_side(
                 fragments=fragments.filter(pl.col("breakage").str.contains("END")),
                 modification_rate=modification_rate,
                 seq_len=seq_len,
-                breakage_dict=breakage_dict,
             ),
         }
 
@@ -268,14 +263,15 @@ class Predictor:
                 modification_rate=modification_rate,
                 seq_len=seq_len,
                 dp_table=self.dp_table,
-                breakage_dict=breakage_dict,
-                su_mode=True,
             )
 
         return explanations
 
     def collect_explanations_per_side(
-        self, fragments, modification_rate, seq_len, breakage_dict
+        self,
+        fragments,
+        modification_rate,
+        seq_len,
     ):
         max_weight = (
             max(self.explanation_masses.get_column("monoisotopic_mass").to_list())
@@ -313,8 +309,6 @@ class Predictor:
                 modification_rate=modification_rate,
                 seq_len=seq_len,
                 dp_table=self.dp_table,
-                breakage_dict=breakage_dict,
-                su_mode=True,
             )
             if expl is not None and len(expl) >= 1:
                 explanations[diff] = expl
