@@ -510,6 +510,7 @@ def explain_mass_without_breakage(
     max_modifications=np.inf,
     compression_rate=None,
     threshold=None,
+    with_memo=True,
 ) -> MassExplanation:
     """
     Return all possible combinations of nucleosides that could sum up to the given mass.
@@ -533,7 +534,7 @@ def explain_mass_without_breakage(
         current_weight = dp_table.masses[current_idx].mass
 
         # If the result for this state is already computed, return it
-        if (total_mass, current_idx) in memo:
+        if with_memo and (total_mass, current_idx) in memo:
             return memo[(total_mass, current_idx)]
 
         # Return empty list for cells outside of table
@@ -593,7 +594,8 @@ def explain_mass_without_breakage(
                 ]
 
         # Store result in memo
-        memo[(total_mass, current_idx)] = solutions
+        if with_memo:
+            memo[(total_mass, current_idx)] = solutions
 
         return solutions
 

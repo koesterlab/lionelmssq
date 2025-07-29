@@ -166,8 +166,9 @@ def test_testcase_with_dp(testcase, compression, memo, threshold):
 
 @pytest.mark.parametrize("testcase", MASS_SEQ_DICT.items())
 @pytest.mark.parametrize("compression", COMPRESSION_RATES)
+@pytest.mark.parametrize("memo", WITH_MEMO)
 @pytest.mark.parametrize("threshold", THRESHOLDS)
-def test_testcase_without_breakage(testcase, compression, threshold):
+def test_testcase_without_breakage(testcase, compression, threshold, memo):
     breakage = list(testcase[1].keys())[0]
 
     dp_table = DynamicProgrammingTable(
@@ -184,6 +185,7 @@ def test_testcase_without_breakage(testcase, compression, threshold):
         dp_table=dp_table,
         seq_len=len(testcase[1][breakage]),
         max_modifications=round(MOD_RATE * len(tuple(testcase[1][breakage]))),
+        with_memo=memo,
     ).explanations
 
     assert predicted_mass_explanations is not None
