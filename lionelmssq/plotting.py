@@ -36,10 +36,10 @@ def plot_prediction(
         )
         .alias("range"),
         pl.map_batches(
-            ["observed_mass", "predicted_mass_diff"],
+            ["standard_unit_mass", "predicted_diff"],
             fmt_mass,
         ).alias("mass_info"),
-        pl.col("predicted_fragment_seq")
+        pl.col("predicted_seq")
         # .map_elements(reject_none, return_dtype=pl.List(pl.Utf8))
         .map_elements(parse_nucleosides, return_dtype=pl.List(pl.Utf8))
         .alias("fragment_seq"),

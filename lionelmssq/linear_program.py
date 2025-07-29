@@ -28,14 +28,17 @@ class LinearProgramInstance:
         self.nucleoside_masses = dict(
             nucleosides.select(["nucleoside", "standard_unit_mass"]).iter_rows()
         )
+
         fragment_masses = self.fragments.get_column("standard_unit_mass").to_list()
         valid_fragment_range = list(range(len(fragment_masses)))
+
         # x: binary variables indicating fragment j presence at position i
         self.x = self._set_x(valid_fragment_range, fragments)
         # y: binary variables indicating base b at position i
         self.y = self._set_y(skeleton_seq)
         # z: binary variables indicating product of x and y
         self.z = self._set_z(valid_fragment_range)
+
         # weight_diff: difference between fragment monoisotopic mass and sum of masses of bases in fragment as estimated in the MILP
         self.predicted_mass_diff = self._set_predicted_mass_difference(
             fragment_masses, valid_fragment_range
@@ -279,6 +282,7 @@ class LinearProgramInstance:
             for j in list(range(len(fragment_masses)))
         ]
 
+        observed_masses = self.fragments.get_column("observed_mass").to_list()
         fragment_predictions = pl.from_dicts(
             [
                 {
@@ -292,10 +296,11 @@ class LinearProgramInstance:
                         default=-1,
                     )
                     + 1,  # right bound shall be exclusive, hence add 1
-                    "predicted_fragment_seq": fragment_seq[j],
-                    "predicted_fragment_mass": predicted_fragment_mass[j],
-                    "observed_mass": fragment_masses[j],
-                    "predicted_mass_diff": self.predicted_mass_diff[j].value(),
+                    "observed_mass": observed_masses[j],
+                    "standard_unit_mass": fragment_masses[j],
+                    "predicted_mass": predicted_fragment_mass[j],
+                    "predicted_diff": self.predicted_mass_diff[j].value(),
+                    "predicted_seq": fragment_seq[j],
                 }
                 for j in list(range(len(fragment_masses)))
             ]

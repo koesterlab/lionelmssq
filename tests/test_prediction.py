@@ -142,14 +142,6 @@ def test_testcase(testcase):
         solver_params=solver_params,
     )
 
-    fragment_masses = pl.Series(
-        prediction.fragments.select(pl.col("observed_mass"))
-    ).to_list()
-
-    prediction_masses = pl.Series(
-        prediction.fragments.select(pl.col("predicted_fragment_mass"))
-    ).to_list()
-
     print("Predicted sequence =\t", prediction.sequence)
     print("True sequence =\t\t", true_seq)
 
@@ -166,23 +158,15 @@ def test_testcase(testcase):
     with open(base_path / "meta.yaml", "w") as f:
         yaml.safe_dump(meta, f)
 
-    # Assert if the sequences match!
+    # Assert whether the sequences match
     assert prediction.sequence == true_seq
 
-    # Assert if all the sequence fragments match the predicted fragments in mass at least!
+    # Assert whether observed and predicted mass match for all fragments
+    # Note this will only be true for simulated data; experimental data does
+    # not have any guarantee accuracy
     if simulation:
-        # This will only be true for simulated data, for experimental data, every fragment is not predicted so accurately!
-        for i in range(len(fragment_masses)):
-            # print(f"Fragment {i}: {fragment_masses[i]} vs {prediction_masses[i]}")
-            if (
-                abs(fragment_masses[i] - prediction_masses[i])
-                < 0.01 * fragment_masses[i]
-            ):
-                # TODO: The above is a temporary measure, there is an issue with ONE fragment in test_06!
-                assert (
-                    abs(prediction_masses[i] / fragment_masses[i] - 1)
-                    <= matching_threshold
-                )
-
-
-# test_testcase("test_04")
+        for idx in range(len(prediction.fragments)):
+            assert abs(
+                prediction.fragments.item(idx, "standard_unit_mass")
+                - prediction.fragments.item(idx, "predicted_mass")
+            ) <= matching_threshold * prediction.fragments.item(idx, "observed_mass")
