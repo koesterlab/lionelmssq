@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Set, Tuple
+from typing import List, Set, Tuple
 from itertools import product, combinations_with_replacement, chain
 
 import polars as pl
@@ -16,12 +16,6 @@ from lionelmssq.masses import (
 
 @dataclass
 class MassExplanations:
-    breakage: str
-    explanations: Set[Tuple[str]]
-
-
-@dataclass
-class MassExplanation:
     explanations: Set[Tuple[str]]
 
 
@@ -166,7 +160,7 @@ def explain_mass_with_table(
     compression_rate=None,
     threshold=None,
     with_memo=True,
-) -> MassExplanation:
+) -> MassExplanations:
     """
     Return all possible combinations of nucleosides that could sum up to the given mass.
     """
@@ -267,39 +261,7 @@ def explain_mass_with_table(
             round(seq_len * dp_table.masses[-1].modification_rate),
         )
 
-    # Store the nucleoside names (as tuples) for the given tolerated_integer_masses in the set solution_names
-    solution_names = set()
-    # Return None if no explanation is found
-    if len(solutions) == 0:
-        return MassExplanation(None)
-    # Convert the DP table masses to their respective nucleoside names
-    for solution in solutions:
-        if len(solution) == 0:
-            continue
-        solution_names.update(
-            [
-                tuple(chain.from_iterable(entry))
-                for entry in list(
-                    product(
-                        *[
-                            list(
-                                combinations_with_replacement(
-                                    MASS_NAMES[mass], solution.count(mass)
-                                )
-                            )
-                            for mass in [
-                                solution[idx]
-                                for idx in range(len(solution))
-                                if idx == 0 or solution[idx - 1] != solution[idx]
-                            ]
-                        ]
-                    )
-                )
-            ]
-        )
-
-    # Return list of explanations
-    return MassExplanation(solution_names)
+    return convert_nucleotide_masses_to_names(solutions=solutions)
 
 
 def explain_mass_with_recursion(
@@ -308,7 +270,7 @@ def explain_mass_with_recursion(
     seq_len: int,
     max_modifications=np.inf,
     threshold=None,
-) -> MassExplanation:
+) -> MassExplanations:
     """
     Returns all the possible combinations of nucleosides that could sum up to the given mass.
     """
@@ -378,15 +340,19 @@ def explain_mass_with_recursion(
 
         return combinations
 
-    # Start with the full target and all tolerated_integer_masses (except 0.0)
+    # Compute all solutions for the full target and all allowed masses (except 0.0)
     solutions = dp(target, 1, 0, 0)
 
-    # Store the nucleoside names (as tuples) for the given tolerated_integer_masses in the set solution_names
+    return convert_nucleotide_masses_to_names(solutions=solutions)
+
+
+def convert_nucleotide_masses_to_names(solutions: List[List[int]]) -> MassExplanations:
+    # Store the nucleotide names (as tuples) for the given masses in a set
     solution_names = set()
     # Return None if no explanation is found
     if len(solutions) == 0:
-        return MassExplanation(None)
-    # Convert the DP table masses to their respective nucleoside names
+        return MassExplanations(None)
+    # Convert the masses to their respective nucleotide names
     for solution in solutions:
         if len(solution) == 0:
             continue
@@ -413,4 +379,4 @@ def explain_mass_with_recursion(
         )
 
     # Return list of explanations
-    return MassExplanation(solution_names)
+    return MassExplanations(solution_names)
