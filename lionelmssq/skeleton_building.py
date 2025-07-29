@@ -99,7 +99,8 @@ class SkeletonBuilder:
 
             # Stop if no positions are left to fill
             if len(pos) == 0:
-                break
+                invalid_list.append(fragments.item(frag_idx, "index"))
+                continue
 
             explanations = self.explain_difference(
                 diff=diff,
