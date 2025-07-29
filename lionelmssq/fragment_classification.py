@@ -260,7 +260,7 @@ def mark_terminal_fragment_candidates(
         )
         .sort(pl.col("observed_mass"))
         .filter(pl.col("intensity") > intensity_cutoff)
-        .filter(pl.col("neutral_mass") < mass_cutoff)
+        .filter(pl.col("observed_mass") < mass_cutoff)
     )
 
     # Write terminal fragments to file if file name is given
@@ -280,8 +280,11 @@ def classify_fragments(
 ) -> pl.DataFrame:
     if "observed_mass" in fragment_masses.columns:
         fragment_masses = fragment_masses.with_columns(
-            pl.col("observed_mass").alias("neutral_mass"),
             pl.lit(intensity_cutoff * 1.1).alias("intensity"),
+        )
+    else:
+        fragment_masses = fragment_masses.with_columns(
+            pl.col("neutral_mass").alias("observed_mass"),
         )
 
     fragment_masses = fragment_masses.with_row_index("fragment_index")
@@ -295,9 +298,9 @@ def classify_fragments(
     fragments = pl.concat(
         [
             fragment_masses.with_columns(
-                (pl.col("neutral_mass") - (breakage_weight * dp_table.precision)).alias(
-                    "standard_unit_mass"
-                ),
+                (
+                    pl.col("observed_mass") - (breakage_weight * dp_table.precision)
+                ).alias("standard_unit_mass"),
                 pl.lit(breakages[0]).alias("breakage"),
             )
             for (breakage_weight, breakages) in breakage_dict.items()
@@ -307,12 +310,12 @@ def classify_fragments(
     # Filter out all fragments without any explanations
     fragments = (
         fragments.with_columns(
-            pl.struct("neutral_mass", "standard_unit_mass")
+            pl.struct("observed_mass", "standard_unit_mass")
             .map_elements(
                 lambda x: is_valid_su_mass(
                     mass=x["standard_unit_mass"],
                     dp_table=dp_table,
-                    threshold=dp_table.tolerance * x["neutral_mass"],
+                    threshold=dp_table.tolerance * x["observed_mass"],
                 ),
                 return_dtype=bool,
             )
@@ -324,13 +327,13 @@ def classify_fragments(
 
     # Determine all fragments that may be singletons
     fragments = fragments.with_columns(
-        pl.struct("neutral_mass", "standard_unit_mass")
+        pl.struct("observed_mass", "standard_unit_mass")
         .map_elements(
             lambda x: is_singleton(
                 mass=x["standard_unit_mass"],
                 integer_masses=[mass.mass for mass in dp_table.masses],
                 dp_table=dp_table,
-                threshold=dp_table.tolerance * x["neutral_mass"],
+                threshold=dp_table.tolerance * x["observed_mass"],
             ),
             return_dtype=bool,
         )
@@ -341,7 +344,7 @@ def classify_fragments(
     fragments = (
         fragments.sort(pl.col("standard_unit_mass"))
         .filter(pl.col("intensity") > intensity_cutoff)
-        .filter(pl.col("neutral_mass") < mass_cutoff)
+        .filter(pl.col("observed_mass") < mass_cutoff)
     )
 
     # Write terminal fragments to file if file name is given

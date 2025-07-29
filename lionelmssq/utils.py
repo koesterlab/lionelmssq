@@ -7,7 +7,9 @@ def estimate_MS_error_matching_threshold(
     fragments, unique_masses=UNIQUE_MASSES, rejection_threshold=0.5, simulation=False
 ):
     """
-    Using the mass of the single nucleosides, A, U, G, C, estimate the relatve error that the MS makes, this is used to determine the MATCHING_THRESHOLD for the DP algorithm!
+    Using the mass of the single nucleosides, A, U, G, C, estimate the
+    relative error that the MS makes, this is used to determine the
+    MATCHING_THRESHOLD for the DP algorithm!
 
     """
 
@@ -28,12 +30,12 @@ def estimate_MS_error_matching_threshold(
     else:
         singleton_masses = (
             fragments.filter(
-                pl.col("neutral_mass").is_between(
+                pl.col("observed_mass").is_between(
                     min(unique_natural_masses) - rejection_threshold,
                     max(unique_natural_masses) + rejection_threshold,
                 )
             )
-            .select(pl.col("neutral_mass"))
+            .select(pl.col("observed_mass"))
             .to_series()
             .to_list()
         )
