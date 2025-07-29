@@ -56,10 +56,13 @@ class LinearProgramInstance:
         idx_index = fragments.get_column_index("index")
         idx_min_end = fragments.get_column_index("min_end")
         idx_max_end = fragments.get_column_index("max_end")
+        idx_breakage = fragments.get_column_index("breakage")
 
-        # ensure that start fragments are aligned at the beginning of the sequence
-        if len(fragments.filter(pl.col("true_start"))) > 0:
+        # Ensure START fragments are aligned at the beginning of the sequence
+        if len(fragments.filter(pl.col("breakage").str.contains("START"))) > 0:
             for fragment in fragments.filter(pl.col("true_start")).rows():
+                if fragment[idx_breakage] == "START_END":
+                    continue
                 # j is the row index where the "index" matches fragment.index
                 # fragment.index uses the original (mass sorted) index of the read fragment files,
                 # but in self.fragments we disqualify many fragments of the original file.
@@ -78,9 +81,11 @@ class LinearProgramInstance:
                     x[i][j].setInitialValue(0)
                     x[i][j].fixValue()
 
-        # ensure that end fragments are aligned at the end of the sequence
-        if len(fragments.filter(pl.col("true_end"))) > 0:
+        # Ensure END fragments are aligned at the end of the sequence
+        if len(fragments.filter(pl.col("breakage").str.contains("END"))) > 0:
             for fragment in fragments.filter(pl.col("true_end")).rows():
+                if fragment[idx_breakage] == "START_END":
+                    continue
                 j = (
                     fragments.with_row_index("row_index")
                     .filter(pl.col("index") == fragment[idx_index])
@@ -92,6 +97,18 @@ class LinearProgramInstance:
                     x[i][j].fixValue()
                 for i in range(-self.seq_len, fragment[idx_max_end] + 1):
                     x[i][j].setInitialValue(0)
+                    x[i][j].fixValue()
+
+        # Ensure complete fragments are aligned at the whole sequence
+        if len(fragments.filter(pl.col("breakage") == "START_END")) > 0:
+            for fragment in fragments.filter(pl.col("breakage") == "START_END").rows():
+                j = (
+                    fragments.with_row_index("row_index")
+                    .filter(pl.col("index") == fragment[idx_index])
+                    .item(0, "row_index")
+                )
+                for i in range(self.seq_len):
+                    x[i][j].setInitialValue(1)
                     x[i][j].fixValue()
 
         # Fragments that aren't either start or end are either inner or uncertain.
