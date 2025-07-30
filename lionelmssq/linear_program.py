@@ -73,67 +73,39 @@ class LinearProgramInstance:
             ]
             for i in range(self.seq_len)
         ]
-        idx_index = fragments.get_column_index("index")
-        idx_min_end = fragments.get_column_index("min_end")
-        idx_max_end = fragments.get_column_index("max_end")
-        idx_breakage = fragments.get_column_index("breakage")
 
-        # Ensure START fragments are aligned at the beginning of the sequence
-        if len(fragments.filter(pl.col("breakage").str.contains("START"))) > 0:
-            for fragment in fragments.filter(pl.col("true_start")).rows():
-                if fragment[idx_breakage] == "START_END":
-                    continue
-                # j is the row index where the "index" matches fragment.index
-                # fragment.index uses the original (mass sorted) index of the read fragment files,
-                # but in self.fragments we disqualify many fragments of the original file.
-                # Hence, we need to find the correct row index in self.fragments which corresponds to the original index
-                # since in the MILP we fit all the fragments of self.fragments
-                j = (
-                    fragments.with_row_index("row_index")
-                    .filter(pl.col("index") == fragment[idx_index])
-                    .item(0, "row_index")
-                )
-                # min_end is exclusive
-                for i in range(fragment[idx_min_end]):
-                    x[i][j].setInitialValue(1)
-                    x[i][j].fixValue()
-                for i in range(fragment[idx_max_end], self.seq_len):
-                    x[i][j].setInitialValue(0)
-                    x[i][j].fixValue()
-
-        # Ensure END fragments are aligned at the end of the sequence
-        if len(fragments.filter(pl.col("breakage").str.contains("END"))) > 0:
-            for fragment in fragments.filter(pl.col("true_end")).rows():
-                if fragment[idx_breakage] == "START_END":
-                    continue
-                j = (
-                    fragments.with_row_index("row_index")
-                    .filter(pl.col("index") == fragment[idx_index])
-                    .item(0, "row_index")
-                )
-                # min_end is exclusive
-                for i in range(fragment[idx_min_end] + 1, 0):
-                    x[i][j].setInitialValue(1)
-                    x[i][j].fixValue()
-                for i in range(-self.seq_len, fragment[idx_max_end] + 1):
-                    x[i][j].setInitialValue(0)
-                    x[i][j].fixValue()
-
-        # Ensure complete fragments are aligned at the whole sequence
-        if len(fragments.filter(pl.col("breakage") == "START_END")) > 0:
-            for fragment in fragments.filter(pl.col("breakage") == "START_END").rows():
-                j = (
-                    fragments.with_row_index("row_index")
-                    .filter(pl.col("index") == fragment[idx_index])
-                    .item(0, "row_index")
-                )
+        for j in range(len(fragments)):
+            # Ensure complete fragments are aligned at the whole sequence
+            if fragments.item(j, "breakage") == "START_END":
                 for i in range(self.seq_len):
                     x[i][j].setInitialValue(1)
                     x[i][j].fixValue()
+                continue
 
-        # Fragments that aren't either start or end are either inner or uncertain.
-        # Hence, we don't further constrain their positioning and length and let the
-        # LP decide.
+            # Ensure START fragments are aligned at the beginning of the sequence
+            if "START" in fragments.item(j, "breakage"):
+                # min_end is exclusive
+                for i in range(fragments.item(j, "min_end")):
+                    x[i][j].setInitialValue(1)
+                    x[i][j].fixValue()
+                for i in range(fragments.item(j, "max_end"), self.seq_len):
+                    x[i][j].setInitialValue(0)
+                    x[i][j].fixValue()
+                continue
+
+            # Ensure END fragments are aligned at the end of the sequence
+            if "END" in fragments.item(j, "breakage"):
+                # min_end is exclusive
+                for i in range(fragments.item(j, "min_end") + 1, 0):
+                    x[i][j].setInitialValue(1)
+                    x[i][j].fixValue()
+                for i in range(-self.seq_len, fragments.item(j, "max_end") + 1):
+                    x[i][j].setInitialValue(0)
+                    x[i][j].fixValue()
+                continue
+
+            # Internal fragments are not further constrained in both their
+            # positioning and length for now; let the LP decide.
 
         return x
 
