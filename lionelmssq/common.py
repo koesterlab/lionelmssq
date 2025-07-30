@@ -4,7 +4,7 @@ from typing import List
 from lionelmssq.mass_explanation import explain_mass_with_table
 from lionelmssq.mass_table import DynamicProgrammingTable
 
-
+ERROR_METHOD = 'l2_norm'
 _NUCLEOSIDE_RE = re.compile(r"\d*[ACGU]")
 
 
@@ -27,8 +27,13 @@ class Explanation:
 
 
 def calculate_error_threshold(mass1: float, mass2: float, threshold: float) -> float:
-    # METHOD: Determine the error threshold using the L2 norm
-    return threshold * ((mass1**2 + mass2**2) ** 0.5)
+    match ERROR_METHOD:
+        case 'l1_norm':
+            return threshold * (mass1 + mass2)
+        case 'l2_norm':
+            return threshold * ((mass1**2 + mass2**2) ** 0.5)
+        case _:
+            raise NotImplementedError("This error method is not implemented.")
 
 
 def calculate_explanations(
