@@ -5,6 +5,12 @@ from lionelmssq.mass_explanation import is_valid_mass
 from lionelmssq.mass_table import DynamicProgrammingTable
 
 
+# METHOD: For each breakage option that yields a valid mass (i.e. one that
+# can be explained by any valid composition) for a given fragment, duplicate
+# the fragment and determine its breakage-independent standard-unit mass by
+# subtracting the weight imposed by the breakage.
+
+
 def classify_fragments(
     fragment_masses,
     dp_table: DynamicProgrammingTable,
@@ -26,7 +32,7 @@ def classify_fragments(
     # Index fragments
     fragment_masses = fragment_masses.with_row_index("fragment_index")
 
-    # Copy each fragment for each unique breakage weights
+    # Copy each fragment for each unique breakage weights and set standard-unit mass
     fragments = pl.concat(
         [
             fragment_masses.with_columns(
