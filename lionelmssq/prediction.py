@@ -104,20 +104,15 @@ class Predictor:
         # Rebuild fragment dataframe from internal and terminal fragments
         fragments = frag_internal.vstack(frag_terminal).sort("index")
 
-        # Add new information from skeleton building to dataframe
-        fragments = fragments.with_columns(
-            pl.col("breakage").str.contains("START").alias("true_start"),
-            pl.col("breakage").str.contains("END").alias("true_end"),
-            (
-                ~pl.col("breakage").str.contains("START")
-                & ~pl.col("breakage").str.contains("END")
-            ).alias("true_internal"),
-        )
-
         # Filter out all internal fragments that do not fit anywhere in skeleton
         print(
             "Number of internal fragments before filtering: ",
-            len(fragments.filter(pl.col("true_internal"))),
+            len(
+                fragments.filter(
+                    ~pl.col("breakage").str.contains("START")
+                    & ~pl.col("breakage").str.contains("END")
+                )
+            ),
         )
         fragments = self.filter_with_lp(
             fragments=fragments,
@@ -128,17 +123,22 @@ class Predictor:
         )
         print(
             "Number of internal fragments after filtering: ",
-            len(fragments.filter(pl.col("true_internal"))),
+            len(
+                fragments.filter(
+                    ~pl.col("breakage").str.contains("START")
+                    & ~pl.col("breakage").str.contains("END")
+                )
+            ),
         )
 
         print("Fragments considered for fitting, n_fragments = ", len(fragments))
 
-        if len(fragments.filter(pl.col("true_start"))) == 0:
+        if len(fragments.filter(pl.col("breakage").str.contains("START"))) == 0:
             logger.warning(
                 "No start fragments provided, this will likely lead to suboptimal results."
             )
 
-        if len(fragments.filter(pl.col("true_end"))) == 0:
+        if len(fragments.filter(pl.col("breakage").str.contains("END"))) == 0:
             logger.warning(
                 "No end fragments provided, this will likely lead to suboptimal results."
             )
@@ -188,7 +188,9 @@ class Predictor:
         is_invalid = []
         for idx in range(len(fragments)):
             # Skip terminal (i.e. non-internal) fragments
-            if not fragments.item(idx, "true_internal"):
+            if ("START" in fragments.item(idx, "breakage")) or (
+                "END" in fragments.item(idx, "breakage")
+            ):
                 continue
 
             # Initialize LP instance for a singular fragment
