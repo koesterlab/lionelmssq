@@ -7,12 +7,29 @@ from pulp import (
     lpSum,
     getSolver,
 )
-from lionelmssq.common import get_singleton_set_item, milp_is_one
+from typing import Any, Set
 from itertools import combinations
 import polars as pl
 import numpy as np
 
 from lionelmssq.masses import UNMODIFIED_BASES
+
+
+MILP_QUASI_ONE_THRESHOLD = 0.9
+
+
+def milp_is_one(var, threshold=MILP_QUASI_ONE_THRESHOLD):
+    # Due to the LP relaxation, the LP sometimes does not exactly output
+    # probabilities of 1 for one nucleotide or one position.
+    # Hence, we need to set a threshold for the LP relaxation.
+    return var.value() >= threshold
+
+
+def get_singleton_set_item(set_: Set[Any]) -> Any:
+    """Return the only item in a set."""
+    if len(set_) != 1:
+        raise ValueError(f"Expected a set with one item, got {set_}")
+    return next(iter(set_))
 
 
 class LinearProgramInstance:

@@ -1,31 +1,15 @@
 import re
-from typing import Any, List, Set
+from typing import List
 
 from lionelmssq.mass_explanation import explain_mass_with_table
 from lionelmssq.mass_table import DynamicProgrammingTable
 
-MILP_QUASI_ONE_THRESHOLD = 0.9
 
-
-# _NUCLEOSIDE_RE = re.compile(r"\d*[ACGUT]")
 _NUCLEOSIDE_RE = re.compile(r"\d*[ACGU]")
-
-
-def milp_is_one(var, threshold=MILP_QUASI_ONE_THRESHOLD):
-    # Sometime the LP does not exactly output probabilities of 1 for one nucleotide or one position.
-    # This is due to the LP relaxation. Hence, we need to set a threshold for the LP relaxation.
-    return var.value() >= threshold
 
 
 def parse_nucleosides(sequence: str):
     return _NUCLEOSIDE_RE.findall(sequence)
-
-
-def get_singleton_set_item(set_: Set[Any]) -> Any:
-    """Return the only item in a set."""
-    if len(set_) != 1:
-        raise ValueError(f"Expected a set with one item, got {set_}")
-    return next(iter(set_))
 
 
 class Explanation:
