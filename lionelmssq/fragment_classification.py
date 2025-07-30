@@ -13,7 +13,8 @@ def classify_fragments(
     intensity_cutoff=0.5e6,
     mass_cutoff=50000,
 ) -> pl.DataFrame:
-    if "observed_mass" in fragment_masses.columns:
+    # If no intensity is given, set it so that all fragments pass the filter
+    if "intensity" not in fragment_masses.columns:
         fragment_masses = fragment_masses.with_columns(
             pl.lit(intensity_cutoff * 1.1).alias("intensity"),
         )
