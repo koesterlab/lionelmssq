@@ -1,7 +1,8 @@
 import re
-from typing import Any, Set
+from typing import Any, List, Set
 
 from lionelmssq.mass_explanation import explain_mass_with_table
+from lionelmssq.mass_table import DynamicProgrammingTable
 
 MILP_QUASI_ONE_THRESHOLD = 0.9
 
@@ -41,17 +42,18 @@ class Explanation:
         return f"{{{','.join(self.nucleosides)}}}"
 
 
-def calculate_diff_errors(mass1, mass2, threshold) -> float:
+def calculate_error_threshold(mass1: float, mass2: float, threshold: float) -> float:
+    # METHOD: Determine the error threshold using the L2 norm
     return threshold * ((mass1**2 + mass2**2) ** 0.5)
 
 
-def calculate_diff_dp(
-    diff,
-    threshold,
-    modification_rate,
-    seq_len,
-    dp_table,
-):
+def calculate_explanations(
+    diff: float,
+    threshold: float,
+    modification_rate: float,
+    seq_len: int,
+    dp_table: DynamicProgrammingTable,
+) -> List[Explanation]:
     explanation_list = explain_mass_with_table(
         diff,
         dp_table=dp_table,

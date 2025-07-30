@@ -6,8 +6,8 @@ import polars as pl
 
 from lionelmssq.common import (
     Explanation,
-    calculate_diff_dp,
-    calculate_diff_errors,
+    calculate_error_threshold,
+    calculate_explanations,
 )
 from lionelmssq.mass_table import DynamicProgrammingTable
 
@@ -173,12 +173,12 @@ class SkeletonBuilder:
         if diff in self.explanations:
             return self.explanations.get(diff, [])
         else:
-            threshold = calculate_diff_errors(
+            threshold = calculate_error_threshold(
                 prev_mass,
                 current_mass,
                 self.dp_table.tolerance,
             )
-            return calculate_diff_dp(
+            return calculate_explanations(
                 diff,
                 threshold,  # * diff,
                 modification_rate,

@@ -4,7 +4,7 @@ from typing import List, Self
 import polars as pl
 from loguru import logger
 
-from lionelmssq.common import calculate_diff_dp, calculate_diff_errors
+from lionelmssq.common import calculate_error_threshold, calculate_explanations
 from lionelmssq.linear_program import LinearProgramInstance
 from lionelmssq.mass_table import DynamicProgrammingTable
 from lionelmssq.masses import PHOSPHATE_LINK_MASS
@@ -237,7 +237,7 @@ class Predictor:
         idx_observed_mass = fragments.get_column_index("observed_mass")
         idx_su_mass = fragments.get_column_index("standard_unit_mass")
         for singleton in singleton_list.rows():
-            explanations[singleton[idx_su_mass]] = calculate_diff_dp(
+            explanations[singleton[idx_su_mass]] = calculate_explanations(
                 diff=singleton[idx_su_mass],
                 threshold=self.dp_table.tolerance * singleton[idx_observed_mass],
                 modification_rate=modification_rate,
@@ -278,12 +278,12 @@ class Predictor:
                 end = start + 1
                 continue
 
-            diff_error = calculate_diff_errors(
+            diff_error = calculate_error_threshold(
                 observed_masses[start],
                 observed_masses[end],
                 self.dp_table.tolerance,
             )
-            expl = calculate_diff_dp(
+            expl = calculate_explanations(
                 diff=diff,
                 threshold=diff_error,  # * diff,
                 modification_rate=modification_rate,
