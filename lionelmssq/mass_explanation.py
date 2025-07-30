@@ -1,24 +1,16 @@
 from dataclasses import dataclass
-from typing import Set, Tuple
+from typing import List, Set, Tuple
 from itertools import product, combinations_with_replacement, chain
 
 import polars as pl
 import numpy as np
 
 from lionelmssq.mass_table import DynamicProgrammingTable
-from lionelmssq.masses import (
-    EXPLANATION_MASSES,
-    TOLERANCE,
-    MATCHING_THRESHOLD,
-    BREAKAGES,
-    COMPRESSION_RATE,
-    UNMODIFIED_BASES,
-)
+from lionelmssq.masses import EXPLANATION_MASSES, UNMODIFIED_BASES
 
 
 @dataclass
 class MassExplanations:
-    breakage: str
     explanations: Set[Tuple[str]]
 
 
@@ -52,89 +44,83 @@ IS_MOD = {
 
 def is_valid_mass(
     mass: float,
-    dp_table,
-    breakages=BREAKAGES,
-    compression_rate=COMPRESSION_RATE,
-    threshold=MATCHING_THRESHOLD,
+    dp_table: DynamicProgrammingTable,
+    threshold: float = None,
 ) -> bool:
-    # Ensure that all breakage weights have a associated breakage
-    breakages = {
-        breakage_weight: breakage
-        for breakage_weight, breakage in breakages.items()
-        if len(breakage) > 0
-    }
-
     # Convert the target to an integer for easy operations
-    target = int(round(mass / TOLERANCE, 0))
+    target = int(round(mass / dp_table.precision, 0))
 
-    # Set matching threshold based on target mass
-    threshold = int(np.ceil(threshold * target))
+    # Set relative threshold if not given
+    if threshold is None:
+        threshold = dp_table.tolerance * mass
 
-    current_idx = len(dp_table) - 1
-    for breakage_weight in breakages:
-        for value in range(
-            target - breakage_weight - threshold,
-            target - breakage_weight + threshold + 1,
-        ):
-            # Skip non-positive masses
-            if value <= 0:
-                continue
+    # Convert the threshold to integer
+    threshold = int(np.ceil(threshold / dp_table.precision))
 
-            # Raise error if mass is not in table (due to its size)
-            if value >= len(dp_table[0]) * compression_rate:
-                raise NotImplementedError(
-                    f"The value {value} is not in the DP table. Extend its "
-                    f"size if you want to compute larger masses."
-                )
+    compression_rate = dp_table.compression_per_cell
 
-            current_value = (
-                dp_table[current_idx, value]
-                if compression_rate == 1
-                else dp_table[current_idx, value // compression_rate]
-                >> 2 * (compression_rate - 1 - value % compression_rate)
+    current_idx = len(dp_table.table) - 1
+    for value in range(target - threshold, target + threshold + 1):
+        # Skip non-positive masses
+        if value <= 0:
+            continue
+
+        # Raise error if mass is not in table (due to its size)
+        if value >= len(dp_table.table[0]) * compression_rate:
+            raise NotImplementedError(
+                f"The value {value} is not in the DP table. Extend its "
+                f"size if you want to compute larger masses."
             )
 
-            # Skip unreachable cells
-            if compression_rate != 1 and current_value % compression_rate == 0.0:
-                continue
+        current_value = (
+            dp_table.table[current_idx, value]
+            if compression_rate == 1
+            else dp_table.table[current_idx, value // compression_rate]
+            >> 2 * (compression_rate - 1 - value % compression_rate)
+        )
 
-            # Return True when mass corresponds to valid entry in table
-            if current_value % 2 == 1 or (current_value >> 1) % 2 == 1:
-                return True
+        # Skip unreachable cells
+        if compression_rate != 1 and current_value % compression_rate == 0.0:
+            continue
+
+        # Return True when mass corresponds to valid entry in table
+        if current_value % 2 == 1 or (current_value >> 1) % 2 == 1:
+            return True
     return False
 
 
-def explain_mass_with_dp(
+def explain_mass_with_table(
     mass: float,
     dp_table: DynamicProgrammingTable,
-    with_memo: bool,
     seq_len: int,
     max_modifications=np.inf,
     compression_rate=None,
     threshold=None,
-) -> list[MassExplanations]:
+    with_memo=True,
+) -> MassExplanations:
     """
     Return all possible combinations of nucleosides that could sum up to the given mass.
     """
-    if threshold is None:
-        threshold = dp_table.tolerance
-
     if compression_rate is None:
         compression_rate = dp_table.compression_per_cell
 
     # Convert the target to an integer for easy operations
     target = int(round(mass / dp_table.precision, 0))
 
-    # Set matching threshold based on target mass
-    threshold = int(np.ceil(threshold * target))
+    # Set relative threshold if not given
+    if threshold is None:
+        threshold = dp_table.tolerance * mass
+
+    # Convert the threshold to integer
+    threshold = int(np.ceil(threshold / dp_table.precision))
 
     memo = {}
 
-    def backtrack_with_memo(total_mass, current_idx, max_mods_all, max_mods_ind):
+    def backtrack(total_mass, current_idx, max_mods_all, max_mods_ind):
         current_weight = dp_table.masses[current_idx].mass
 
         # If the result for this state is already computed, return it
-        if (total_mass, current_idx) in memo:
+        if with_memo and (total_mass, current_idx) in memo:
             return memo[(total_mass, current_idx)]
 
         # Return empty list for cells outside of table
@@ -154,63 +140,6 @@ def explain_mass_with_dp(
 
         current_value = (
             dp_table[current_idx, total_mass]
-            if compression_rate == 1
-            else dp_table.table[current_idx, total_mass // compression_rate]
-            >> 2 * (compression_rate - 1 - total_mass % compression_rate)
-        )
-
-        # Return empty list for unreachable cells
-        if compression_rate != 1 and current_value % compression_rate == 0.0:
-            return []
-
-        solutions = []
-        # Backtrack to the next row above if possible
-        if current_value % 2 == 1:
-            solutions += backtrack_with_memo(
-                total_mass,
-                current_idx - 1,
-                max_mods_all,
-                round(seq_len * dp_table.masses[current_idx - 1].modification_rate),
-            )
-
-        # Backtrack to the next left-side column if possible
-        if (current_value >> 1) % 2 == 1:
-            if not dp_table.masses[current_idx].is_modification or (
-                max_mods_all > 0 and max_mods_ind > 0
-            ):
-                # Adjust number of still allowed modifications if necessary
-                if dp_table.masses[current_idx].is_modification:
-                    max_mods_all -= 1
-                    max_mods_ind -= 1
-
-                solutions += [
-                    entry + [current_weight]
-                    for entry in backtrack_with_memo(
-                        total_mass - current_weight,
-                        current_idx,
-                        max_mods_all,
-                        max_mods_ind,
-                    )
-                ]
-
-        # Store result in memo
-        memo[(total_mass, current_idx)] = solutions
-
-        return solutions
-
-    def backtrack(total_mass, current_idx, max_mods_all, max_mods_ind):
-        current_weight = dp_table.masses[current_idx].mass
-
-        # Return empty list for cells outside of table
-        if total_mass < 0:
-            return []
-
-        # Initialize a new nucleoside set for a valid start in table
-        if total_mass == 0:
-            return [[]]
-
-        current_value = (
-            dp_table.table[current_idx, total_mass]
             if compression_rate == 1
             else dp_table.table[current_idx, total_mass // compression_rate]
             >> 2 * (compression_rate - 1 - total_mass % compression_rate)
@@ -250,79 +179,29 @@ def explain_mass_with_dp(
                     )
                 ]
 
+        # Store result in memo
+        if with_memo:
+            memo[(total_mass, current_idx)] = solutions
+
         return solutions
 
-    solution_tolerated_integer_masses = {}
-    for breakage_weight in BREAKAGES:
-        # Compute all valid solutions within the threshold interval
-        solutions = []
-        for value in range(
-            target - breakage_weight - threshold,
-            target - breakage_weight + threshold + 1,
-        ):
-            solutions += (
-                backtrack_with_memo(
-                    value,
-                    len(dp_table.masses) - 1,
-                    max_modifications,
-                    round(seq_len * dp_table.masses[-1].modification_rate),
-                )
-                if with_memo
-                else backtrack(
-                    value,
-                    len(dp_table.masses) - 1,
-                    max_modifications,
-                    round(seq_len * dp_table.masses[-1].modification_rate),
-                )
-            )
-
-        # Add valid solutions to dictionary of breakpoint options
-        for breakage in BREAKAGES[breakage_weight]:
-            solution_tolerated_integer_masses[breakage] = solutions
-
-    # Convert the DP table masses to their respective nucleoside names
-    explanations = []
-    for breakage in solution_tolerated_integer_masses.keys():
-        # Return None if no explanation is found
-        if len(solution_tolerated_integer_masses[breakage]) == 0:
-            solution_names = None
-        # Store the nucleoside names (as tuples) for the given tolerated_integer_masses in the set solution_names
-        else:
-            solution_names = set()
-            for combo in solution_tolerated_integer_masses[breakage]:
-                if len(combo) == 0:
-                    continue
-                solution_names.update(
-                    [
-                        tuple(chain.from_iterable(entry))
-                        for entry in list(
-                            product(
-                                *[
-                                    list(
-                                        combinations_with_replacement(
-                                            MASS_NAMES[mass], combo.count(mass)
-                                        )
-                                    )
-                                    for mass in [
-                                        combo[idx]
-                                        for idx in range(len(combo))
-                                        if idx == 0 or combo[idx - 1] != combo[idx]
-                                    ]
-                                ]
-                            )
-                        )
-                    ]
-                )
-        # Add desired Dataclass object to list
-        explanations.append(
-            MassExplanations(breakage=breakage, explanations=solution_names)
+    # Compute all valid solutions within the threshold interval
+    solutions = []
+    for value in range(
+        target - threshold,
+        target + threshold + 1,
+    ):
+        solutions += backtrack(
+            value,
+            len(dp_table.masses) - 1,
+            max_modifications,
+            round(seq_len * dp_table.masses[-1].modification_rate),
         )
 
-    # Return list of explanations
-    return explanations
+    return convert_nucleotide_masses_to_names(solutions=solutions)
 
 
-def explain_mass(
+def explain_mass_with_recursion(
     mass: float,
     dp_table: DynamicProgrammingTable,
     seq_len: int,
@@ -332,16 +211,17 @@ def explain_mass(
     """
     Returns all the possible combinations of nucleosides that could sum up to the given mass.
     """
-    if threshold is None:
-        threshold = dp_table.tolerance
-
     tolerated_integer_masses = [mass.mass for mass in dp_table.masses]
 
     # Convert the target to an integer for easy operations
-    target = int(round(mass / TOLERANCE, 0))
+    target = int(round(mass / dp_table.precision, 0))
 
-    # Set matching threshold based on target mass
-    threshold = int(np.ceil(threshold * target))
+    # Set relative threshold if not given
+    if threshold is None:
+        threshold = dp_table.tolerance * mass
+
+    # Convert the threshold to integer
+    threshold = int(np.ceil(threshold / dp_table.precision))
 
     # Memoization dictionary to store results for a given target
     memo = {}
@@ -397,50 +277,43 @@ def explain_mass(
 
         return combinations
 
-    solution_tolerated_integer_masses = {}
-    for breakage_weight in BREAKAGES:
-        # Start with the full target and all tolerated_integer_masses (except 0.0)
-        solutions = dp(target - breakage_weight, 1, 0, 0)
-        for breakage in BREAKAGES[breakage_weight]:
-            solution_tolerated_integer_masses[breakage] = solutions
+    # Compute all solutions for the full target and all allowed masses (except 0.0)
+    solutions = dp(target, 1, 0, 0)
 
-    # Convert the tolerated_integer_masses to the respective nucleoside names
-    explanations = []
-    for breakage in solution_tolerated_integer_masses.keys():
-        # Return None if no explanation is found
-        if len(solution_tolerated_integer_masses[breakage]) == 0:
-            solution_names = None
-        # Store the nucleoside names (as tuples) for the given tolerated_integer_masses in the set solution_names
-        else:
-            solution_names = set()
-            for combo in solution_tolerated_integer_masses[breakage]:
-                if len(combo) == 0:
-                    continue
-                solution_names.update(
-                    [
-                        tuple(chain.from_iterable(entry))
-                        for entry in list(
-                            product(
-                                *[
-                                    list(
-                                        combinations_with_replacement(
-                                            MASS_NAMES[mass], combo.count(mass)
-                                        )
-                                    )
-                                    for mass in [
-                                        combo[idx]
-                                        for idx in range(len(combo))
-                                        if idx == 0 or combo[idx - 1] != combo[idx]
-                                    ]
-                                ]
+    return convert_nucleotide_masses_to_names(solutions=solutions)
+
+
+def convert_nucleotide_masses_to_names(solutions: List[List[int]]) -> MassExplanations:
+    # Store the nucleotide names (as tuples) for the given masses in a set
+    solution_names = set()
+    # Return None if no explanation is found
+    if len(solutions) == 0:
+        return MassExplanations(None)
+    # Convert the masses to their respective nucleotide names
+    for solution in solutions:
+        if len(solution) == 0:
+            continue
+        solution_names.update(
+            [
+                tuple(chain.from_iterable(entry))
+                for entry in list(
+                    product(
+                        *[
+                            list(
+                                combinations_with_replacement(
+                                    MASS_NAMES[mass], solution.count(mass)
+                                )
                             )
-                        )
-                    ]
+                            for mass in [
+                                solution[idx]
+                                for idx in range(len(solution))
+                                if idx == 0 or solution[idx - 1] != solution[idx]
+                            ]
+                        ]
+                    )
                 )
-        # Add desired Dataclass object to list
-        explanations.append(
-            MassExplanations(breakage=breakage, explanations=solution_names)
+            ]
         )
 
     # Return list of explanations
-    return explanations
+    return MassExplanations(solution_names)

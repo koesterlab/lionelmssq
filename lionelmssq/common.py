@@ -1,39 +1,15 @@
-from enum import Enum
 import re
-from typing import Any, Set
+from typing import List
 
-from lionelmssq.mass_explanation import explain_mass
+from lionelmssq.mass_explanation import explain_mass_with_table
+from lionelmssq.mass_table import DynamicProgrammingTable
 
-MILP_QUASI_ONE_THRESHOLD = 0.9
-
-
-# _NUCLEOSIDE_RE = re.compile(r"\d*[ACGUT]")
+ERROR_METHOD = "l2_norm"
 _NUCLEOSIDE_RE = re.compile(r"\d*[ACGU]")
-
-
-def milp_is_one(var, threshold=MILP_QUASI_ONE_THRESHOLD):
-    # Sometime the LP does not exactly output probabilities of 1 for one nucleotide or one position.
-    # This is due to the LP relaxation. Hence, we need to set a threshold for the LP relaxation.
-    return var.value() >= threshold
 
 
 def parse_nucleosides(sequence: str):
     return _NUCLEOSIDE_RE.findall(sequence)
-
-
-class Side(Enum):
-    START = "start"
-    END = "end"
-
-    def __str__(self):
-        return self.value
-
-
-def get_singleton_set_item(set_: Set[Any]) -> Any:
-    """Return the only item in a set."""
-    if len(set_) != 1:
-        raise ValueError(f"Expected a set with one item, got {set_}")
-    return next(iter(set_))
 
 
 class Explanation:
@@ -50,28 +26,30 @@ class Explanation:
         return f"{{{','.join(self.nucleosides)}}}"
 
 
-def calculate_diff_errors(mass1, mass2, threshold) -> float:
-    retval = threshold * ((mass1**2 + mass2**2) ** 0.5) / abs(mass1 - mass2)
-    # Constrain the maximum relative error to 1!
-    # For mass difference very close to zero, the relative error can be very high!
-    if retval > 1:
-        retval = 1.0
-    return retval
+def calculate_error_threshold(mass1: float, mass2: float, threshold: float) -> float:
+    match ERROR_METHOD:
+        case "l1_norm":
+            return threshold * (mass1 + mass2)
+        case "l2_norm":
+            return threshold * ((mass1**2 + mass2**2) ** 0.5)
+        case _:
+            raise NotImplementedError("This error method is not implemented.")
 
 
-def calculate_diff_dp(diff, threshold, modification_rate, seq_len, dp_table):
-    # TODO: Add support for other breakages than 'c/y_c/y'
-    explanation_list = [
-        entry
-        for entry in explain_mass(
-            diff,
-            dp_table=dp_table,
-            seq_len=seq_len,
-            max_modifications=round(modification_rate * seq_len),
-            threshold=threshold,
-        )
-        if entry.breakage == "c/y_c/y"
-    ][0].explanations
+def calculate_explanations(
+    diff: float,
+    threshold: float,
+    modification_rate: float,
+    seq_len: int,
+    dp_table: DynamicProgrammingTable,
+) -> List[Explanation]:
+    explanation_list = explain_mass_with_table(
+        diff,
+        dp_table=dp_table,
+        seq_len=seq_len,
+        max_modifications=round(modification_rate * seq_len),
+        threshold=threshold,
+    ).explanations
 
     # Return None if no explanation was found
     if explanation_list is None:

@@ -4,9 +4,10 @@ from typing import List, Self
 import polars as pl
 from loguru import logger
 
-from lionelmssq.common import Side, calculate_diff_dp, calculate_diff_errors
+from lionelmssq.common import calculate_error_threshold, calculate_explanations
 from lionelmssq.linear_program import LinearProgramInstance
 from lionelmssq.mass_table import DynamicProgrammingTable
+from lionelmssq.masses import PHOSPHATE_LINK_MASS
 from lionelmssq.skeleton_building import SkeletonBuilder
 
 
@@ -30,11 +31,8 @@ class Predictor:
         self,
         dp_table: DynamicProgrammingTable,
         explanation_masses: pl.DataFrame,
-        mass_tag_start: float = 0.0,
-        mass_tag_end: float = 0.0,
     ):
         self.explanation_masses = explanation_masses
-        self.mass_tags = {Side.START: mass_tag_start, Side.END: mass_tag_end}
         self.dp_table = dp_table
 
     def predict(
@@ -51,74 +49,28 @@ class Predictor:
 
         fragments = (
             fragments.with_row_index(name="orig_index")
-            .sort("observed_mass")
+            .sort("standard_unit_mass")
             .with_row_index(name="index")
         )
         print(len(fragments))
 
-        # Sort the fragments in the order of single nucleosides, start fragments, end fragments,
-        # start fragments AND end fragments, internal fragments and then by mass for each category!
-
-        with pl.Config() as cfg:
-            cfg.set_tbl_rows(-1)
-            print(
-                fragments.select(
-                    pl.col("observed_mass"),
-                    pl.col("is_start"),
-                    pl.col("is_end"),
-                    pl.col("single_nucleoside"),
-                    pl.col("is_start_end"),
-                    pl.col("is_internal"),
-                    # pl.col("mass_explanations"),
-                    pl.col("index"),
-                    pl.col("orig_index"),
-                )
-            )
-
         # TODO: get rid of the requirement to pass the length of the sequence
         #  and instead infer it from the fragments
 
-        # Collect the fragments for the start and end side which also include the start_end fragments (entire sequences)
-        fragments_side = {
-            Side.START: fragments.filter(pl.col("is_start") | pl.col("is_start_end")),
-            Side.END: fragments.filter(pl.col("is_end") | pl.col("is_start_end")),
-        }
+        fragments = fragments.with_columns(
+            pl.lit(0, dtype=pl.Int64).alias("min_end"),
+            pl.lit(-1, dtype=pl.Int64).alias("max_end"),
+        )
 
-        # Collect the masses of these fragments (subtract the appropriate tag masses)
-        fragment_masses = {
-            Side.START: self._collect_fragment_side_masses(
-                fragments=fragments,
-                side=Side.START,
-            ),
-            Side.END: self._collect_fragment_side_masses(
-                fragments=fragments,
-                side=Side.END,
-            ),
-        }
+        # Collect internal fragments
+        frag_internal = fragments.filter(
+            ~pl.col("breakage").str.contains("START")
+            & ~pl.col("breakage").str.contains("END")
+        )
 
-        # Roughly estimate the differences as a first step with all fragments marked as start and then as end
-        # Note that we do not consider fragments is_start_end now,
-        # since the difference may be quite large and explained by lots of combinations
-        # Note that there may be faulty mass fragments which will lead to bad (not truly existent) differences here!
-        mass_diffs = {
-            Side.START: self._collect_diffs(
-                fragment_masses[Side.START], side=Side.START
-            ),
-            Side.END: self._collect_diffs(fragment_masses[Side.END], side=Side.END),
-        }
-        mass_diffs_errors = {
-            Side.START: self._collect_diff_errors(
-                fragment_masses[Side.START],
-                Side.START,
-            ),
-            Side.END: self._collect_diff_errors(
-                fragment_masses[Side.END],
-                Side.END,
-            ),
-        }
-        explanations = self._collect_diff_explanations(
-            mass_diffs=mass_diffs,
-            mass_diff_errors=mass_diffs_errors,
+        # Roughly explain the mass differences (to reduce the alphabet)
+        # Note there may be faulty mass fragments leading to not truly existent values
+        explanations = self.collect_diff_explanations_for_su(
             modification_rate=modification_rate,
             fragments=fragments,
             seq_len=seq_len,
@@ -132,101 +84,35 @@ class Predictor:
         masses = self._reduce_alphabet(explanations=explanations)
 
         skeleton_builder = SkeletonBuilder(
-            fragment_masses=fragment_masses,
-            fragments_side=fragments_side,
-            mass_diffs=mass_diffs,
             explanations=explanations,
             seq_len=seq_len,
             dp_table=self.dp_table,
         )
 
-        # Now we build the skeleton sequence from both sides and align them to get the final skeleton sequence!
-        (
-            skeleton_seq,
-            start_fragments,
-            end_fragments,
-            invalid_start_fragments,
-            invalid_end_fragments,
-        ) = skeleton_builder.build_skeleton(modification_rate)
-
-        # TODO: If the tags are considered in the LP at the end, then most of the following code will become obsolete!
-
-        # Filter out incorrectly flagged terminal fragments and reject also all END fragments that are also START fragments
-        fragments_side[Side.START] = fragments_side[Side.START].filter(
-            ~pl.col("index").is_in(invalid_start_fragments)
-        )
-        fragments_side[Side.END] = (
-            fragments_side[Side.END]
-            .filter(~pl.col("index").is_in(invalid_end_fragments))
-            .filter(~pl.col("index").is_in([i.index for i in start_fragments]))
+        # Build skeleton sequence from both sides and align them into final sequence
+        skeleton_seq, frag_terminal = skeleton_builder.build_skeleton(
+            modification_rate, fragments
         )
 
-        def select_ends(fragments, idx):
-            selected_fragments = [frag for frag in fragments if frag.index == idx]
-            if len(selected_fragments) == 0:
-                return 0, -1
-            return selected_fragments[0].min_end, selected_fragments[0].max_end
-
-        # Add new information from skeleton building to dataframe
-        fragments = fragments.with_columns(
-            (pl.col("index").is_in([frag.index for frag in start_fragments])).alias(
-                "true_start"
-            ),
-            (pl.col("index").is_in([frag.index for frag in end_fragments])).alias(
-                "true_end"
-            ),
-            (
-                pl.col("is_internal")
-                & ~pl.col("index").is_in(
-                    [frag.index for frag in start_fragments + end_fragments]
-                )
-            ).alias("true_internal"),
-            (
-                pl.col("index").map_elements(
-                    lambda x: select_ends(start_fragments + end_fragments, x)[0],
-                    return_dtype=int,
-                )
-            ).alias("min_end"),
-            (
-                pl.col("index").map_elements(
-                    lambda x: select_ends(start_fragments + end_fragments, x)[1],
-                    return_dtype=int,
-                )
-            ).alias("max_end"),
+        # Remove all "internal" fragment duplicates that are truly terminal fragments
+        frag_internal = frag_internal.filter(
+            ~pl.col("fragment_index").is_in(
+                frag_terminal.get_column("fragment_index").to_list()
+            )
         )
 
-        # Subtract tags from "observed_mass" column for true terminal fragments
-        fragments = pl.concat(
-            [
-                fragments.filter(pl.col("true_start")).with_columns(
-                    pl.col("observed_mass")
-                    .map_elements(
-                        lambda x: x - self.mass_tags[Side.START],
-                        return_dtype=float,
-                    )
-                    .alias("observed_mass")
-                ),
-                fragments.filter(~pl.col("true_start")),
-            ]
-        )
-        fragments = pl.concat(
-            [
-                fragments.filter(pl.col("true_end")).with_columns(
-                    pl.col("observed_mass")
-                    .map_elements(
-                        lambda x: x - self.mass_tags[Side.END],
-                        return_dtype=float,
-                    )
-                    .alias("observed_mass")
-                ),
-                fragments.filter(~pl.col("true_end")),
-            ]
-        )
+        # Rebuild fragment dataframe from internal and terminal fragments
+        fragments = frag_internal.vstack(frag_terminal).sort("index")
 
         # Filter out all internal fragments that do not fit anywhere in skeleton
         print(
             "Number of internal fragments before filtering: ",
-            len(fragments.filter(pl.col("true_internal"))),
+            len(
+                fragments.filter(
+                    ~pl.col("breakage").str.contains("START")
+                    & ~pl.col("breakage").str.contains("END")
+                )
+            ),
         )
         fragments = self.filter_with_lp(
             fragments=fragments,
@@ -237,26 +123,22 @@ class Predictor:
         )
         print(
             "Number of internal fragments after filtering: ",
-            len(fragments.filter(pl.col("true_internal"))),
+            len(
+                fragments.filter(
+                    ~pl.col("breakage").str.contains("START")
+                    & ~pl.col("breakage").str.contains("END")
+                )
+            ),
         )
 
-        fragments = (
-            fragments.filter(pl.col("true_start"))
-            .vstack(fragments.filter(pl.col("true_end")))
-            .vstack(fragments.filter(pl.col("true_internal")))
-        )
+        print("Fragments considered for fitting, n_fragments = ", len(fragments))
 
-        print(
-            "Fragments considered for fitting, n_fragments = ",
-            len(fragments.get_column("observed_mass").to_list()),
-        )
-
-        if not start_fragments:
+        if len(fragments.filter(pl.col("breakage").str.contains("START"))) == 0:
             logger.warning(
                 "No start fragments provided, this will likely lead to suboptimal results."
             )
 
-        if not end_fragments:
+        if len(fragments.filter(pl.col("breakage").str.contains("END"))) == 0:
             logger.warning(
                 "No end fragments provided, this will likely lead to suboptimal results."
             )
@@ -271,81 +153,6 @@ class Predictor:
 
         return Prediction(*lp_instance.evaluate(solver_params))
 
-    def _collect_fragment_side_masses(self, fragments, side: Side):
-        """
-        Collect the fragment masses for the given side (also including the
-        start_end fragments, i.e. the entire sequence).
-        """
-
-        # Collect masses of terminal fragments for the given side
-        side_fragments = (
-            fragments.filter(pl.col(f"is_{side}")).get_column("observed_mass").to_list()
-        )
-
-        # Collect masses of complete fragments (opposing tag subtracted)
-        start_end_fragments = self._get_terminal_fragments_without_opposing_tag(
-            side=side, fragments=fragments
-        )
-
-        return side_fragments + start_end_fragments
-
-    def _get_terminal_fragments_without_opposing_tag(
-        self, side: Side, fragments: pl.DataFrame
-    ):
-        other_side = Side.END if side == Side.START else Side.START
-        return [
-            i - self.mass_tags[other_side]
-            for i in fragments.filter(pl.col("is_start_end"))
-            .get_column("observed_mass")
-            .to_list()
-        ]
-
-    def _collect_diffs(self, masses: list, side: Side) -> list:
-        return [masses[0] - self.mass_tags[side]] + [
-            masses[i] - masses[i - 1] for i in range(1, len(masses))
-        ]
-
-    def _collect_diff_errors(self, masses: list, side: Side) -> list:
-        return [
-            calculate_diff_errors(
-                self.mass_tags[side],
-                masses[0],
-                self.dp_table.tolerance,
-            )
-        ] + [
-            calculate_diff_errors(
-                masses[i],
-                masses[i - 1],
-                self.dp_table.tolerance,
-            )
-            for i in range(1, len(masses))
-        ]
-
-    def _collect_diff_explanations(
-        self, mass_diffs, mass_diff_errors, modification_rate, fragments, seq_len
-    ) -> dict:
-        # Collect singleton masses
-        singleton_masses = set(
-            fragments.filter(pl.col("single_nucleoside")).get_column("observed_mass")
-        )
-
-        explanations = {}
-        for diff, diff_error in zip(
-            mass_diffs[Side.START] + mass_diffs[Side.END],
-            mass_diff_errors[Side.START] + mass_diff_errors[Side.END],
-        ):
-            explanations[diff] = calculate_diff_dp(
-                diff, diff_error, modification_rate, seq_len, self.dp_table
-            )
-
-        for diff in singleton_masses:
-            explanations[diff] = calculate_diff_dp(
-                diff, self.dp_table.tolerance, modification_rate, seq_len, self.dp_table
-            )
-
-        return explanations
-        # TODO: Can make it simpler here by rejecting diff which cannot be explained instead of doing it in the _predict_skeleton function!
-
     def _reduce_alphabet(self, explanations) -> pl.DataFrame:
         observed_nucleosides = {
             nuc
@@ -356,6 +163,11 @@ class Predictor:
         }
         reduced = self.explanation_masses.filter(
             pl.col("nucleoside").is_in(observed_nucleosides)
+        )
+        reduced = reduced.with_columns(
+            (pl.col("monoisotopic_mass") + PHOSPHATE_LINK_MASS).alias(
+                "standard_unit_mass"
+            )
         )
         print("Nucleosides considered for fitting after alphabet reduction:", reduced)
 
@@ -372,14 +184,18 @@ class Predictor:
         skeleton_seq: list,
         modification_rate: float,
         solver_params: dict,
-    ):
-        is_valid_fragment = []
-        for frag in fragments.filter(pl.col("true_internal")).rows():
+    ) -> pl.DataFrame:
+        is_invalid = []
+        for idx in range(len(fragments)):
+            # Skip terminal (i.e. non-internal) fragments
+            if ("START" in fragments.item(idx, "breakage")) or (
+                "END" in fragments.item(idx, "breakage")
+            ):
+                continue
+
             # Initialize LP instance for a singular fragment
             filter_instance = LinearProgramInstance(
-                fragments=fragments.filter(
-                    pl.col("index") == frag[fragments.get_column_index("index")]
-                ),
+                fragments=fragments[idx],
                 nucleosides=masses,
                 dp_table=self.dp_table,
                 skeleton_seq=skeleton_seq,
@@ -387,16 +203,100 @@ class Predictor:
             )
 
             # Check whether fragment can feasibly be aligned to skeleton
-            if filter_instance.check_feasibility(
+            if not filter_instance.check_feasibility(
                 solver_params=solver_params,
                 threshold=self.dp_table.tolerance
-                * frag[fragments.get_column_index("observed_mass")],
+                * fragments.item(idx, "observed_mass"),
             ):
-                is_valid_fragment.append(frag[fragments.get_column_index("index")])
+                is_invalid.append(fragments.item(idx, "index"))
 
         # Return only valid fragments
-        return fragments.with_columns(
-            true_internal=pl.when(pl.col("index").is_in(is_valid_fragment))
-            .then(pl.col("true_internal"))
-            .otherwise(False)
+        return fragments.filter(~pl.col("index").is_in(is_invalid))
+
+    def collect_diff_explanations_for_su(
+        self,
+        modification_rate,
+        fragments,
+        seq_len,
+    ) -> dict:
+        # Collect explanation for all reasonable mass differences for each side
+        explanations = {
+            **self.collect_explanations_per_side(
+                fragments=fragments.filter(pl.col("breakage").str.contains("START")),
+                modification_rate=modification_rate,
+                seq_len=seq_len,
+            ),
+            **self.collect_explanations_per_side(
+                fragments=fragments.filter(pl.col("breakage").str.contains("END")),
+                modification_rate=modification_rate,
+                seq_len=seq_len,
+            ),
+        }
+
+        # Collect singleton masses
+        singleton_list = fragments.filter(pl.col("is_singleton"))
+
+        idx_observed_mass = fragments.get_column_index("observed_mass")
+        idx_su_mass = fragments.get_column_index("standard_unit_mass")
+        for singleton in singleton_list.rows():
+            explanations[singleton[idx_su_mass]] = calculate_explanations(
+                diff=singleton[idx_su_mass],
+                threshold=self.dp_table.tolerance * singleton[idx_observed_mass],
+                modification_rate=modification_rate,
+                seq_len=seq_len,
+                dp_table=self.dp_table,
+            )
+
+        return explanations
+
+    def collect_explanations_per_side(
+        self,
+        fragments,
+        modification_rate,
+        seq_len,
+    ):
+        max_weight = (
+            max(self.explanation_masses.get_column("monoisotopic_mass").to_list())
+            + PHOSPHATE_LINK_MASS
         )
+        su_masses = fragments.get_column("standard_unit_mass").to_list()
+        observed_masses = fragments.get_column("observed_mass").to_list()
+        start = 0
+        end = 1
+
+        explanations = {}
+        while end < len(fragments):
+            # Skip singletons
+            if (end - start) <= 0:
+                end += 1
+                continue
+
+            # Determine mass difference between fragments
+            diff = su_masses[end] - su_masses[start]
+
+            # If mass difference > any nucleotide mass, drop 1st fragment in window
+            if diff > max_weight:
+                start += 1
+                end = start + 1
+                continue
+
+            diff_error = calculate_error_threshold(
+                observed_masses[start],
+                observed_masses[end],
+                self.dp_table.tolerance,
+            )
+            expl = calculate_explanations(
+                diff=diff,
+                threshold=diff_error,  # * diff,
+                modification_rate=modification_rate,
+                seq_len=seq_len,
+                dp_table=self.dp_table,
+            )
+            if expl is not None and len(expl) >= 1:
+                explanations[diff] = expl
+            if end == len(fragments) - 1:
+                start += 1
+            else:
+                end += 1
+
+        return explanations

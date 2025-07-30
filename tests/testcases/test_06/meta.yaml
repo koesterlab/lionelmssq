@@ -1,5 +1,5 @@
 identity: Simulated_data
-label_mass_3T: 0.0
-label_mass_5T: 0.0
+label_mass_3T: 79.965
+label_mass_5T: 18.009
 predicted_sequence: CAGCAAAACGAUCAUAUAGAGAUCCGCAGU
 true_sequence: CAGCAAAACGAUCAUAUAGAGAUCCGCAGU

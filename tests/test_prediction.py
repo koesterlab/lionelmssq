@@ -8,8 +8,7 @@ from lionelmssq.mass_table import DynamicProgrammingTable
 from lionelmssq.prediction import Predictor
 from lionelmssq.common import parse_nucleosides
 from lionelmssq.plotting import plot_prediction
-from lionelmssq.utils import estimate_MS_error_matching_threshold
-from lionelmssq.fragment_classification import mark_terminal_fragment_candidates
+from lionelmssq.fragment_classification import classify_fragments
 
 import polars as pl
 import yaml
@@ -18,6 +17,7 @@ from lionelmssq.masses import (
     COMPRESSION_RATE,
     TOLERANCE,
     MATCHING_THRESHOLD,
+    build_breakage_dict,
     initialize_nucleotide_df,
 )
 
@@ -41,18 +41,17 @@ def test_testcase(testcase):
 
     input_file = pl.read_csv(base_path / "fragments.tsv", separator="\t")
 
-    label_mass_3T = meta["label_mass_3T"]
-    label_mass_5T = meta["label_mass_5T"]
-
     if "intensity_cutoff" in meta:
         intensity_cutoff = meta["intensity_cutoff"]
     else:
         intensity_cutoff = 1e4
 
-    if "sequence_mass" in meta:
-        ms1_mass = meta["sequence_mass"]
-    else:
-        ms1_mass = None
+    # if "sequence_mass" in meta:
+    #     ms1_mass = meta["sequence_mass"]
+    # else:
+    #     ms1_mass = None
+
+    matching_threshold = MATCHING_THRESHOLD
 
     # If the left and right columns exist, means that the input file is from a simulation with the sequence of each fragment known!
     if "left" in input_file.columns or "right" in input_file.columns:
@@ -64,20 +63,17 @@ def test_testcase(testcase):
             (pl.col("observed_mass").alias("observed_mass")),
             (pl.col("true_mass_with_backbone").alias("true_mass")),
         )
-        with pl.Config(tbl_rows=30):
-            print(fragments)
 
         _, unique_masses, explanation_masses = initialize_nucleotide_df(
             reduce_set=False
         )
 
         # TODO: Discuss why it doesn't work with the estimated error!
-        matching_threshold, _, _ = estimate_MS_error_matching_threshold(
-            fragments, unique_masses=unique_masses, simulation=simulation
-        )
-        matching_threshold = MATCHING_THRESHOLD
+        # matching_threshold, _, _ = estimate_MS_error_matching_threshold(
+        #     fragments, unique_masses=unique_masses, simulation=simulation
+        # )
         # print(
-        #     "Matching threshold (rel errror) estimated from singleton masses = ",
+        #     "Matching threshold (rel error) estimated from singleton masses = ",
         #     matching_threshold,
         # )
 
@@ -86,22 +82,21 @@ def test_testcase(testcase):
             reduced_table=True,
             reduced_set=False,
             compression_rate=COMPRESSION_RATE,
-            tolerance=MATCHING_THRESHOLD,
+            tolerance=matching_threshold,
             precision=TOLERANCE,
         )
 
     else:
         simulation = False
 
-        fragment_masses_read = pl.read_csv(base_path / "fragments.tsv", separator="\t")
+        fragments = pl.read_csv(base_path / "fragments.tsv", separator="\t")
 
-        matching_threshold = MATCHING_THRESHOLD
         # TODO: Discuss why it doesn't work with the estimated error!
         # matching_threshold, _, _ = estimate_MS_error_MATCHING_THRESHOLD(
         #     fragment_masses_read, unique_masses=unique_masses, simulation=simulation
         # )
         # print(
-        #     "Matching threshold (rel errror) estimated from singleton masses = ",
+        #     "Matching threshold (rel error) estimated from singleton masses = ",
         #     matching_threshold,
         # )
 
@@ -112,22 +107,24 @@ def test_testcase(testcase):
             reduced_table=False,
             reduced_set=True,
             compression_rate=COMPRESSION_RATE,
-            tolerance=MATCHING_THRESHOLD,
+            tolerance=max(matching_threshold, 20e-6),
+            # tolerance=matching_threshold,
             precision=TOLERANCE,
         )
 
-        fragments = mark_terminal_fragment_candidates(
-            fragment_masses_read,
-            dp_table=dp_table,
-            output_file_path=base_path / "fragments_with_classification_marked.tsv",
-            # matching_threshold=matching_threshold,
-            intensity_cutoff=intensity_cutoff,
-            ms1_mass=ms1_mass,
-        )
-        with pl.Config(tbl_rows=30):
-            print(fragments)
-
     # fragment_masses = pl.Series(fragments.select(pl.col("observed_mass"))).to_list()
+
+    breakage_dict = build_breakage_dict(
+        mass_5_prime=meta["label_mass_5T"], mass_3_prime=meta["label_mass_3T"]
+    )
+
+    fragments = classify_fragments(
+        fragments,
+        dp_table=dp_table,
+        breakage_dict=breakage_dict,
+        output_file_path=base_path / "standard_unit_fragments.tsv",
+        intensity_cutoff=intensity_cutoff,
+    )
 
     solver_params = {
         "solver": select_solver(os.environ.get("SOLVER", "cbc")),
@@ -139,17 +136,11 @@ def test_testcase(testcase):
     prediction = Predictor(
         dp_table=dp_table,
         explanation_masses=explanation_masses,
-        mass_tag_start=label_mass_5T,
-        mass_tag_end=label_mass_3T,
-    ).predict(fragments=fragments, seq_len=len(true_seq), solver_params=solver_params)
-
-    fragment_masses = pl.Series(
-        prediction.fragments.select(pl.col("observed_mass"))
-    ).to_list()
-
-    prediction_masses = pl.Series(
-        prediction.fragments.select(pl.col("predicted_fragment_mass"))
-    ).to_list()
+    ).predict(
+        fragments=fragments,
+        seq_len=len(true_seq),
+        solver_params=solver_params,
+    )
 
     print("Predicted sequence =\t", prediction.sequence)
     print("True sequence =\t\t", true_seq)
@@ -167,23 +158,15 @@ def test_testcase(testcase):
     with open(base_path / "meta.yaml", "w") as f:
         yaml.safe_dump(meta, f)
 
-    # Assert if the sequences match!
+    # Assert whether the sequences match
     assert prediction.sequence == true_seq
 
-    # Assert if all the sequence fragments match the predicted fragments in mass at least!
+    # Assert whether observed and predicted mass match for all fragments
+    # Note this will only be true for simulated data; experimental data does
+    # not have any guarantee accuracy
     if simulation:
-        # This will only be true for simulated data, for experimental data, every fragment is not predicted so accurately!
-        for i in range(len(fragment_masses)):
-            # print(f"Fragment {i}: {fragment_masses[i]} vs {prediction_masses[i]}")
-            if (
-                abs(fragment_masses[i] - prediction_masses[i])
-                < 0.01 * fragment_masses[i]
-            ):
-                # TODO: The above is a temporary measure, there is an issue with ONE fragment in test_06!
-                assert (
-                    abs(prediction_masses[i] / fragment_masses[i] - 1)
-                    <= matching_threshold
-                )
-
-
-# test_testcase("test_04")
+        for idx in range(len(prediction.fragments)):
+            assert abs(
+                prediction.fragments.item(idx, "standard_unit_mass")
+                - prediction.fragments.item(idx, "predicted_mass")
+            ) <= matching_threshold * prediction.fragments.item(idx, "observed_mass")

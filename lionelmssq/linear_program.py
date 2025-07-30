@@ -7,12 +7,29 @@ from pulp import (
     lpSum,
     getSolver,
 )
-from lionelmssq.common import get_singleton_set_item, milp_is_one
+from typing import Any, Set
 from itertools import combinations
 import polars as pl
 import numpy as np
 
 from lionelmssq.masses import UNMODIFIED_BASES
+
+
+MILP_QUASI_ONE_THRESHOLD = 0.9
+
+
+def milp_is_one(var, threshold=MILP_QUASI_ONE_THRESHOLD):
+    # Due to the LP relaxation, the LP sometimes does not exactly output
+    # probabilities of 1 for one nucleotide or one position.
+    # Hence, we need to set a threshold for the LP relaxation.
+    return var.value() >= threshold
+
+
+def get_singleton_set_item(set_: Set[Any]) -> Any:
+    """Return the only item in a set."""
+    if len(set_) != 1:
+        raise ValueError(f"Expected a set with one item, got {set_}")
+    return next(iter(set_))
 
 
 class LinearProgramInstance:
@@ -26,16 +43,19 @@ class LinearProgramInstance:
         self.seq_len = len(skeleton_seq)
         self.nucleoside_names = nucleosides.get_column("nucleoside").to_list()
         self.nucleoside_masses = dict(
-            nucleosides.select(["nucleoside", "monoisotopic_mass"]).iter_rows()
+            nucleosides.select(["nucleoside", "standard_unit_mass"]).iter_rows()
         )
-        fragment_masses = self.fragments.get_column("observed_mass").to_list()
+
+        fragment_masses = self.fragments.get_column("standard_unit_mass").to_list()
         valid_fragment_range = list(range(len(fragment_masses)))
+
         # x: binary variables indicating fragment j presence at position i
         self.x = self._set_x(valid_fragment_range, fragments)
         # y: binary variables indicating base b at position i
         self.y = self._set_y(skeleton_seq)
         # z: binary variables indicating product of x and y
         self.z = self._set_z(valid_fragment_range)
+
         # weight_diff: difference between fragment monoisotopic mass and sum of masses of bases in fragment as estimated in the MILP
         self.predicted_mass_diff = self._set_predicted_mass_difference(
             fragment_masses, valid_fragment_range
@@ -53,50 +73,39 @@ class LinearProgramInstance:
             ]
             for i in range(self.seq_len)
         ]
-        idx_index = fragments.get_column_index("index")
-        idx_min_end = fragments.get_column_index("min_end")
-        idx_max_end = fragments.get_column_index("max_end")
 
-        # ensure that start fragments are aligned at the beginning of the sequence
-        if len(fragments.filter(pl.col("true_start"))) > 0:
-            for fragment in fragments.filter(pl.col("true_start")).rows():
-                # j is the row index where the "index" matches fragment.index
-                # fragment.index uses the original (mass sorted) index of the read fragment files,
-                # but in self.fragments we disqualify many fragments of the original file.
-                # Hence, we need to find the correct row index in self.fragments which corresponds to the original index
-                # since in the MILP we fit all the fragments of self.fragments
-                j = (
-                    fragments.with_row_index("row_index")
-                    .filter(pl.col("index") == fragment[idx_index])
-                    .item(0, "row_index")
-                )
-                # min_end is exclusive
-                for i in range(fragment[idx_min_end]):
+        for j in range(len(fragments)):
+            # Ensure complete fragments are aligned at the whole sequence
+            if fragments.item(j, "breakage") == "START_END":
+                for i in range(self.seq_len):
                     x[i][j].setInitialValue(1)
                     x[i][j].fixValue()
-                for i in range(fragment[idx_max_end], self.seq_len):
-                    x[i][j].setInitialValue(0)
-                    x[i][j].fixValue()
+                continue
 
-        # ensure that end fragments are aligned at the end of the sequence
-        if len(fragments.filter(pl.col("true_end"))) > 0:
-            for fragment in fragments.filter(pl.col("true_end")).rows():
-                j = (
-                    fragments.with_row_index("row_index")
-                    .filter(pl.col("index") == fragment[idx_index])
-                    .item(0, "row_index")
-                )
+            # Ensure START fragments are aligned at the beginning of the sequence
+            if "START" in fragments.item(j, "breakage"):
                 # min_end is exclusive
-                for i in range(fragment[idx_min_end] + 1, 0):
+                for i in range(fragments.item(j, "min_end")):
                     x[i][j].setInitialValue(1)
                     x[i][j].fixValue()
-                for i in range(-self.seq_len, fragment[idx_max_end] + 1):
+                for i in range(fragments.item(j, "max_end"), self.seq_len):
                     x[i][j].setInitialValue(0)
                     x[i][j].fixValue()
+                continue
 
-        # Fragments that aren't either start or end are either inner or uncertain.
-        # Hence, we don't further constrain their positioning and length and let the
-        # LP decide.
+            # Ensure END fragments are aligned at the end of the sequence
+            if "END" in fragments.item(j, "breakage"):
+                # min_end is exclusive
+                for i in range(fragments.item(j, "min_end") + 1, 0):
+                    x[i][j].setInitialValue(1)
+                    x[i][j].fixValue()
+                for i in range(-self.seq_len, fragments.item(j, "max_end") + 1):
+                    x[i][j].setInitialValue(0)
+                    x[i][j].fixValue()
+                continue
+
+            # Internal fragments are not further constrained in both their
+            # positioning and length for now; let the LP decide.
 
         return x
 
@@ -219,12 +228,12 @@ class LinearProgramInstance:
         return problem
 
     def check_feasibility(self, solver_params, threshold):
-        solver = getSolver(**solver_params)
+        solver = getSolver(**solver_params, timeLimit=30)
         _ = self.problem.solve(solver)
         return self.problem.objective.value() <= threshold
 
     def evaluate(self, solver_params):
-        solver = getSolver(**solver_params)
+        solver = getSolver(**solver_params, timeLimit=300)
         # gurobi.msg = False
         # TODO the returned value resembles the accuracy of the prediction
         _ = self.problem.solve(solver)
@@ -236,7 +245,7 @@ class LinearProgramInstance:
             "".join([val if val is not None else "-" for val in seq]),
         )
 
-        fragment_masses = self.fragments.get_column("observed_mass").to_list()
+        fragment_masses = self.fragments.get_column("standard_unit_mass").to_list()
 
         # Get the sequence corresponding to each of the fragments!
         fragment_seq = [
@@ -262,6 +271,7 @@ class LinearProgramInstance:
             for j in list(range(len(fragment_masses)))
         ]
 
+        observed_masses = self.fragments.get_column("observed_mass").to_list()
         fragment_predictions = pl.from_dicts(
             [
                 {
@@ -275,10 +285,11 @@ class LinearProgramInstance:
                         default=-1,
                     )
                     + 1,  # right bound shall be exclusive, hence add 1
-                    "predicted_fragment_seq": fragment_seq[j],
-                    "predicted_fragment_mass": predicted_fragment_mass[j],
-                    "observed_mass": fragment_masses[j],
-                    "predicted_mass_diff": self.predicted_mass_diff[j].value(),
+                    "observed_mass": observed_masses[j],
+                    "standard_unit_mass": fragment_masses[j],
+                    "predicted_mass": predicted_fragment_mass[j],
+                    "predicted_diff": self.predicted_mass_diff[j].value(),
+                    "predicted_seq": fragment_seq[j],
                 }
                 for j in list(range(len(fragment_masses)))
             ]

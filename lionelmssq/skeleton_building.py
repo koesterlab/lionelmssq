@@ -2,88 +2,75 @@ from dataclasses import dataclass
 from itertools import chain, groupby
 from typing import List, Optional, Set, Tuple
 from loguru import logger
+import polars as pl
 
 from lionelmssq.common import (
     Explanation,
-    Side,
-    calculate_diff_dp,
-    calculate_diff_errors,
+    calculate_error_threshold,
+    calculate_explanations,
 )
 from lionelmssq.mass_table import DynamicProgrammingTable
 
 
 @dataclass
-class TerminalFragment:
-    index: int  # Fragment index
-    min_end: int  # Minimum length of fragment (negative for end fragments)
-    max_end: int  # Maximum length of fragment (negative for end fragments)
-
-
-@dataclass
 class SkeletonBuilder:
-    fragment_masses: dict
-    fragments_side: dict
-    mass_diffs: dict
     explanations: list[Explanation]
     seq_len: int
     dp_table: DynamicProgrammingTable
 
     def build_skeleton(
-        self, modification_rate: float
-    ) -> Tuple[
-        List[Set[str]],
-        List[TerminalFragment],
-        List[TerminalFragment],
-        List[int],
-        List[int],
-    ]:
+        self, modification_rate: float, fragments: pl.DataFrame
+    ) -> Tuple[List[Set[str]], pl.DataFrame]:
         # Build skeleton sequence from 5'-end
-        start_skeleton, start_fragments, non_start_fragments = self._predict_skeleton(
+        start_skeleton, start_fragments = self._predict_skeleton(
             modification_rate=modification_rate,
-            fragment_masses=self.fragment_masses[Side.START],
-            candidate_fragments=self.fragments_side[Side.START]
-            .get_column("index")
-            .to_list(),
-            mass_diffs=self.mass_diffs[Side.START],
+            fragments=fragments.filter(pl.col("breakage").str.contains("START")),
             skeleton_seq=[set() for _ in range(self.seq_len)],
         )
         print("Skeleton sequence start = ", start_skeleton)
 
         # Build skeleton sequence from 3'-end
-        end_skeleton, end_fragments, non_end_fragments = self._predict_skeleton(
+        end_skeleton, end_fragments = self._predict_skeleton(
             modification_rate=modification_rate,
-            fragment_masses=self.fragment_masses[Side.END],
-            candidate_fragments=self.fragments_side[Side.END]
-            .get_column("index")
-            .to_list(),
-            mass_diffs=self.mass_diffs[Side.END],
+            fragments=fragments.filter(pl.col("breakage").str.contains("END")),
             skeleton_seq=[set() for _ in range(self.seq_len)],
         )
+        # Reverse skeleton from END fragments
         end_skeleton = end_skeleton[::-1]
-        end_fragments = adjust_end_fragment_info(end_fragments)
+
+        # Adapt end indices to reverse indexation of END fragments
+        end_fragments = end_fragments.with_columns(
+            pl.struct("min_end", "max_end")
+            .map_elements(lambda x: -1 - x["max_end"], return_dtype=int)
+            .alias("min_end"),
+            pl.struct("min_end", "max_end")
+            .map_elements(lambda x: -1 - x["min_end"], return_dtype=int)
+            .alias("max_end"),
+        )
+
+        # Ensure fragments only occur once
+        end_fragments = end_fragments.filter(
+            ~pl.col("index").is_in(start_fragments.get_column("index").to_list())
+        )
+
         print("Skeleton sequence end = ", end_skeleton)
 
         # Combine both skeleton sequences
         skeleton_seq = self._align_skeletons(start_skeleton, end_skeleton)
         print("Skeleton sequence = ", skeleton_seq)
 
-        # Return skeleton and fragments (divided by sequence end and validity)
+        # Return skeleton and valid terminal fragments
         return (
             skeleton_seq,
-            start_fragments,
-            end_fragments,
-            non_start_fragments,
-            non_end_fragments,
+            pl.concat([start_fragments, end_fragments]),
         )
 
     def _predict_skeleton(
         self,
         modification_rate,
-        fragment_masses,
-        candidate_fragments,
-        mass_diffs,
+        fragments,
         skeleton_seq: Optional[List[Set[str]]] = None,
-    ) -> Tuple[List[Set[str]], List[TerminalFragment], List[int]]:
+    ) -> Tuple[List[Set[str]], pl.DataFrame]:
         # Initialize skeleton sequence (if not already given)
         if skeleton_seq is None:
             skeleton_seq = [set() for _ in range(self.seq_len)]
@@ -97,51 +84,67 @@ class SkeletonBuilder:
         carry_over_mass = 0.0
         last_valid_mass = 0.0
 
-        fragments_valid = []
-        fragments_invalid = []
-        for fragment_index, (diff, mass) in enumerate(zip(mass_diffs, fragment_masses)):
+        invalid_list = []
+        for frag_idx in range(len(fragments)):
+            # Define mass difference to last fragment
+            diff = (
+                fragments.item(frag_idx, "standard_unit_mass")
+                - fragments.item(frag_idx - 1, "standard_unit_mass")
+                if frag_idx > 0
+                else fragments.item(0, "standard_unit_mass")
+            )
+
+            # Add carry-over mass (in case the last fragment was rejected)
             diff += carry_over_mass
-            assert pos
+
+            # Stop if no positions are left to fill
+            if len(pos) == 0:
+                invalid_list.append(fragments.item(frag_idx, "index"))
+                continue
 
             explanations = self.explain_difference(
                 diff=diff,
                 prev_mass=last_valid_mass,
+                current_mass=fragments.item(frag_idx, "observed_mass"),
                 modification_rate=modification_rate,
             )
 
+            # Skip fragments without any explanation
             if explanations is None:
-                is_valid = False
-            else:
-                next_pos, skeleton_seq = self.update_skeleton_for_given_explanations(
-                    explanations=explanations,
-                    pos=pos,
-                    skeleton_seq=skeleton_seq,
-                )
-                is_valid = len(next_pos) != 0
-
-            if is_valid:
-                fragments_valid.append(
-                    TerminalFragment(
-                        index=candidate_fragments[fragment_index],
-                        min_end=min(next_pos, default=None),
-                        max_end=max(next_pos, default=None),
-                    )
-                )
-                pos = next_pos
-                last_valid_mass = mass
-                carry_over_mass = 0.0
-            else:
+                # Add a warning in the log for the skipped fragment
                 logger.warning(
-                    f"Skipping fragment {fragment_index} with observed mass {mass} because no "
-                    "explanations are found for the mass difference."
+                    f"Skipping {fragments.item(frag_idx, 'breakage')} fragment "
+                    f"{fragments.item(frag_idx, 'index')} with observed mass "
+                    f"{fragments.item(frag_idx, 'observed_mass'):.4f} and SU "
+                    f"mass "
+                    f"{fragments.item(frag_idx, 'standard_unit_mass'):.4f} "
+                    f"because no explanations were found."
                 )
+                # Save the current mass as carry-over
                 carry_over_mass = diff
 
-                # Consider the skipped fragments as internal fragments! Add back the terminal mass to this fragments!
-                if fragment_index and candidate_fragments:
-                    fragments_invalid.append(candidate_fragments[fragment_index])
+                invalid_list.append(fragments.item(frag_idx, "index"))
+            else:
+                # Continue skeleton building if a non-empty explanation exists
+                if len(explanations) > 0:
+                    pos, skeleton_seq = self.update_skeleton_for_given_explanations(
+                        explanations=explanations,
+                        pos=pos,
+                        skeleton_seq=skeleton_seq,
+                    )
 
-        return skeleton_seq, fragments_valid, fragments_invalid
+                # Adapt information on end index for given fragment
+                fragments[frag_idx, "min_end"] = min(pos, default=0)
+                fragments[frag_idx, "max_end"] = max(pos, default=-1)
+
+                # Update carry-over information for next fragment
+                last_valid_mass = fragments.item(frag_idx, "observed_mass")
+                carry_over_mass = 0.0
+
+        # Filter out all invalid fragments
+        fragments = fragments.filter(~pl.col("index").is_in(invalid_list))
+
+        return skeleton_seq, fragments
 
     def _align_skeletons(
         self, start_skeleton: List[Set[str]], end_skeleton: List[Set[str]]
@@ -160,17 +163,27 @@ class SkeletonBuilder:
 
         return skeleton_seq
 
-    def explain_difference(self, diff, prev_mass, modification_rate):
+    def explain_difference(
+        self,
+        diff,
+        prev_mass,
+        current_mass,
+        modification_rate,
+    ):
         if diff in self.explanations:
             return self.explanations.get(diff, [])
         else:
-            threshold = calculate_diff_errors(
+            threshold = calculate_error_threshold(
                 prev_mass,
-                prev_mass + diff,
+                current_mass,
                 self.dp_table.tolerance,
             )
-            return calculate_diff_dp(
-                diff, threshold, modification_rate, self.seq_len, self.dp_table
+            return calculate_explanations(
+                diff,
+                threshold,  # * diff,
+                modification_rate,
+                self.seq_len,
+                self.dp_table,
             )
 
     def update_skeleton_for_given_explanations(
@@ -214,10 +227,3 @@ class SkeletonBuilder:
             # Update possible follow-up positions
             next_pos.update(p + expl_len for expl_len in alphabet_per_expl_len)
         return next_pos, skeleton_seq
-
-
-def adjust_end_fragment_info(fragments):
-    return [
-        TerminalFragment(fragment.index, -1 - fragment.max_end, -1 - fragment.min_end)
-        for fragment in fragments
-    ]
