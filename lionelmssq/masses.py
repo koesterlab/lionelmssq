@@ -14,39 +14,41 @@ REDUCE_TABLE = True
 REDUCE_SET = False
 COMPRESSION_RATE = 32
 
-ROUND_DECIMAL = 5  # The precision (after decimal points) to which to consider the nucleoside masses.
-# In the nucleoside table, it can happen that the same masses may be reported with different precision values. So UNIQUE MASSES after rounding may not be unique without doing the above step!
 
-TOLERANCE = 1e-3  # For perfect matching, the TOLERANCE should be the
-# precision (digits after decimal) to which the masses of nucleosides and sequences are reported, i.e. 1e-(ROUND_DECIMAL)
+# Set the number of decimal places up to which to consider nucleoside masses
+DECIMAL_PLACES = 5
+
+# Set precision for calculations
+# Note that for perfect matching, this should be equal or higher the precision
+# to which nucleosides/sequences masses are reported, i.e. 1e-(DECIMAL_PLACES)
+TOLERANCE = 1e-3
+
+# Set relative matching threshold such that we consider
+# abs(sum(masses)/target_mass - 1) < MATCHING_THRESHOLD for matching
+# Note that the error is on the higher side than would be for a good
+# calibrated machine (6ppm), but in the absence of an experimental measurement
+# of this error, this conservative value works well
+MATCHING_THRESHOLD = 12e-6
 
 
 # Build dict with elemental masses
-ELEMENTAL_MASSES = pl.read_csv(
+elements = pl.read_csv(
     importlib.resources.files(__package__) / "assets" / "element_masses.tsv",
     separator="\t",
 )
 ELEMENT_MASSES = {
-    row[ELEMENTAL_MASSES.get_column_index("symbol")]: row[
-        ELEMENTAL_MASSES.get_column_index("mass")
-    ]
-    for row in ELEMENTAL_MASSES.iter_rows()
+    row[elements.get_column_index("symbol")]: row[elements.get_column_index("mass")]
+    for row in elements.iter_rows()
 }
 
-# PHOSPHATE_LINK_MASS = 61.95577  # P(30.97389) + 2*O(2*15.99491) - H(1.00783)
+# Set mass for phosphate link between bases
 PHOSPHATE_LINK_MASS = (
     ELEMENT_MASSES["P"] + 2 * ELEMENT_MASSES["O"] - ELEMENT_MASSES["H+"]
 )
 
 
-# This dictates a relative matching threshold such that we consider abs(sum(masses)/target_mass - 1) < MATCHING_THRESHOLD to be matched!
-MATCHING_THRESHOLD = 12e-6
-# We choose 20 ppm as the default error from the MS.
-# The error is on the higher side than would be for a good calibrated machine (6ppm),
-# but in the absence of an experimental measurement of this error, this (very) conservative value works well!
-
-
 def initialize_nucleotide_df(reduce_set):
+    # Read nucleoside masses from file
     masses = pl.read_csv(
         (
             importlib.resources.files(__package__)
@@ -55,19 +57,19 @@ def initialize_nucleotide_df(reduce_set):
         ),
         separator="\t",
     )
-    # Note: "masses.tsv" has multiples nucleosides with the same mass!
-
     assert masses.columns == _COLS
 
-    masses = masses.with_columns(pl.col("monoisotopic_mass").round(ROUND_DECIMAL))
+    # Round nucleoside masses
+    masses = masses.with_columns(pl.col("monoisotopic_mass").round(DECIMAL_PLACES))
 
+    # Select unique nucleoside masses
     unique_masses = (
         masses.group_by("monoisotopic_mass", maintain_order=True)
         .first()
         .select(pl.col(_COLS))
     )
-    # For mass explanation for ladder building, to convert the masses to an integer value for the DP algorithm!
 
+    # Convert unique nucleoside masses to integer nucleotide ones for the DP algorithm
     explanation_masses = unique_masses.with_columns(
         ((pl.col("monoisotopic_mass") + PHOSPHATE_LINK_MASS) / TOLERANCE)
         .round(0)
@@ -108,6 +110,7 @@ def build_breakage_dict(mass_5_prime, mass_3_prime):
         "c/y": -element_masses["H+"],
     }
 
+    # Collect all unique breakage-related mass combinations in dict
     breakage_dict = {}
     for start, end in list(product(start_dict.keys(), end_dict.keys())):
         val = int((start_dict[start] + end_dict[end]) / TOLERANCE)
