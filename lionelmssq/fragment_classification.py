@@ -18,11 +18,12 @@ def classify_fragments(
         fragment_masses = fragment_masses.with_columns(
             pl.lit(intensity_cutoff * 1.1).alias("intensity"),
         )
-    else:
-        fragment_masses = fragment_masses.with_columns(
-            pl.col("neutral_mass").alias("observed_mass"),
-        )
 
+    # Rename 'neutral_mass' values from deisotoping to 'observed_mass'
+    if "neutral_mass" in fragment_masses.columns:
+        fragment_masses = fragment_masses.rename({"neutral_mass": "observed_mass"})
+
+    # Index fragments
     fragment_masses = fragment_masses.with_row_index("fragment_index")
 
     # Copy each fragment for each unique breakage weights
