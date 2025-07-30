@@ -49,7 +49,7 @@ class Predictor:
 
         fragments = (
             fragments.with_row_index(name="orig_index")
-            .sort("observed_mass")
+            .sort("standard_unit_mass")
             .with_row_index(name="index")
         )
         print(len(fragments))
