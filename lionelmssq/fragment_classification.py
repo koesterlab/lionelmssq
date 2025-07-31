@@ -136,4 +136,13 @@ def filter_by_sequence_mass(
         pl.col("standard_unit_mass") < mass_cutoff + MAX_VARIANCE
     )
 
+    # Filter out all "complete" fragments with a too low SU mass (within variance)
+    fragments = fragments.filter(
+        (pl.col("standard_unit_mass") > mass_cutoff - MAX_VARIANCE)
+        | ~(
+            pl.col("breakage").str.contains("START")
+            & pl.col("breakage").str.contains("END")
+        )
+    )
+
     return fragments
