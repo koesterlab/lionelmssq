@@ -5,6 +5,9 @@ from lionelmssq.mass_explanation import is_valid_mass
 from lionelmssq.mass_table import DynamicProgrammingTable
 
 
+MAX_VARIANCE = 10
+
+
 # METHOD: For each breakage option that yields a valid mass (i.e. one that
 # can be explained by any valid composition) for a given fragment, duplicate
 # the fragment and determine its breakage-independent standard-unit mass by
@@ -17,6 +20,7 @@ def classify_fragments(
     breakage_dict: dict,
     output_file_path=None,
     intensity_cutoff=0.5e6,
+    seq_mass=None,
     mass_cutoff=50000,
 ) -> pl.DataFrame:
     # If no intensity is given, set it so that all fragments pass the filter
@@ -85,6 +89,20 @@ def classify_fragments(
         .filter(pl.col("observed_mass") < mass_cutoff)
     )
 
+    if seq_mass is not None:
+        # Select highest valid SU mass, i.e. sequence mass without START_END breakage
+        mass_cutoff = (
+            seq_mass
+            - [
+                mass * dp_table.precision
+                for mass in breakage_dict
+                if "START_END" in breakage_dict[mass]
+            ][0]
+        )
+
+        # Filter fragments based on mass cutoff
+        fragments = filter_by_sequence_mass(mass_cutoff, fragments)
+
     # Write terminal fragments to file if file name is given
     if output_file_path is not None:
         fragments.write_csv(output_file_path, separator="\t")
@@ -108,3 +126,23 @@ def is_singleton(mass, integer_masses, dp_table, threshold=None):
         if value in integer_masses:
             return True
     return False
+
+
+def filter_by_sequence_mass(
+    mass_cutoff: float, fragments: pl.DataFrame
+) -> pl.DataFrame:
+    # Filter out fragments that have a too high SU mass (within variance)
+    fragments = fragments.filter(
+        pl.col("standard_unit_mass") < mass_cutoff + MAX_VARIANCE
+    )
+
+    # Filter out all "complete" fragments with a too low SU mass (within variance)
+    fragments = fragments.filter(
+        (pl.col("standard_unit_mass") > mass_cutoff - MAX_VARIANCE)
+        | ~(
+            pl.col("breakage").str.contains("START")
+            & pl.col("breakage").str.contains("END")
+        )
+    )
+
+    return fragments

@@ -54,6 +54,7 @@ def main():
         meta = {}
 
     intensity_cutoff = meta["intensity_cutoff"] if "intensity_cutoff" in meta else 1e4
+    seq_mass = meta["sequence_mass"] if "sequence_mass" in meta else None
     start_tag = meta["label_mass_5T"] if "label_mass_5T" in meta else 555.1294
     end_tag = meta["label_mass_3T"] if "label_mass_3T" in meta else 455.1491
 
@@ -91,6 +92,7 @@ def main():
         breakage_dict=breakages,
         output_file_path=fragment_dir / "standard_unit_fragments.tsv",
         intensity_cutoff=intensity_cutoff,
+        seq_mass=seq_mass,
     )
 
     prediction = Predictor(

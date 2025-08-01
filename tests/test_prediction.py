@@ -46,10 +46,10 @@ def test_testcase(testcase):
     else:
         intensity_cutoff = 1e4
 
-    # if "sequence_mass" in meta:
-    #     ms1_mass = meta["sequence_mass"]
-    # else:
-    #     ms1_mass = None
+    if "sequence_mass" in meta:
+        seq_mass = meta["sequence_mass"]
+    else:
+        seq_mass = None
 
     matching_threshold = MATCHING_THRESHOLD
 
@@ -124,6 +124,7 @@ def test_testcase(testcase):
         breakage_dict=breakage_dict,
         output_file_path=base_path / "standard_unit_fragments.tsv",
         intensity_cutoff=intensity_cutoff,
+        seq_mass=seq_mass,
     )
 
     solver_params = {

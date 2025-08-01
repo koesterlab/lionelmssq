@@ -233,7 +233,7 @@ class LinearProgramInstance:
         return self.problem.objective.value() <= threshold
 
     def evaluate(self, solver_params):
-        solver = getSolver(**solver_params, timeLimit=300)
+        solver = getSolver(**solver_params, timeLimit=60)
         # gurobi.msg = False
         # TODO the returned value resembles the accuracy of the prediction
         _ = self.problem.solve(solver)

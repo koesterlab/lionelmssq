@@ -3,4 +3,5 @@ intensity_cutoff: 500000
 label_mass_3T: 455.1491
 label_mass_5T: 555.1294
 predicted_sequence: GAUUGUCGUG
+sequence_mass: 4150.6171
 true_sequence: GAUUGUCGUG
