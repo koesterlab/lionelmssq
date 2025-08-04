@@ -102,7 +102,10 @@ class SkeletonBuilder:
             # Bin fragments with similar mass together
             if neighbour_diff <= neighbour_threshold:
                 current_bin.append(frag_idx)
-                continue
+
+                # Only process bin immediately if there are no unbinned fragments left
+                if frag_idx + 1 < len(fragments):
+                    continue
 
             explanations = self.explain_bin_differences(
                 prev_bin=last_valid_bin,
