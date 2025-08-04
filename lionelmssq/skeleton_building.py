@@ -197,17 +197,26 @@ class SkeletonBuilder:
                 for current_idx in current_bin
             ]
 
-        return (
-            None
-            if all(expl is None for expl in explanations)
-            else [
-                expl
-                for expl_list in explanations
-                if expl_list is not None
-                for expl in expl_list
-                if expl is not None
-            ]
-        )
+        # If no explanation was found, return None
+        if all(expl is None for expl in explanations):
+            return None
+
+        # Flatten explanation list
+        explanations = [
+            expl
+            for expl_list in explanations
+            if expl_list is not None
+            for expl in expl_list
+            if expl is not None
+        ]
+
+        # Remove duplicates from explanation list
+        unique_explanations = []
+        for expl in explanations:
+            if expl not in unique_explanations:
+                unique_explanations.append(expl)
+
+        return unique_explanations
 
     def explain_mass_difference(
         self,

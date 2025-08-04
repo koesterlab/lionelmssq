@@ -25,6 +25,9 @@ class Explanation:
     def __repr__(self):
         return f"{{{','.join(self.nucleosides)}}}"
 
+    def __eq__(self, other):
+        return self.nucleosides == other
+
 
 def calculate_error_threshold(mass1: float, mass2: float, threshold: float) -> float:
     match ERROR_METHOD:
