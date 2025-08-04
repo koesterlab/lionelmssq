@@ -256,7 +256,7 @@ class SkeletonBuilder:
                     [
                         expl
                         for expl in explanations
-                        if 0 <= p + len(expl) < self.seq_len
+                        if 0 <= p + len(expl) - 1 < self.seq_len
                     ],
                     len,
                 )
