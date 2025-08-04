@@ -82,12 +82,26 @@ class SkeletonBuilder:
         last_valid_bin = None
 
         invalid_list = []
-        for frag_idx in range(len(fragments)):
-            current_bin = [frag_idx]
-
+        current_bin = [0]
+        for frag_idx in range(1, len(fragments)):
             # Stop if no positions are left to fill
             if len(pos) == 0:
                 invalid_list.append(fragments.item(frag_idx, "index"))
+                continue
+
+            # Define mass difference and threshold between neighbouring fragments
+            neighbour_diff = fragments.item(
+                frag_idx, "standard_unit_mass"
+            ) - fragments.item(frag_idx - 1, "standard_unit_mass")
+            neighbour_threshold = calculate_error_threshold(
+                fragments.item(frag_idx - 1, "observed_mass"),
+                fragments.item(frag_idx, "observed_mass"),
+                self.dp_table.tolerance,
+            )
+
+            # Bin fragments with similar mass together
+            if neighbour_diff <= neighbour_threshold:
+                current_bin.append(frag_idx)
                 continue
 
             explanations = self.explain_bin_differences(
@@ -111,21 +125,23 @@ class SkeletonBuilder:
 
                     invalid_list.append(fragments.item(idx, "index"))
             else:
-                # Continue skeleton building if a non-empty explanation exists
-                if len(explanations) > 0:
-                    pos, skeleton_seq = self.update_skeleton_for_given_explanations(
-                        explanations=explanations,
-                        pos=pos,
-                        skeleton_seq=skeleton_seq,
-                    )
+                # Continue skeleton building
+                pos, skeleton_seq = self.update_skeleton_for_given_explanations(
+                    explanations=explanations,
+                    pos=pos,
+                    skeleton_seq=skeleton_seq,
+                )
 
                 # Adapt information on end index for given bin
                 for idx in current_bin:
                     fragments[idx, "min_end"] = min(pos, default=0)
                     fragments[idx, "max_end"] = max(pos, default=-1)
 
-                # Update bin information
+                # Update information for previous bin
                 last_valid_bin = current_bin
+
+            # Update information for current bin
+            current_bin = [frag_idx]
 
         # Filter out all invalid fragments
         fragments = fragments.filter(~pl.col("index").is_in(invalid_list))
@@ -187,6 +203,7 @@ class SkeletonBuilder:
             else [
                 expl
                 for expl_list in explanations
+                if expl_list is not None
                 for expl in expl_list
                 if expl is not None
             ]
