@@ -76,70 +76,75 @@ class SkeletonBuilder:
             skeleton_seq = [set() for _ in range(self.seq_len)]
 
         # METHOD: Reject fragments which are not explained well by mass
-        # differences. While iterating through the fragments,
-        # the "carry_over_mass" keeps a track of the rejected mass
-        # difference (to add to the next considered difference) and
-        # "last_valid_mass" keeps a track of the last not-rejected mass
+        # differences. While iterating through the fragments, bin them
+        # to keep track of similar masses and reject them in bulk.
         pos = {0}
-        carry_over_mass = 0.0
-        last_valid_mass = 0.0
+        last_valid_bin = None
 
         invalid_list = []
-        for frag_idx in range(len(fragments)):
-            # Define mass difference to last fragment
-            diff = (
-                fragments.item(frag_idx, "standard_unit_mass")
-                - fragments.item(frag_idx - 1, "standard_unit_mass")
-                if frag_idx > 0
-                else fragments.item(0, "standard_unit_mass")
-            )
-
-            # Add carry-over mass (in case the last fragment was rejected)
-            diff += carry_over_mass
-
+        current_bin = [0]
+        for frag_idx in range(1, len(fragments)):
             # Stop if no positions are left to fill
             if len(pos) == 0:
                 invalid_list.append(fragments.item(frag_idx, "index"))
                 continue
 
-            explanations = self.explain_difference(
-                diff=diff,
-                prev_mass=last_valid_mass,
-                current_mass=fragments.item(frag_idx, "observed_mass"),
+            # Define mass difference and threshold between neighbouring fragments
+            neighbour_diff = fragments.item(
+                frag_idx, "standard_unit_mass"
+            ) - fragments.item(frag_idx - 1, "standard_unit_mass")
+            neighbour_threshold = calculate_error_threshold(
+                fragments.item(frag_idx - 1, "observed_mass"),
+                fragments.item(frag_idx, "observed_mass"),
+                self.dp_table.tolerance,
+            )
+
+            # Bin fragments with similar mass together
+            if neighbour_diff <= neighbour_threshold:
+                current_bin.append(frag_idx)
+
+                # Only process bin immediately if there are no unbinned fragments left
+                if frag_idx + 1 < len(fragments):
+                    continue
+
+            explanations = self.explain_bin_differences(
+                prev_bin=last_valid_bin,
+                current_bin=current_bin,
+                fragments=fragments,
                 modification_rate=modification_rate,
             )
 
-            # Skip fragments without any explanation
+            # Skip bins without any explanation
             if explanations is None:
-                # Add a warning in the log for the skipped fragment
-                logger.warning(
-                    f"Skipping {fragments.item(frag_idx, 'breakage')} fragment "
-                    f"{fragments.item(frag_idx, 'index')} with observed mass "
-                    f"{fragments.item(frag_idx, 'observed_mass'):.4f} and SU "
-                    f"mass "
-                    f"{fragments.item(frag_idx, 'standard_unit_mass'):.4f} "
-                    f"because no explanations were found."
-                )
-                # Save the current mass as carry-over
-                carry_over_mass = diff
-
-                invalid_list.append(fragments.item(frag_idx, "index"))
-            else:
-                # Continue skeleton building if a non-empty explanation exists
-                if len(explanations) > 0:
-                    pos, skeleton_seq = self.update_skeleton_for_given_explanations(
-                        explanations=explanations,
-                        pos=pos,
-                        skeleton_seq=skeleton_seq,
+                for idx in current_bin:
+                    # Add a warning in the log for the skipped fragment
+                    logger.warning(
+                        f"Skipping {fragments.item(idx, 'breakage')} fragment "
+                        f"{fragments.item(idx, 'index')} with observed mass "
+                        f"{fragments.item(idx, 'observed_mass'):.4f} and SU "
+                        f"mass {fragments.item(idx, 'standard_unit_mass'):.4f}"
+                        f" because no explanations were found."
                     )
 
-                # Adapt information on end index for given fragment
-                fragments[frag_idx, "min_end"] = min(pos, default=0)
-                fragments[frag_idx, "max_end"] = max(pos, default=-1)
+                    invalid_list.append(fragments.item(idx, "index"))
+            else:
+                # Continue skeleton building
+                pos, skeleton_seq = self.update_skeleton_for_given_explanations(
+                    explanations=explanations,
+                    pos=pos,
+                    skeleton_seq=skeleton_seq,
+                )
 
-                # Update carry-over information for next fragment
-                last_valid_mass = fragments.item(frag_idx, "observed_mass")
-                carry_over_mass = 0.0
+                # Adapt information on end index for given bin
+                for idx in current_bin:
+                    fragments[idx, "min_end"] = min(pos, default=0)
+                    fragments[idx, "max_end"] = max(pos, default=-1)
+
+                # Update information for previous bin
+                last_valid_bin = current_bin
+
+            # Update information for current bin
+            current_bin = [frag_idx]
 
         # Filter out all invalid fragments
         fragments = fragments.filter(~pl.col("index").is_in(invalid_list))
@@ -163,13 +168,66 @@ class SkeletonBuilder:
 
         return skeleton_seq
 
-    def explain_difference(
+    def explain_bin_differences(
         self,
-        diff,
-        prev_mass,
-        current_mass,
-        modification_rate,
-    ):
+        prev_bin: list,
+        current_bin: list,
+        fragments: pl.DataFrame,
+        modification_rate: float,
+    ) -> List[Explanation]:
+        # Collect mass explanations for first bin
+        if prev_bin is None:
+            explanations = [
+                self.explain_mass_difference(
+                    diff=fragments.item(idx, "standard_unit_mass"),
+                    prev_mass=0.0,
+                    current_mass=fragments.item(idx, "observed_mass"),
+                    modification_rate=modification_rate,
+                )
+                for idx in current_bin
+            ]
+        # Collect mass explanations between previous and current bin
+        else:
+            explanations = [
+                self.explain_mass_difference(
+                    diff=fragments.item(current_idx, "standard_unit_mass")
+                    - fragments.item(prev_idx, "standard_unit_mass"),
+                    prev_mass=fragments.item(prev_idx, "observed_mass"),
+                    current_mass=fragments.item(current_idx, "observed_mass"),
+                    modification_rate=modification_rate,
+                )
+                for prev_idx in prev_bin
+                for current_idx in current_bin
+            ]
+
+        # If no explanation was found, return None
+        if all(expl is None for expl in explanations):
+            return None
+
+        # Flatten explanation list
+        explanations = [
+            expl
+            for expl_list in explanations
+            if expl_list is not None
+            for expl in expl_list
+            if expl is not None
+        ]
+
+        # Remove duplicates from explanation list
+        unique_explanations = []
+        for expl in explanations:
+            if expl not in unique_explanations:
+                unique_explanations.append(expl)
+
+        return unique_explanations
+
+    def explain_mass_difference(
+        self,
+        diff: float,
+        prev_mass: float,
+        current_mass: float,
+        modification_rate: float,
+    ) -> List[Explanation]:
         if diff in self.explanations:
             return self.explanations.get(diff, [])
         else:
@@ -180,7 +238,7 @@ class SkeletonBuilder:
             )
             return calculate_explanations(
                 diff,
-                threshold,  # * diff,
+                threshold,
                 modification_rate,
                 self.seq_len,
                 self.dp_table,
@@ -201,7 +259,7 @@ class SkeletonBuilder:
                     [
                         expl
                         for expl in explanations
-                        if 0 <= p + len(expl) < self.seq_len
+                        if 0 <= p + len(expl) - 1 < self.seq_len
                     ],
                     len,
                 )

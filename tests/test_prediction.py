@@ -23,13 +23,17 @@ from lionelmssq.masses import (
 
 _TESTCASES = importlib.resources.files("tests") / "testcases"
 
+TESTS = ["test_01", "test_02", "test_03"]
+# TESTS = ["test_01", "test_02", "test_03", "test_04", "test_05", "test_08"]
+
 
 @pytest.mark.parametrize(
     "testcase",
-    # [tc for tc in _TESTCASES.iterdir() if tc.name not in ["test_08", ".DS_Store"]],
-    [tc for tc in _TESTCASES.iterdir() if tc.name in ["test_01", "test_02", "test_03"]],
+    # [tc for tc in _TESTCASES.iterdir() if tc.name not in [".DS_Store"]],
+    # ids=[tc.name for tc in _TESTCASES.iterdir() if tc.name not in [".DS_Store"]],
+    [tc for tc in _TESTCASES.iterdir() if tc.name in TESTS],
+    ids=[tc.name for tc in _TESTCASES.iterdir() if tc.name in TESTS],
 )
-# @pytest.mark.parametrize("testcase", _TESTCASES.iterdir())
 def test_testcase(testcase):
     base_path = _TESTCASES / testcase
     with open(base_path / "meta.yaml", "r") as f:
