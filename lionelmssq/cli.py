@@ -47,11 +47,9 @@ def main():
 
     # Read additional parameter from meta file
     fragment_dir = settings.fragments.parent
-    if "observed_mass" not in fragments.columns:
-        with open(fragment_dir / "meta.yaml", "r") as f:
-            meta = yaml.safe_load(f)
-    else:
-        meta = {}
+    file_prefix = settings.fragments.stem
+    with open(fragment_dir / f"{file_prefix}.meta.yaml", "r") as f:
+        meta = yaml.safe_load(f)
 
     intensity_cutoff = meta["intensity_cutoff"] if "intensity_cutoff" in meta else 1e4
     seq_mass = meta["sequence_mass"] if "sequence_mass" in meta else None
@@ -90,7 +88,7 @@ def main():
         fragment_masses=fragments,
         dp_table=dp_table,
         breakage_dict=breakages,
-        output_file_path=fragment_dir / "standard_unit_fragments.tsv",
+        output_file_path=fragment_dir / f"{file_prefix}.standard_unit_fragments.tsv",
         intensity_cutoff=intensity_cutoff,
         seq_mass=seq_mass,
     )
