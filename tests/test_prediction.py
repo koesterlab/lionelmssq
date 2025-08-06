@@ -36,7 +36,7 @@ TESTS = ["test_01", "test_02", "test_03"]
 )
 def test_testcase(testcase):
     base_path = _TESTCASES / testcase
-    with open(base_path / "meta.yaml", "r") as f:
+    with open(base_path / "fragments.meta.yaml", "r") as f:
         meta = yaml.safe_load(f)
     if meta.get("skip"):
         pytest.skip("Testcase is marked as skipped in meta.yaml")
@@ -126,7 +126,7 @@ def test_testcase(testcase):
         fragments,
         dp_table=dp_table,
         breakage_dict=breakage_dict,
-        output_file_path=base_path / "standard_unit_fragments.tsv",
+        output_file_path=base_path / "fragments.standard_unit_fragments.tsv",
         intensity_cutoff=intensity_cutoff,
         seq_mass=seq_mass,
     )
@@ -154,13 +154,13 @@ def test_testcase(testcase):
         plot_prediction(
             prediction,
             true_seq,
-        ).save(base_path / "plot.html")
+        ).save(base_path / "fragments.plot.html")
         # The above is temporary, until the prediction for the entire intact sequence is fixed!)
     else:
-        plot_prediction(prediction, true_seq).save(base_path / "plot.html")
+        plot_prediction(prediction, true_seq).save(base_path / "fragments.plot.html")
 
     meta["predicted_sequence"] = "".join(prediction.sequence)
-    with open(base_path / "meta.yaml", "w") as f:
+    with open(base_path / "fragments.meta.yaml", "w") as f:
         yaml.safe_dump(meta, f)
 
     # Assert whether the sequences match

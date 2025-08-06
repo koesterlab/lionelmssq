@@ -6,5 +6,5 @@ poetry.lock
 *gurobi.log
 *.code-workspace
 tests/self_test*
-tests/testcases/*/plot.html
-tests/testcases/*/standard_unit_fragments.tsv
+tests/testcases/*/fragments.plot.html
+tests/testcases/*/fragments.standard_unit_fragments.tsv
