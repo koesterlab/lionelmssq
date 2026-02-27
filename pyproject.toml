@@ -1,6 +1,6 @@
 [project]
 name = "spectrseqtools"
-version = "0.1.2"
+version = "0.1.3"
 description = "SpectrSeqTools is a fully automatic analysis platform for sequencing small RNA molecules including 144 known post translational modifications measured via LC-MS/MS data."
 authors = [
     { name = "Laura Christine Kuehle", email = "laura.kuehle@mpi-dortmund.mpg.de" },
