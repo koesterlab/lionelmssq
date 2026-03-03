@@ -1,10 +1,15 @@
 from typing import List
 import polars as pl
 import altair as alt
+import importlib.resources
 
 from spectrseqtools.prediction import Prediction
 from spectrseqtools.common import parse_nucleosides
 
+MASSES = pl.read_csv(
+        (importlib.resources.files(__package__) / "assets" / "masses.tsv"),
+        separator="\t",
+)
 
 STATUS_COLORS = {
     "False": "#808285",
@@ -12,12 +17,18 @@ STATUS_COLORS = {
 }
 
 
+def convert_seq(seq: List[str]) -> List[str]:
+    return [
+        MASSES.row(named=True, by_predicate=(pl.col("nucleoside") == val))[
+            "encoding"] for val in seq]
+
 def plot_prediction(
     prediction: Prediction,
     true_seq: List[str],
     simulation: pl.DataFrame = None,
 ) -> alt.Chart:
-    pred_seq = prediction.sequence
+    true_seq = convert_seq(seq=true_seq)
+    pred_seq = convert_seq(seq=prediction.sequence)
     seq_data = pl.DataFrame(
         {
             "nucleoside": true_seq + pred_seq,
@@ -91,6 +102,10 @@ def plot_prediction(
         data = fragment_predictions
 
     data = data.with_columns(
+        pl.col("fragment_seq")
+        .map_elements(convert_seq, return_dtype=pl.List(
+            pl.Utf8))
+        .name.keep(),
         pl.when(pl.col("ppm_error").abs().lt(10))
         .then(pl.lit("True"))
         .otherwise(pl.lit("False"))
