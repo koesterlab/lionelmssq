@@ -111,14 +111,15 @@ def plot_prediction(
     # Remove the rows with empty sets for fragment_seq! This may happen when the LP_relaxation_threshold is too high and because of the LP relaxation, the pribability is low!
 
     max_value = data_seq["right"].max()
+    data = data.with_columns(pl.lit(2*((max_value + 2)//2)).alias("max_value"))
 
     def facet_plots(df_mass, df_seq, index):
         p1 = (
             alt.Chart(df_mass)
-            .mark_text(align="left", dx=3)
+            .mark_text(align="left", dx=5)
             .encode(
-                alt.X("right").axis(labels=False, ticks=False),
-                alt.Y("type"),
+                x=alt.X("max_value").axis(labels=False, ticks=False),
+                y=alt.Y("type"),
                 text=alt.Text("ppm_info"),
                 color=alt.value(
                     STATUS_COLORS[df_mass.row(0, named=True)["within_tolerance"]]
