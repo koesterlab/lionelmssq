@@ -7,8 +7,8 @@ from spectrseqtools.prediction import Prediction
 from spectrseqtools.common import parse_nucleosides
 
 MASSES = pl.read_csv(
-        (importlib.resources.files(__package__) / "assets" / "masses.tsv"),
-        separator="\t",
+    (importlib.resources.files(__package__) / "assets" / "masses.tsv"),
+    separator="\t",
 )
 
 STATUS_COLORS = {
@@ -19,8 +19,10 @@ STATUS_COLORS = {
 
 def convert_seq(seq: List[str]) -> List[str]:
     return [
-        MASSES.row(named=True, by_predicate=(pl.col("nucleoside") == val))[
-            "encoding"] for val in seq]
+        MASSES.row(named=True, by_predicate=(pl.col("nucleoside") == val))["encoding"]
+        for val in seq
+    ]
+
 
 def plot_prediction(
     prediction: Prediction,
@@ -42,8 +44,8 @@ def plot_prediction(
 
     def fmt_ppm(cols):
         return pl.Series(
-            [f"{row[0]:.2f} ({row[1]:.2f} = {row[2]:.3f} ppm)" for row in zip(
-                *cols)])
+            [f"{row[0]:.2f} ({row[1]:.2f} = {row[2]:.3f} ppm)" for row in zip(*cols)]
+        )
 
     def create_range(left, right):
         return list(range(left, right))
@@ -103,8 +105,7 @@ def plot_prediction(
 
     data = data.with_columns(
         pl.col("fragment_seq")
-        .map_elements(convert_seq, return_dtype=pl.List(
-            pl.Utf8))
+        .map_elements(convert_seq, return_dtype=pl.List(pl.Utf8))
         .name.keep(),
         pl.when(pl.col("ppm_error").abs().lt(10))
         .then(pl.lit("True"))
@@ -126,7 +127,7 @@ def plot_prediction(
     # Remove the rows with empty sets for fragment_seq! This may happen when the LP_relaxation_threshold is too high and because of the LP relaxation, the pribability is low!
 
     max_value = data_seq["right"].max()
-    data = data.with_columns(pl.lit(2*((max_value + 2)//2)).alias("max_value"))
+    data = data.with_columns(pl.lit(2 * ((max_value + 2) // 2)).alias("max_value"))
 
     def facet_plots(df_mass, df_seq, index):
         p1 = (
