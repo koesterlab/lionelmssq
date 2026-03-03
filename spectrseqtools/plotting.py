@@ -62,7 +62,7 @@ def plot_prediction(
         # .map_elements(reject_none, return_dtype=pl.List(pl.Utf8))
         .map_elements(parse_nucleosides, return_dtype=pl.List(pl.Utf8))
         .alias("fragment_seq"),
-        pl.lit(None).cast(str).alias("type"),
+        pl.lit("").cast(str).alias("type"),
     ).with_row_index()
 
     if simulation is not None:
@@ -119,7 +119,7 @@ def plot_prediction(
             .mark_text(align="left", dx=5)
             .encode(
                 x=alt.X("max_value").axis(labels=False, ticks=False),
-                y=alt.Y("type"),
+                y=alt.Y("type", title=""),
                 text=alt.Text("ppm_info"),
                 color=alt.value(
                     STATUS_COLORS[df_mass.row(0, named=True)["within_tolerance"]]
