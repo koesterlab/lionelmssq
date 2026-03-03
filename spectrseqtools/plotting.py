@@ -1,9 +1,27 @@
 from typing import List
 import polars as pl
 import altair as alt
+import importlib.resources
 
 from spectrseqtools.prediction import Prediction
 from spectrseqtools.common import parse_nucleosides
+
+MASSES = pl.read_csv(
+    (importlib.resources.files(__package__) / "assets" / "masses.tsv"),
+    separator="\t",
+)
+
+STATUS_COLORS = {
+    "False": "#808285",
+    "True": "black",
+}
+
+
+def convert_seq(seq: List[str]) -> List[str]:
+    return [
+        MASSES.row(named=True, by_predicate=(pl.col("nucleoside") == val))["encoding"]
+        for val in seq
+    ]
 
 
 def plot_prediction(
@@ -11,7 +29,8 @@ def plot_prediction(
     true_seq: List[str],
     simulation: pl.DataFrame = None,
 ) -> alt.Chart:
-    pred_seq = prediction.sequence
+    true_seq = convert_seq(seq=true_seq)
+    pred_seq = convert_seq(seq=prediction.sequence)
     seq_data = pl.DataFrame(
         {
             "nucleoside": true_seq + pred_seq,
@@ -22,6 +41,11 @@ def plot_prediction(
 
     def fmt_mass(cols):
         return pl.Series([f"{row[0]:.2f} ({row[1]:.2f})" for row in zip(*cols)])
+
+    def fmt_ppm(cols):
+        return pl.Series(
+            [f"{row[0]:.2f} ({row[1]:.2f} = {row[2]:.3f} ppm)" for row in zip(*cols)]
+        )
 
     def create_range(left, right):
         return list(range(left, right))
@@ -39,11 +63,19 @@ def plot_prediction(
             ["standard_unit_mass", "predicted_diff"],
             fmt_mass,
         ).alias("mass_info"),
+        pl.struct(["observed_mass", "predicted_diff"])
+        .map_elements(
+            lambda x: (
+                x["predicted_diff"] * 10**6 / (x["observed_mass"] - x["predicted_diff"])
+            ),
+            return_dtype=pl.Float64,
+        )
+        .alias("ppm_error"),
         pl.col("predicted_seq")
         # .map_elements(reject_none, return_dtype=pl.List(pl.Utf8))
         .map_elements(parse_nucleosides, return_dtype=pl.List(pl.Utf8))
         .alias("fragment_seq"),
-        pl.lit(None).cast(str).alias("type"),
+        pl.lit("").cast(str).alias("type"),
     ).with_row_index()
 
     if simulation is not None:
@@ -71,6 +103,20 @@ def plot_prediction(
     else:
         data = fragment_predictions
 
+    data = data.with_columns(
+        pl.col("fragment_seq")
+        .map_elements(convert_seq, return_dtype=pl.List(pl.Utf8))
+        .name.keep(),
+        pl.when(pl.col("ppm_error").abs().lt(10))
+        .then(pl.lit("True"))
+        .otherwise(pl.lit("False"))
+        .alias("within_tolerance"),
+        pl.map_batches(
+            ["observed_mass", "predicted_diff", "ppm_error"],
+            fmt_ppm,
+        ).alias("ppm_info"),
+    )
+
     # new = data.with_columns(pl.col("range").map_elements(lambda x: len(x)).alias("len_range")).with_columns(pl.col("fragment_seq").map_elements(lambda x: len(x)).alias("len_fragment_seq"))
     # with pl.Config(tbl_rows=-1):
     #    print(new)
@@ -81,15 +127,19 @@ def plot_prediction(
     # Remove the rows with empty sets for fragment_seq! This may happen when the LP_relaxation_threshold is too high and because of the LP relaxation, the pribability is low!
 
     max_value = data_seq["right"].max()
+    data = data.with_columns(pl.lit(2 * ((max_value + 2) // 2)).alias("max_value"))
 
     def facet_plots(df_mass, df_seq, index):
         p1 = (
             alt.Chart(df_mass)
-            .mark_text(align="left", dx=3)
+            .mark_text(align="left", dx=5)
             .encode(
-                alt.X("right").axis(labels=False, ticks=False),
-                alt.Y("type"),
-                alt.Text("mass_info"),
+                x=alt.X("max_value").axis(labels=False, ticks=False),
+                y=alt.Y("type", title=""),
+                text=alt.Text("ppm_info"),
+                color=alt.value(
+                    STATUS_COLORS[df_mass.row(0, named=True)["within_tolerance"]]
+                ),
             )
         )
 
