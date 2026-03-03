@@ -6,6 +6,12 @@ from spectrseqtools.prediction import Prediction
 from spectrseqtools.common import parse_nucleosides
 
 
+STATUS_COLORS = {
+    "False": "#808285",
+    "True": "black",
+}
+
+
 def plot_prediction(
     prediction: Prediction,
     true_seq: List[str],
@@ -39,6 +45,14 @@ def plot_prediction(
             ["standard_unit_mass", "predicted_diff"],
             fmt_mass,
         ).alias("mass_info"),
+        pl.struct(["observed_mass", "predicted_diff"])
+        .map_elements(
+            lambda x: (
+                x["predicted_diff"] * 10**6 / (x["observed_mass"] - x["predicted_diff"])
+            ),
+            return_dtype=pl.Float64,
+        )
+        .alias("ppm_error"),
         pl.col("predicted_seq")
         # .map_elements(reject_none, return_dtype=pl.List(pl.Utf8))
         .map_elements(parse_nucleosides, return_dtype=pl.List(pl.Utf8))
@@ -71,6 +85,13 @@ def plot_prediction(
     else:
         data = fragment_predictions
 
+    data = data.with_columns(
+        pl.when(pl.col("ppm_error").abs().lt(10))
+        .then(pl.lit("True"))
+        .otherwise(pl.lit("False"))
+        .alias("within_tolerance"),
+    )
+
     # new = data.with_columns(pl.col("range").map_elements(lambda x: len(x)).alias("len_range")).with_columns(pl.col("fragment_seq").map_elements(lambda x: len(x)).alias("len_fragment_seq"))
     # with pl.Config(tbl_rows=-1):
     #    print(new)
@@ -90,6 +111,9 @@ def plot_prediction(
                 alt.X("right").axis(labels=False, ticks=False),
                 alt.Y("type"),
                 alt.Text("mass_info"),
+                color=alt.value(
+                    STATUS_COLORS[df_mass.row(0, named=True)["within_tolerance"]]
+                ),
             )
         )
 
