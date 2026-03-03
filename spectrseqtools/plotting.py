@@ -29,6 +29,11 @@ def plot_prediction(
     def fmt_mass(cols):
         return pl.Series([f"{row[0]:.2f} ({row[1]:.2f})" for row in zip(*cols)])
 
+    def fmt_ppm(cols):
+        return pl.Series(
+            [f"{row[0]:.2f} ({row[1]:.2f} = {row[2]:.3f} ppm)" for row in zip(
+                *cols)])
+
     def create_range(left, right):
         return list(range(left, right))
 
@@ -90,6 +95,10 @@ def plot_prediction(
         .then(pl.lit("True"))
         .otherwise(pl.lit("False"))
         .alias("within_tolerance"),
+        pl.map_batches(
+            ["observed_mass", "predicted_diff", "ppm_error"],
+            fmt_ppm,
+        ).alias("ppm_info"),
     )
 
     # new = data.with_columns(pl.col("range").map_elements(lambda x: len(x)).alias("len_range")).with_columns(pl.col("fragment_seq").map_elements(lambda x: len(x)).alias("len_fragment_seq"))
@@ -110,7 +119,7 @@ def plot_prediction(
             .encode(
                 alt.X("right").axis(labels=False, ticks=False),
                 alt.Y("type"),
-                alt.Text("mass_info"),
+                text=alt.Text("ppm_info"),
                 color=alt.value(
                     STATUS_COLORS[df_mass.row(0, named=True)["within_tolerance"]]
                 ),
