@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import List, Tuple
 
 from spectrseqtools.common import initialize_raw_file_iterator
+from spectrseqtools.masses import ELEMENT_MASSES
 
 rt = get_mono()
 
@@ -24,6 +25,7 @@ COL_TYPES_DEISOTOPED = {
     "intensity": pl.Float64,
     "neutral_mass": pl.Float64,
     "is_precursor_deisotoped": pl.Boolean,
+    "is_raw_peak": pl.Boolean,
     "mz": pl.Float64,
 }
 
@@ -156,7 +158,7 @@ def set_averagine(backbone: str) -> dict:
     return average_composition
 
 
-def deconvolute(file_path: str, params: dict) -> pl.DataFrame:
+def deconvolute(file_path: str, params: dict, extract_all: bool = False) -> pl.DataFrame:
     """
     Deconvolute/deisotope peaks in MS2 scans from ThermoFisher RAW file.
 
@@ -195,7 +197,7 @@ def deconvolute(file_path: str, params: dict) -> pl.DataFrame:
             continue
 
         # Deconvolute scan to get list of deisotoped peaks
-        peak_list += deconvolute_scan(scan=scan, params=params)
+        peak_list += deconvolute_scan(scan=scan, params=params, extract_all=extract_all)
 
     return aggregate_peaks_into_fragments(peak_list)
 
@@ -208,11 +210,12 @@ class DeisotopedPeak:
     intensity: float
     neutral_mass: float
     is_precursor_deisotoped: bool
+    is_raw_peak: bool
     mz: float
 
 
 def deconvolute_scan(
-    scan: ms_ditp.data_source.Scan, params: dict
+    scan: ms_ditp.data_source.Scan, params: dict, extract_all: bool = False
 ) -> List[DeisotopedPeak]:
     """
     Deconvolute peaks from MS2 scan.
@@ -285,8 +288,36 @@ def deconvolute_scan(
                 <= mz
                 <= precursor_mz
             ),
+            is_raw_peak = False,
             mz=mz,
         )
+
+    if extract_all:
+        env_peak_idx = []
+        for peak in peak_set.peaks:
+            peak_envelope = peak.envelope
+            for env_peak in peak_envelope:
+                env_peak_mz = env_peak[0]
+                raw_peak = scan.has_peak(env_peak_mz)
+                if raw_peak is not None:
+                    env_peak_idx.append(raw_peak.index)
+        
+        precursor_charge = scan.precursor_information.charge
+        for peak in scan.peak_set:
+            if peak.index in env_peak_idx:
+                continue
+            for z in range(1, precursor_charge+1):
+                peak_list.append(
+                    DeisotopedPeak(
+                        scan_id=scan_id,
+                        scan_time=scan_time,
+                        peak_idx=idx*1000 + peak.index,
+                        intensity=peak.intensity,
+                        neutral_mass=(peak.mz*z) + (z*ELEMENT_MASSES["H+"]),
+                        is_precursor_deisotoped=False,
+                        is_raw_peak = True,
+                        mz=peak.mz,
+                    ))
     return peak_list
 
 
