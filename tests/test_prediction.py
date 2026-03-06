@@ -17,7 +17,7 @@ from spectrseqtools.masses import (
     DEFAULT_INTENSITY_CUTOFF,
     EXPLANATION_MASSES,
     NUC_REPS,
-    TOLERANCE,
+    PRECISION,
     MATCHING_THRESHOLD,
     UNMODIFIED_BASES,
     build_breakage_dict,
@@ -146,7 +146,7 @@ def test_testcase(testcase):
     seq_mass_su = (
         seq_mass_obs
         - [
-            mass * TOLERANCE
+            mass * PRECISION
             for mass in breakage_dict
             if "START_END" in breakage_dict[mass]
         ][0]
@@ -156,7 +156,7 @@ def test_testcase(testcase):
     seq_info = SequenceInformation(
         max_len=int(
             seq_mass_su
-            / TOLERANCE
+            / PRECISION
             / min(
                 pl.Series(
                     explanation_masses.filter(pl.col("modification_rate") > 0.0).select(
@@ -175,7 +175,7 @@ def test_testcase(testcase):
         explanation_masses,
         compression_rate=COMPRESSION_RATE,
         tolerance=matching_threshold,
-        precision=TOLERANCE,
+        precision=PRECISION,
         seq=seq_info,
     )
 

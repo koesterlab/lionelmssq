@@ -30,7 +30,7 @@ COMPRESSION_RATE = 32
 DECIMAL_PLACES = 3
 
 # Set precision for calculations
-TOLERANCE = 10 ** (-DECIMAL_PLACES)
+PRECISION = 10 ** (-DECIMAL_PLACES)
 
 # Set relative matching threshold such that we consider
 # abs(sum(masses)/target_mass - 1) < MATCHING_THRESHOLD for matching
@@ -85,7 +85,7 @@ def initialize_nucleotide_df() -> pl.DataFrame:
         )  # Subtract one proton from nucleotide (for singleton charge)
         .alias("theoretical_mz")
     ).with_columns(
-        ((pl.col("monoisotopic_mass") + PHOSPHATE_LINK_MASS) / TOLERANCE)
+        ((pl.col("monoisotopic_mass") + PHOSPHATE_LINK_MASS) / PRECISION)
         .round(0)
         .cast(pl.Int64)
         .alias("tolerated_integer_masses")
@@ -158,7 +158,7 @@ def build_breakage_dict(mass_5_prime, mass_3_prime):
     # Collect all unique breakage-related mass combinations in dict
     breakage_dict = {}
     for start, end in list(product(start_dict.keys(), end_dict.keys())):
-        val = int((start_dict[start] + end_dict[end]) / TOLERANCE)
+        val = int((start_dict[start] + end_dict[end]) / PRECISION)
         if val not in breakage_dict:
             breakage_dict[val] = []
         breakage_dict[val] += [f"{start}_{end}"]

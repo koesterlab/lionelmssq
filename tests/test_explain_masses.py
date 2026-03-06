@@ -8,7 +8,7 @@ from spectrseqtools.mass_explanation import (
 from spectrseqtools.masses import (
     EXPLANATION_MASSES,
     PHOSPHATE_LINK_MASS,
-    TOLERANCE,
+    PRECISION,
 )
 from spectrseqtools.mass_table import DynamicProgrammingTable, SequenceInformation
 
@@ -57,7 +57,7 @@ def test_testcase_with_recursion(testcase, threshold):
     seq_info = SequenceInformation(
         max_len=int(
             testcase[0]
-            / TOLERANCE
+            / PRECISION
             / min(
                 pl.Series(
                     EXPLANATION_MASSES.select("tolerated_integer_masses")
@@ -73,7 +73,7 @@ def test_testcase_with_recursion(testcase, threshold):
         EXPLANATION_MASSES,
         compression_rate=32,
         tolerance=threshold,
-        precision=TOLERANCE,
+        precision=PRECISION,
         seq=seq_info,
     )
 
@@ -102,7 +102,7 @@ def test_testcase_with_table(testcase, compression, threshold, memo):
     seq_info = SequenceInformation(
         max_len=int(
             testcase[0]
-            / TOLERANCE
+            / PRECISION
             / min(
                 pl.Series(
                     EXPLANATION_MASSES.select("tolerated_integer_masses")
@@ -118,7 +118,7 @@ def test_testcase_with_table(testcase, compression, threshold, memo):
         EXPLANATION_MASSES,
         compression_rate=compression,
         tolerance=threshold,
-        precision=TOLERANCE,
+        precision=PRECISION,
         seq=seq_info,
     )
 
