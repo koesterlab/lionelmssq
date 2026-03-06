@@ -32,12 +32,12 @@ DECIMAL_PLACES = 3
 # Set precision for calculations
 PRECISION = 10 ** (-DECIMAL_PLACES)
 
-# Set relative matching threshold such that we consider
-# abs(sum(masses)/target_mass - 1) < MATCHING_THRESHOLD for matching
+# Set relative tolerance such that we consider
+# abs(sum(masses)/target_mass - 1) < TOLERANCE for matching
 # Note that the error is on the higher side than would be for a good
-# calibrated machine (6ppm), but in the absence of an experimental measurement
-# of this error, this conservative value works well
-MATCHING_THRESHOLD = 10e-6
+# calibrated machine (10 ppm), but in the absence of an experimental
+# measurement of this error, this conservative value works well
+TOLERANCE = 10e-6
 
 
 # Build dict with elemental masses

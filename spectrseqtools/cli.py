@@ -11,7 +11,7 @@ from spectrseqtools.masses import (
     COMPRESSION_RATE,
     DEFAULT_INTENSITY_CUTOFF,
     EXPLANATION_MASSES,
-    MATCHING_THRESHOLD,
+    TOLERANCE,
     NUC_REPS,
     PRECISION,
     UNMODIFIED_BASES,
@@ -179,7 +179,7 @@ def main():
     dp_table = DynamicProgrammingTable(
         nucleotide_df=explanation_masses,
         compression_rate=int(COMPRESSION_RATE),
-        tolerance=MATCHING_THRESHOLD,
+        tolerance=TOLERANCE,
         precision=PRECISION,
         seq=seq_info,
     )

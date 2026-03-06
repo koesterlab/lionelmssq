@@ -47,13 +47,13 @@ MASS_SEQ_DICT = dict(
         TEST_SEQ,
     )
 )
-THRESHOLDS = [10e-6, 5e-6, 2e-6]
+TOLERANCES = [10e-6, 5e-6, 2e-6]
 MOD_RATE = 0.5
 
 
 @pytest.mark.parametrize("testcase", MASS_SEQ_DICT.items())
-@pytest.mark.parametrize("threshold", THRESHOLDS)
-def test_testcase_with_recursion(testcase, threshold):
+@pytest.mark.parametrize("tolerance", TOLERANCES)
+def test_testcase_with_recursion(testcase, tolerance):
     seq_info = SequenceInformation(
         max_len=int(
             testcase[0]
@@ -72,7 +72,7 @@ def test_testcase_with_recursion(testcase, threshold):
     dp_table = DynamicProgrammingTable(
         EXPLANATION_MASSES,
         compression_rate=32,
-        tolerance=threshold,
+        tolerance=tolerance,
         precision=PRECISION,
         seq=seq_info,
     )
@@ -97,8 +97,8 @@ COMPRESSION_RATES = [32]
 @pytest.mark.parametrize("testcase", MASS_SEQ_DICT.items())
 @pytest.mark.parametrize("compression", COMPRESSION_RATES)
 @pytest.mark.parametrize("memo", WITH_MEMO)
-@pytest.mark.parametrize("threshold", THRESHOLDS)
-def test_testcase_with_table(testcase, compression, threshold, memo):
+@pytest.mark.parametrize("tolerance", TOLERANCES)
+def test_testcase_with_table(testcase, compression, tolerance, memo):
     seq_info = SequenceInformation(
         max_len=int(
             testcase[0]
@@ -117,7 +117,7 @@ def test_testcase_with_table(testcase, compression, threshold, memo):
     dp_table = DynamicProgrammingTable(
         EXPLANATION_MASSES,
         compression_rate=compression,
-        tolerance=threshold,
+        tolerance=tolerance,
         precision=PRECISION,
         seq=seq_info,
     )

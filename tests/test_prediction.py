@@ -18,7 +18,7 @@ from spectrseqtools.masses import (
     EXPLANATION_MASSES,
     NUC_REPS,
     PRECISION,
-    MATCHING_THRESHOLD,
+    TOLERANCE,
     UNMODIFIED_BASES,
     build_breakage_dict,
 )
@@ -98,7 +98,7 @@ def test_testcase(testcase):
         else DEFAULT_INTENSITY_CUTOFF
     )
     explanation_masses = EXPLANATION_MASSES
-    matching_threshold = MATCHING_THRESHOLD
+    tolerance = TOLERANCE
 
     # Filter by singletons
     if singletons is not None:
@@ -128,12 +128,12 @@ def test_testcase(testcase):
     )
 
     # TODO: Discuss why it doesn't work with the estimated error!
-    # matching_threshold, _, _ = estimate_MS_error_matching_threshold(
+    # tolerance, _, _ = estimate_MS_error_tolerance(
     #     fragments, unique_masses=unique_masses, simulation=simulation
     # )
     # print(
-    #     "Matching threshold (rel error) estimated from singleton masses = ",
-    #     matching_threshold,
+    #     "Tolerance (rel error) estimated from singleton masses = ",
+    #     tolerance,
     # )
 
     # Build breakage dict
@@ -174,7 +174,7 @@ def test_testcase(testcase):
     dp_table = DynamicProgrammingTable(
         explanation_masses,
         compression_rate=COMPRESSION_RATE,
-        tolerance=matching_threshold,
+        tolerance=tolerance,
         precision=PRECISION,
         seq=seq_info,
     )
@@ -234,4 +234,4 @@ def test_testcase(testcase):
     #         assert abs(
     #             prediction.fragments.item(idx, "standard_unit_mass")
     #             - prediction.fragments.item(idx, "predicted_mass")
-    #         ) <= matching_threshold * prediction.fragments.item(idx, "observed_mass")
+    #         ) <= tolerance * prediction.fragments.item(idx, "observed_mass")
