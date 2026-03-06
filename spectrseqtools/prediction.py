@@ -114,8 +114,8 @@ class Predictor:
             "Number of internal fragments before filtering: ",
             len(
                 fragments.filter(
-                    ~pl.col("breakage").str.contains("START")
-                    & ~pl.col("breakage").str.contains("END")
+                    ~pl.col("fragmentation").str.contains("START")
+                    & ~pl.col("fragmentation").str.contains("END")
                 )
             ),
         )
@@ -135,8 +135,8 @@ class Predictor:
             "Number of internal fragments after filtering: ",
             len(
                 fragments.filter(
-                    ~pl.col("breakage").str.contains("START")
-                    & ~pl.col("breakage").str.contains("END")
+                    ~pl.col("fragmentation").str.contains("START")
+                    & ~pl.col("fragmentation").str.contains("END")
                 )
             ),
         )
@@ -145,12 +145,12 @@ class Predictor:
         print("Number of fragments considered for fitting:", len(fragments))
         print()
 
-        if len(fragments.filter(pl.col("breakage").str.contains("START"))) == 0:
+        if len(fragments.filter(pl.col("fragmentation").str.contains("START"))) == 0:
             logger.warning(
                 "No start fragments provided, this will likely lead to suboptimal results."
             )
 
-        if len(fragments.filter(pl.col("breakage").str.contains("END"))) == 0:
+        if len(fragments.filter(pl.col("fragmentation").str.contains("END"))) == 0:
             logger.warning(
                 "No end fragments provided, this will likely lead to suboptimal results."
             )
@@ -237,8 +237,8 @@ class Predictor:
             # TODO: Add terminal-fragment filter based on LP output of
             #  sequence-length estimation and reuse the below (for speed-up)
             # # Skip terminal (i.e. non-internal) fragments
-            # if ("START" in fragments.item(idx, "breakage")) or (
-            #     "END" in fragments.item(idx, "breakage")
+            # if ("START" in fragments.item(idx, "fragmentation")) or (
+            #     "END" in fragments.item(idx, "fragmentation")
             # ):
             #     continue
 
@@ -262,10 +262,12 @@ class Predictor:
         # Collect explanation for all reasonable mass differences for each side
         explanations = {
             **self.collect_explanations_per_side(
-                fragments=fragments.filter(pl.col("breakage").str.contains("START")),
+                fragments=fragments.filter(pl.col(
+                    "fragmentation").str.contains("START")),
             ),
             **self.collect_explanations_per_side(
-                fragments=fragments.filter(pl.col("breakage").str.contains("END")),
+                fragments=fragments.filter(pl.col(
+                    "fragmentation").str.contains("END")),
             ),
         }
 

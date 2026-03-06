@@ -8,16 +8,16 @@ from spectrseqtools.mass_table import DynamicProgrammingTable
 MAX_VARIANCE = 1
 
 
-# METHOD: For each breakage option that yields a valid mass (i.e. one that
+# METHOD: For each fragmentation option that yields a valid mass (i.e. one that
 # can be explained by any valid composition) for a given fragment, duplicate
-# the fragment and determine its breakage-independent standard-unit mass by
-# subtracting the weight imposed by the breakage.
+# the fragment and determine its fragmentation-independent standard-unit
+# mass by subtracting the weight imposed by the fragmentation.
 
 
 def classify_fragments(
     fragment_masses,
     dp_table: DynamicProgrammingTable,
-    breakage_dict: dict,
+    fragmentation_dict: dict,
     output_file_path=None,
     intensity_cutoff=0.5e6,
     mass_cutoff=50000,
@@ -35,16 +35,16 @@ def classify_fragments(
     # Index fragments
     fragment_masses = fragment_masses.with_row_index("fragment_index")
 
-    # Copy each fragment for each unique breakage weights and set standard-unit mass
+    # Copy each fragment for each unique fragmentation weights and set standard-unit mass
     fragments = pl.concat(
         [
             fragment_masses.with_columns(
                 (
-                    pl.col("observed_mass") - (breakage_weight * dp_table.precision)
+                    pl.col("observed_mass") - (weight * dp_table.precision)
                 ).alias("standard_unit_mass"),
-                pl.lit(breakages[0]).alias("breakage"),
+                pl.lit(fragmentation[0]).alias("fragmentation"),
             )
-            for (breakage_weight, breakages) in breakage_dict.items()
+            for (weight, fragmentation) in fragmentation_dict.items()
         ]
     )
 
@@ -131,8 +131,8 @@ def filter_by_sequence_mass(
     fragments = fragments.filter(
         (pl.col("standard_unit_mass") > mass_cutoff - MAX_VARIANCE)
         | ~(
-            pl.col("breakage").str.contains("START")
-            & pl.col("breakage").str.contains("END")
+            pl.col("fragmentation").str.contains("START")
+            & pl.col("fragmentation").str.contains("END")
         )
     )
 

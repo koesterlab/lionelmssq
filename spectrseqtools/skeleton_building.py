@@ -28,14 +28,16 @@ class SkeletonBuilder:
     ) -> Tuple[List[Set[str]], pl.DataFrame]:
         # Build skeleton sequence from 5'-end
         start_skeleton, start_fragments = self._predict_skeleton(
-            fragments=fragments.filter(pl.col("breakage").str.contains("START")),
+            fragments=fragments.filter(pl.col("fragmentation").str.contains(
+                "START")),
             skeleton_seq=[set() for _ in range(self.dp_table.seq.max_len)],
         )
         print("Skeleton sequence start = ", start_skeleton)
 
         # Build skeleton sequence from 3'-end and reverse it
         end_skeleton, end_fragments = self._predict_skeleton(
-            fragments=fragments.filter(pl.col("breakage").str.contains("END")),
+            fragments=fragments.filter(pl.col("fragmentation").str.contains(
+                "END")),
             skeleton_seq=[set() for _ in range(self.dp_table.seq.max_len)],
         )
         end_skeleton = end_skeleton[::-1]
@@ -85,8 +87,8 @@ class SkeletonBuilder:
 
         # Remove all "internal" fragment duplicates that are truly terminal fragments
         frag_internal = fragments.filter(
-            ~pl.col("breakage").str.contains("START")
-            & ~pl.col("breakage").str.contains("END")
+            ~pl.col("fragmentation").str.contains("START")
+            & ~pl.col("fragmentation").str.contains("END")
         ).filter(
             ~pl.col("fragment_index").is_in(
                 frag_terminal.get_column("fragment_index").to_list()
@@ -163,10 +165,10 @@ class SkeletonBuilder:
                 for idx in current_bin:
                     # Add a warning in the log for the skipped fragment
                     logger.warning(
-                        f"Skipping {fragments.item(idx, 'breakage')} fragment "
-                        f"{fragments.item(idx, 'index')} with observed mass "
-                        f"{fragments.item(idx, 'observed_mass'):.4f} and SU "
-                        f"mass {fragments.item(idx, 'standard_unit_mass'):.4f}"
+                        f"Skipping {fragments.item(idx, 'fragmentation')} "
+                        f"fragment {fragments.item(idx, 'index')} with observed "
+                        f"mass {fragments.item(idx, 'observed_mass'):.4f} and "
+                        f"SU mass {fragments.item(idx, 'standard_unit_mass'):.4f}"
                         f" because no explanations were found."
                     )
 

@@ -73,14 +73,14 @@ class LinearProgramInstance:
 
         for j in range(len(fragments)):
             # Ensure complete fragments are aligned at the whole sequence
-            if fragments.item(j, "breakage") == "START_END":
+            if fragments.item(j, "fragmentation") == "START_END":
                 for i in range(self.seq_len):
                     x[i][j].setInitialValue(1)
                     x[i][j].fixValue()
                 continue
 
             # Ensure START fragments are aligned at the beginning of the sequence
-            if "START" in fragments.item(j, "breakage"):
+            if "START" in fragments.item(j, "fragmentation"):
                 # min_end is exclusive
                 for i in range(fragments.item(j, "min_end") + 1):
                     x[i][j].setInitialValue(1)
@@ -91,7 +91,7 @@ class LinearProgramInstance:
                 continue
 
             # Ensure END fragments are aligned at the end of the sequence
-            if "END" in fragments.item(j, "breakage"):
+            if "END" in fragments.item(j, "fragmentation"):
                 # min_end is exclusive
                 for i in range(fragments.item(j, "max_end")):
                     x[i][j].setInitialValue(0)

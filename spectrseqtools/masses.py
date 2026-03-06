@@ -18,8 +18,8 @@ UNMODIFIED_BASES = ["A", "C", "G", "U"]
 # Set default value for intensity cutoff
 DEFAULT_INTENSITY_CUTOFF = 115000
 
-# Set breakage dict modus (full vs only c/y)
-FULL_BREAKAGE_DICT = False
+# Set fragmentation dict modus (full vs only c/y)
+FULL_FRAGMENTATION_DICT = False
 
 
 # Set number of binary-compressed masses per integer cell in DP table
@@ -108,12 +108,12 @@ NUC_REPS = {
 }
 
 
-# METHOD: Precompute all weight changes caused by breakages and adapt the
+# METHOD: Precompute all weight changes caused by fragmentation and adapt the
 # target masses accordingly while finding compositions explaining it.
-# We consider tags at the 5'- or 3'-end to be possible breakage options.
+# We consider tags at the 5'- or 3'-end to be possible fragmentation options.
 
 
-def build_breakage_dict(mass_5_prime, mass_3_prime):
+def build_fragmentation_dict(mass_5_prime, mass_3_prime):
     element_masses = ELEMENT_MASSES
 
     # Initialize dict with masses for 5'-end of fragments
@@ -135,8 +135,8 @@ def build_breakage_dict(mass_5_prime, mass_3_prime):
         "c/y": -element_masses["H+"],
     }
 
-    # Add a/w, b/x, and d/z breakage for full dict version
-    if FULL_BREAKAGE_DICT:
+    # Add a/w-, b/x-, and d/z-fragmentation for full dict version
+    if FULL_FRAGMENTATION_DICT:
         # Add PO3H2 to SU to achieve neutral charge
         start_dict["a/w"] = (
             element_masses["P"] + 3 * element_masses["O"] + 2 * element_masses["H+"]
@@ -155,12 +155,12 @@ def build_breakage_dict(mass_5_prime, mass_3_prime):
         # Add OH to SU to achieve neutral charge
         end_dict["d/z"] = element_masses["O"] + element_masses["H+"]
 
-    # Collect all unique breakage-related mass combinations in dict
-    breakage_dict = {}
+    # Collect all unique fragmentation-related mass combinations in dict
+    fragmentation_dict = {}
     for start, end in list(product(start_dict.keys(), end_dict.keys())):
         val = int((start_dict[start] + end_dict[end]) / PRECISION)
-        if val not in breakage_dict:
-            breakage_dict[val] = []
-        breakage_dict[val] += [f"{start}_{end}"]
+        if val not in fragmentation_dict:
+            fragmentation_dict[val] = []
+        fragmentation_dict[val] += [f"{start}_{end}"]
 
-    return breakage_dict
+    return fragmentation_dict

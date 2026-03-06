@@ -15,7 +15,7 @@ from spectrseqtools.masses import (
     NUC_REPS,
     PRECISION,
     UNMODIFIED_BASES,
-    build_breakage_dict,
+    build_fragmentation_dict,
 )
 from spectrseqtools.prediction import Predictor
 from spectrseqtools.preprocessing import preprocess
@@ -143,17 +143,18 @@ def main():
     start_tag = meta.setdefault("label_mass_5T", 555.1294)
     end_tag = meta.setdefault("label_mass_3T", 455.1491)
 
-    # Build breakage dict
-    breakage_dict = build_breakage_dict(mass_5_prime=start_tag, mass_3_prime=end_tag)
+    # Build fragmentation dict
+    fragmentation_dict = build_fragmentation_dict(mass_5_prime=start_tag,
+                                      mass_3_prime=end_tag)
 
-    # Standardize sequence mass (remove START_END breakage to gain SU mass)
+    # Standardize sequence mass (remove START_END fragmentation to gain SU mass)
     seq_mass_obs = meta["sequence_mass"]
     seq_mass_su = (
         seq_mass_obs
         - [
             mass * PRECISION
-            for mass in breakage_dict
-            if "START_END" in breakage_dict[mass]
+            for mass in fragmentation_dict
+            if "START_END" in fragmentation_dict[mass]
         ][0]
     )
 
@@ -192,7 +193,7 @@ def main():
     fragments = classify_fragments(
         fragment_masses=fragments,
         dp_table=dp_table,
-        breakage_dict=breakage_dict,
+        fragmentation_dict=fragmentation_dict,
         output_file_path=fragment_dir / f"{file_prefix}.standard_unit_fragments.tsv",
         intensity_cutoff=intensity_cutoff,
     )
