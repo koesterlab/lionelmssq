@@ -55,7 +55,7 @@ class NucleotideMass:
 
 
 @dataclass
-class DynamicProgrammingTable:
+class CompositionInferrer:
     matrix: np.ndarray
     compression_per_cell: int
     precision: float
@@ -346,22 +346,22 @@ def load_matrix(path, integer_masses):
     return np.load(f"{path}.npy")
 
 
-def compute_sequence_length_bound(dp_table: DynamicProgrammingTable, dir: str) -> int:
+def compute_sequence_length_bound(inferrer: CompositionInferrer, dir: str) -> int:
     """
     Return bound on length for any sequence that could explain the given mass.
     """
     # Set compression rate
-    compression_rate = dp_table.compression_per_cell
+    compression_rate = inferrer.compression_per_cell
 
     # Set maximum number of modifications
-    max_modifications = round(dp_table.seq.modification_rate * dp_table.seq.max_len)
+    max_modifications = round(inferrer.seq.modification_rate * inferrer.seq.max_len)
 
     # Convert the target to an integer for easy operations
-    target = int(round(dp_table.seq.su_mass / dp_table.precision, 0))
+    target = int(round(inferrer.seq.su_mass / inferrer.precision, 0))
 
     # Convert the threshold to integer
     threshold = int(
-        np.ceil(dp_table.tolerance * dp_table.seq.obs_mass / dp_table.precision)
+        np.ceil(inferrer.tolerance * inferrer.seq.obs_mass / inferrer.precision)
     )
 
     # Initialize memorization dict
@@ -370,14 +370,14 @@ def compute_sequence_length_bound(dp_table: DynamicProgrammingTable, dir: str) -
     # Select default value based on desired bound
     match dir:
         case "lower":
-            default_bound = dp_table.seq.max_len + 1
+            default_bound = inferrer.seq.max_len + 1
         case "upper":
             default_bound = -1
         case _:
             raise NotImplementedError(f"Support for '{dir}' is currently not given.")
 
     def backtrack(total_mass, current_idx, max_mods_all, max_mods_ind):
-        current_weight = dp_table.masses[current_idx].mass
+        current_weight = inferrer.masses[current_idx].mass
 
         # If the result for this state is already computed, return it
         if (total_mass, current_idx) in memo:
@@ -392,16 +392,16 @@ def compute_sequence_length_bound(dp_table: DynamicProgrammingTable, dir: str) -
             return 0
 
         # Raise error if mass is not in matrix (due to its size)
-        if total_mass >= len(dp_table.matrix[0]) * compression_rate:
+        if total_mass >= len(inferrer.matrix[0]) * compression_rate:
             raise NotImplementedError(
                 f"The value {value} is not in the traceback matrix. "
                 f"Extend its size if you want to compute larger masses."
             )
 
         current_value = (
-            dp_table.matrix[current_idx, total_mass]
+            inferrer.matrix[current_idx, total_mass]
             if compression_rate == 1
-            else dp_table.matrix[current_idx, total_mass // compression_rate]
+            else inferrer.matrix[current_idx, total_mass // compression_rate]
             >> 2 * (compression_rate - 1 - total_mass % compression_rate)
         )
 
@@ -420,19 +420,19 @@ def compute_sequence_length_bound(dp_table: DynamicProgrammingTable, dir: str) -
                     current_idx - 1,
                     max_mods_all,
                     round(
-                        dp_table.seq.max_len
-                        * dp_table.masses[current_idx - 1].modification_rate
+                        inferrer.seq.max_len
+                        * inferrer.masses[current_idx - 1].modification_rate
                     ),
                 )
             )
 
         # Backtrack to the next left-side column if possible
         if (current_value >> 1) % 2 == 1:
-            if not dp_table.masses[current_idx].is_modification or (
+            if not inferrer.masses[current_idx].is_modification or (
                 max_mods_all > 0 and max_mods_ind > 0
             ):
                 # Adjust number of still allowed modifications if necessary
-                if dp_table.masses[current_idx].is_modification:
+                if inferrer.masses[current_idx].is_modification:
                     max_mods_all -= 1
                     max_mods_ind -= 1
 
@@ -471,9 +471,9 @@ def compute_sequence_length_bound(dp_table: DynamicProgrammingTable, dir: str) -
         solutions.append(
             backtrack(
                 value,
-                len(dp_table.masses) - 1,
+                len(inferrer.masses) - 1,
                 max_modifications,
-                round(dp_table.seq.max_len * dp_table.masses[-1].modification_rate),
+                round(inferrer.seq.max_len * inferrer.masses[-1].modification_rate),
             )
         )
 
@@ -486,7 +486,7 @@ def compute_sequence_length_bound(dp_table: DynamicProgrammingTable, dir: str) -
         case "upper":
             opt_len = max(solutions)
             if opt_len == default_bound:
-                opt_len = dp_table.seq.max_len
+                opt_len = inferrer.seq.max_len
         case _:
             raise NotImplementedError(f"Support for '{dir}' is currently not given.")
 

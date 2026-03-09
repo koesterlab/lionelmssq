@@ -6,7 +6,7 @@ import pytest
 from clr_loader import get_mono
 
 from spectrseqtools.cli import format_sequence_to_full_version, select_solver
-from spectrseqtools.mass_table import DynamicProgrammingTable, SequenceInformation
+from spectrseqtools.mass_table import CompositionInferrer, SequenceInformation
 from spectrseqtools.prediction import Predictor
 from spectrseqtools.common import parse_nucleosides
 from spectrseqtools.plotting import plot_prediction
@@ -170,8 +170,8 @@ def test_testcase(testcase):
         modification_rate=0.5,
     )
 
-    # Initialize DynamicProgrammingTable class
-    dp_table = DynamicProgrammingTable(
+    # Initialize CompositionInferrer class
+    inferrer = CompositionInferrer(
         nucleotide_df=nucleotide_df,
         compression_rate=COMPRESSION_RATE,
         tolerance=tolerance,
@@ -180,13 +180,13 @@ def test_testcase(testcase):
     )
 
     print("Alphabet after singleton reduction:")
-    dp_table.print_masses()
+    inferrer.print_masses()
     print()
 
     # Classify preprocessed fragments
     fragments = classify_fragments(
         fragment_masses=fragments,
-        dp_table=dp_table,
+        inferrer=inferrer,
         fragmentation_dict=fragmentation_dict,
         output_file_path=base_path / "fragments.standard_unit_fragments.tsv",
         intensity_cutoff=intensity_cutoff,
@@ -194,7 +194,7 @@ def test_testcase(testcase):
 
     # Predict sequence
     prediction = Predictor(
-        dp_table=dp_table,
+        inferrer=inferrer,
         nucleotide_df=nucleotide_df,
     ).predict(
         fragments=fragments,

@@ -10,7 +10,7 @@ from spectrseqtools.masses import (
     PHOSPHATE_LINK_MASS,
     PRECISION,
 )
-from spectrseqtools.mass_table import DynamicProgrammingTable, SequenceInformation
+from spectrseqtools.mass_table import CompositionInferrer, SequenceInformation
 
 
 def get_seq_weight(seq: tuple) -> float:
@@ -69,7 +69,7 @@ def test_testcase_with_recursion(testcase, tolerance):
         modification_rate=MOD_RATE,
     )
 
-    dp_table = DynamicProgrammingTable(
+    inferrer = CompositionInferrer(
         nucleotide_df=NUCLEOTIDE_DF,
         compression_rate=32,
         tolerance=tolerance,
@@ -79,7 +79,7 @@ def test_testcase_with_recursion(testcase, tolerance):
 
     predicted_mass_explanations = explain_mass_with_recursion(
         testcase[0],
-        dp_table=dp_table,
+        inferrer=inferrer,
         max_modifications=round(MOD_RATE * len(testcase[1])),
     ).explanations
 
@@ -114,7 +114,7 @@ def test_testcase_with_matrix(testcase, compression, tolerance, memo):
         modification_rate=MOD_RATE,
     )
 
-    dp_table = DynamicProgrammingTable(
+    inferrer = CompositionInferrer(
         nucleotide_df=NUCLEOTIDE_DF,
         compression_rate=compression,
         tolerance=tolerance,
@@ -124,7 +124,7 @@ def test_testcase_with_matrix(testcase, compression, tolerance, memo):
 
     predicted_mass_explanations = explain_mass_with_matrix(
         testcase[0],
-        dp_table=dp_table,
+        inferrer=inferrer,
         max_modifications=round(MOD_RATE * len(testcase[1])),
         with_memo=memo,
     ).explanations

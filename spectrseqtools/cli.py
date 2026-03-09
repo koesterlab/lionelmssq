@@ -6,7 +6,7 @@ from tap import Tap
 from typing import List, Literal
 
 from spectrseqtools.fragment_classification import classify_fragments
-from spectrseqtools.mass_table import DynamicProgrammingTable, SequenceInformation
+from spectrseqtools.mass_table import CompositionInferrer, SequenceInformation
 from spectrseqtools.masses import (
     COMPRESSION_RATE,
     DEFAULT_INTENSITY_CUTOFF,
@@ -175,8 +175,8 @@ def main():
         modification_rate=settings.modification_rate,
     )
 
-    # Initialize DynamicProgrammingTable class
-    dp_table = DynamicProgrammingTable(
+    # Initialize CompositionInferrer class
+    inferrer = CompositionInferrer(
         nucleotide_df=nucleotide_df,
         compression_rate=int(COMPRESSION_RATE),
         tolerance=TOLERANCE,
@@ -185,13 +185,13 @@ def main():
     )
 
     print("Alphabet after singleton reduction:")
-    dp_table.print_masses()
+    inferrer.print_masses()
     print()
 
     # Classify preprocessed fragments
     fragments = classify_fragments(
         fragment_masses=fragments,
-        dp_table=dp_table,
+        inferrer=inferrer,
         fragmentation_dict=fragmentation_dict,
         output_file_path=fragment_dir / f"{file_prefix}.standard_unit_fragments.tsv",
         intensity_cutoff=intensity_cutoff,
@@ -199,7 +199,7 @@ def main():
 
     # Predict sequence
     prediction = Predictor(
-        dp_table=dp_table,
+        inferrrer=inferrer,
         nucleotide_df=nucleotide_df,
     ).predict(
         fragments=fragments,

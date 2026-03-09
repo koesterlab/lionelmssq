@@ -11,7 +11,7 @@ from spectrseqtools.common import (
 )
 from spectrseqtools.linear_program import LinearProgramInstance
 from spectrseqtools.mass_explanation import is_valid_mass
-from spectrseqtools.mass_table import DynamicProgrammingTable
+from spectrseqtools.mass_table import CompositionInferrer
 from spectrseqtools.masses import PHOSPHATE_LINK_MASS
 from spectrseqtools.skeleton_building import SkeletonBuilder
 
@@ -54,11 +54,11 @@ class Prediction:
 class Predictor:
     def __init__(
         self,
-        dp_table: DynamicProgrammingTable,
+        inferrer: CompositionInferrer,
         nucleotide_df: pl.DataFrame,
     ):
         self.nucleotide_df = nucleotide_df
-        self.dp_table = dp_table
+        self.inferrer = inferrer
 
     def predict(
         self,
@@ -82,7 +82,7 @@ class Predictor:
 
         skeleton_builder = SkeletonBuilder(
             explanations=explanations,
-            dp_table=self.dp_table,
+            inferrer=self.inferrer,
         )
 
         # Build skeleton sequence from both sides and align them into final sequence
@@ -106,7 +106,7 @@ class Predictor:
         print()
 
         print("Alphabet after skeleton-based reduction:")
-        self.dp_table.print_masses()
+        self.inferrer.print_masses()
         print()
 
         # Filter out all internal fragments that do not fit anywhere in skeleton
@@ -159,7 +159,7 @@ class Predictor:
         try:
             lp_instance = LinearProgramInstance(
                 fragments=fragments,
-                dp_table=self.dp_table,
+                inferrer=self.inferrer,
                 skeleton_seq=skeleton_seq,
             )
 
@@ -173,8 +173,8 @@ class Predictor:
         old_alphabet_size = -1
 
         explanations = {}
-        while old_alphabet_size != len(self.dp_table.masses):
-            old_alphabet_size = len(self.dp_table.masses)
+        while old_alphabet_size != len(self.inferrer.masses):
+            old_alphabet_size = len(self.inferrer.masses)
             # Roughly explain the mass differences (to reduce the alphabet)
             # Note there may be faulty mass fragments leading to not truly existent values
             explanations = self.collect_diff_explanations_for_su(fragments=fragments)
@@ -196,7 +196,7 @@ class Predictor:
             fragments = self._reduce_alphabet(observed_nucleotides, fragments)
 
         print("Alphabet after explanation-based reduction:")
-        self.dp_table.print_masses()
+        self.inferrer.print_masses()
         print()
 
         return fragments, explanations
@@ -204,7 +204,7 @@ class Predictor:
     def _reduce_alphabet(
         self, nucleotide_list: Set[str], fragments: pl.DataFrame
     ) -> pl.DataFrame:
-        self.dp_table.adapt_individual_modification_rates_by_alphabet_reduction(
+        self.inferrer.adapt_individual_modification_rates_by_alphabet_reduction(
             nucleotide_list
         )
 
@@ -215,8 +215,8 @@ class Predictor:
                 .map_elements(
                     lambda x: is_valid_mass(
                         mass=x["standard_unit_mass"],
-                        dp_table=self.dp_table,
-                        threshold=self.dp_table.tolerance * x["observed_mass"],
+                        inferrer=self.inferrer,
+                        threshold=self.inferrer.tolerance * x["observed_mass"],
                     ),
                     return_dtype=bool,
                 )
@@ -245,14 +245,14 @@ class Predictor:
             # Initialize LP instance for a singular fragment
             filter_instance = LinearProgramInstance(
                 fragments=fragments[idx],
-                dp_table=self.dp_table,
+                inferrer=self.inferrer,
                 skeleton_seq=skeleton_seq,
             )
 
             # Check whether fragment can feasibly be aligned to skeleton
             if filter_instance.minimize_error(
                 solver_params=solver_params
-            ) > self.dp_table.tolerance * fragments.item(idx, "observed_mass"):
+            ) > self.inferrer.tolerance * fragments.item(idx, "observed_mass"):
                 is_invalid.append(fragments.item(idx, "index"))
 
         # Return only valid fragments
@@ -279,8 +279,8 @@ class Predictor:
         for singleton in singleton_list.rows():
             explanations[singleton[idx_su_mass]] = calculate_explanations(
                 diff=singleton[idx_su_mass],
-                threshold=self.dp_table.tolerance * singleton[idx_observed_mass],
-                dp_table=self.dp_table,
+                threshold=self.inferrer.tolerance * singleton[idx_observed_mass],
+                inferrer=self.inferrer,
             )
 
         return explanations
@@ -314,12 +314,12 @@ class Predictor:
             diff_error = calculate_error_threshold(
                 observed_masses[start],
                 observed_masses[end],
-                self.dp_table.tolerance,
+                self.inferrer.tolerance,
             )
             expl = calculate_explanations(
                 diff=diff,
                 threshold=diff_error,
-                dp_table=self.dp_table,
+                inferrer=self.inferrer,
             )
             if expl is not None and len(expl) >= 1:
                 explanations[diff] = expl

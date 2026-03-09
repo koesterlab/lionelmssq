@@ -33,16 +33,16 @@ def get_singleton_set_item(set_: Set[Any]) -> Any:
 
 
 class LinearProgramInstance:
-    def __init__(self, fragments, dp_table, skeleton_seq):
+    def __init__(self, fragments, inferrer, skeleton_seq):
         # i = 1,...,n: positions in the sequence
         # j = 1,...,m: fragments
         # b = 1,...,k: (modified) bases
         self.fragments = fragments
         self.seq_len = len(skeleton_seq)
-        self.nucleoside_names = [mass.names[0] for mass in dp_table.masses[1:]]
+        self.nucleoside_names = [mass.names[0] for mass in inferrer.masses[1:]]
         self.nucleoside_masses = {
-            mass.names[0]: mass.mass * dp_table.precision
-            for mass in dp_table.masses[1:]
+            mass.names[0]: mass.mass * inferrer.precision
+            for mass in inferrer.masses[1:]
         }
 
         fragment_masses = self.fragments.get_column("standard_unit_mass").to_list()
@@ -60,7 +60,7 @@ class LinearProgramInstance:
             fragment_masses, valid_fragment_range
         )
 
-        self.problem = self._define_lp_problem(valid_fragment_range, dp_table)
+        self.problem = self._define_lp_problem(valid_fragment_range, inferrer)
 
     def _set_x(self, valid_fragment_range, fragments):
         x = [
@@ -161,7 +161,7 @@ class LinearProgramInstance:
             for j in valid_fragment_range
         ]
 
-    def _define_lp_problem(self, valid_fragment_range, dp_table):
+    def _define_lp_problem(self, valid_fragment_range, inferrer):
         problem = LpProblem("fragment_filter", LpMinimize)
 
         # weight_diff_abs: absolute value of weight_diff
@@ -185,10 +185,10 @@ class LinearProgramInstance:
                 for b in self.nucleoside_names
                 if b not in UNMODIFIED_BASES
             ]
-        ) <= np.ceil(dp_table.seq.modification_rate * self.seq_len)
+        ) <= np.ceil(inferrer.seq.modification_rate * self.seq_len)
 
         # Enforce individual modification rates
-        for mass in dp_table.masses:
+        for mass in inferrer.masses:
             for b in mass.names:
                 if b in self.nucleoside_names:
                     problem += lpSum(

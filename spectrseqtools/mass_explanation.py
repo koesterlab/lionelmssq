@@ -5,7 +5,7 @@ from itertools import product, combinations_with_replacement, chain
 import polars as pl
 import numpy as np
 
-from spectrseqtools.mass_table import DynamicProgrammingTable
+from spectrseqtools.mass_table import CompositionInferrer
 from spectrseqtools.masses import NUCLEOTIDE_DF, UNMODIFIED_BASES
 
 
@@ -44,38 +44,38 @@ IS_MOD = {
 
 def is_valid_mass(
     mass: float,
-    dp_table: DynamicProgrammingTable,
+    inferrer: CompositionInferrer,
     threshold: float = None,
 ) -> bool:
     # Convert the target to an integer for easy operations
-    target = int(round(mass / dp_table.precision, 0))
+    target = int(round(mass / inferrer.precision, 0))
 
     # Set relative threshold if not given
     if threshold is None:
-        threshold = dp_table.tolerance * mass
+        threshold = inferrer.tolerance * mass
 
     # Convert the threshold to integer
-    threshold = int(np.ceil(threshold / dp_table.precision))
+    threshold = int(np.ceil(threshold / inferrer.precision))
 
-    compression_rate = dp_table.compression_per_cell
+    compression_rate = inferrer.compression_per_cell
 
-    current_idx = len(dp_table.matrix) - 1
+    current_idx = len(inferrer.matrix) - 1
     for value in range(target - threshold, target + threshold + 1):
         # Skip non-positive masses
         if value <= 0:
             continue
 
         # Raise error if mass is not in matrix (due to its size)
-        if value >= len(dp_table.matrix[0]) * compression_rate:
+        if value >= len(inferrer.matrix[0]) * compression_rate:
             raise NotImplementedError(
                 f"The value {value} is not in the traceback matrix. "
                 f"Extend its size if you want to compute larger masses."
             )
 
         current_value = (
-            dp_table.matrix[current_idx, value]
+            inferrer.matrix[current_idx, value]
             if compression_rate == 1
-            else dp_table.matrix[current_idx, value // compression_rate]
+            else inferrer.matrix[current_idx, value // compression_rate]
             >> 2 * (compression_rate - 1 - value % compression_rate)
         )
 
@@ -91,7 +91,7 @@ def is_valid_mass(
 
 def explain_mass_with_matrix(
     mass: float,
-    dp_table: DynamicProgrammingTable,
+    inferrer: CompositionInferrer,
     max_modifications=np.inf,
     compression_rate=None,
     threshold=None,
@@ -101,22 +101,22 @@ def explain_mass_with_matrix(
     Return all possible combinations of nucleosides that could sum up to the given mass.
     """
     if compression_rate is None:
-        compression_rate = dp_table.compression_per_cell
+        compression_rate = inferrer.compression_per_cell
 
     # Convert the target to an integer for easy operations
-    target = int(round(mass / dp_table.precision, 0))
+    target = int(round(mass / inferrer.precision, 0))
 
     # Set relative threshold if not given
     if threshold is None:
-        threshold = dp_table.tolerance * mass
+        threshold = inferrer.tolerance * mass
 
     # Convert the threshold to integer
-    threshold = int(np.ceil(threshold / dp_table.precision))
+    threshold = int(np.ceil(threshold / inferrer.precision))
 
     memo = {}
 
     def backtrack(total_mass, current_idx, max_mods_all, max_mods_ind):
-        current_weight = dp_table.masses[current_idx].mass
+        current_weight = inferrer.masses[current_idx].mass
 
         # If the result for this state is already computed, return it
         if with_memo and (total_mass, current_idx) in memo:
@@ -131,16 +131,16 @@ def explain_mass_with_matrix(
             return [[]]
 
         # Raise error if mass is not in matrix (due to its size)
-        if total_mass >= len(dp_table.matrix[0]) * compression_rate:
+        if total_mass >= len(inferrer.matrix[0]) * compression_rate:
             raise NotImplementedError(
                 f"The value {value} is not in the traceback matrix. "
                 f"Extend its size if you want to compute larger masses."
             )
 
         current_value = (
-            dp_table.matrix[current_idx, total_mass]
+            inferrer.matrix[current_idx, total_mass]
             if compression_rate == 1
-            else dp_table.matrix[current_idx, total_mass // compression_rate]
+            else inferrer.matrix[current_idx, total_mass // compression_rate]
             >> 2 * (compression_rate - 1 - total_mass % compression_rate)
         )
 
@@ -156,18 +156,18 @@ def explain_mass_with_matrix(
                 current_idx - 1,
                 max_mods_all,
                 round(
-                    dp_table.seq.max_len
-                    * dp_table.masses[current_idx - 1].modification_rate
+                    inferrer.seq.max_len
+                    * inferrer.masses[current_idx - 1].modification_rate
                 ),
             )
 
         # Backtrack to the next left-side column if possible
         if (current_value >> 1) % 2 == 1:
-            if not dp_table.masses[current_idx].is_modification or (
+            if not inferrer.masses[current_idx].is_modification or (
                 max_mods_all > 0 and max_mods_ind > 0
             ):
                 # Adjust number of still allowed modifications if necessary
-                if dp_table.masses[current_idx].is_modification:
+                if inferrer.masses[current_idx].is_modification:
                     max_mods_all -= 1
                     max_mods_ind -= 1
 
@@ -195,9 +195,9 @@ def explain_mass_with_matrix(
     ):
         solutions += backtrack(
             value,
-            len(dp_table.masses) - 1,
+            len(inferrer.masses) - 1,
             max_modifications,
-            round(dp_table.seq.max_len * dp_table.masses[-1].modification_rate),
+            round(inferrer.seq.max_len * inferrer.masses[-1].modification_rate),
         )
 
     return convert_nucleotide_masses_to_names(solutions=solutions)
@@ -205,24 +205,24 @@ def explain_mass_with_matrix(
 
 def explain_mass_with_recursion(
     mass: float,
-    dp_table: DynamicProgrammingTable,
+    inferrer: CompositionInferrer,
     max_modifications=np.inf,
     threshold=None,
 ) -> MassExplanations:
     """
     Returns all the possible combinations of nucleosides that could sum up to the given mass.
     """
-    mass_list = [mass.mass for mass in dp_table.masses]
+    mass_list = [mass.mass for mass in inferrer.masses]
 
     # Convert the target to an integer for easy operations
-    target = int(round(mass / dp_table.precision, 0))
+    target = int(round(mass / inferrer.precision, 0))
 
     # Set relative threshold if not given
     if threshold is None:
-        threshold = dp_table.tolerance * mass
+        threshold = inferrer.tolerance * mass
 
     # Convert the threshold to integer
-    threshold = int(np.ceil(threshold / dp_table.precision))
+    threshold = int(np.ceil(threshold / inferrer.precision))
 
     # Memoization dictionary to store results for a given target
     memo = {}
@@ -230,7 +230,7 @@ def explain_mass_with_recursion(
     def dp(remaining, start, used_mods_all, used_mods_ind):
         # If too many modifications are used, return empty list
         if used_mods_all > max_modifications or used_mods_ind > round(
-            dp_table.seq.max_len * dp_table.masses[start].modification_rate
+            inferrer.seq.max_len * inferrer.masses[start].modification_rate
         ):
             return []
 

@@ -13,7 +13,7 @@ from spectrseqtools.common import (
 from spectrseqtools.fragment_classification import MAX_VARIANCE
 from spectrseqtools.linear_program import LinearProgramInstance
 from spectrseqtools.mass_table import (
-    DynamicProgrammingTable,
+    CompositionInferrer,
     compute_sequence_length_bound,
 )
 
@@ -21,7 +21,7 @@ from spectrseqtools.mass_table import (
 @dataclass
 class SkeletonBuilder:
     explanations: list[Explanation]
-    dp_table: DynamicProgrammingTable
+    inferrer: CompositionInferrer
 
     def build_skeleton(
         self, fragments: pl.DataFrame, solver_params: dict
@@ -30,7 +30,7 @@ class SkeletonBuilder:
         start_skeleton, start_fragments = self._predict_skeleton(
             fragments=fragments.filter(pl.col("fragmentation").str.contains(
                 "START")),
-            skeleton_seq=[set() for _ in range(self.dp_table.seq.max_len)],
+            skeleton_seq=[set() for _ in range(self.inferrer.seq.max_len)],
         )
         print("Skeleton sequence start = ", start_skeleton)
 
@@ -38,7 +38,7 @@ class SkeletonBuilder:
         end_skeleton, end_fragments = self._predict_skeleton(
             fragments=fragments.filter(pl.col("fragmentation").str.contains(
                 "END")),
-            skeleton_seq=[set() for _ in range(self.dp_table.seq.max_len)],
+            skeleton_seq=[set() for _ in range(self.inferrer.seq.max_len)],
         )
         end_skeleton = end_skeleton[::-1]
         print("Skeleton sequence end = ", end_skeleton)
@@ -120,7 +120,7 @@ class SkeletonBuilder:
     ) -> Tuple[List[Set[str]], pl.DataFrame]:
         # Initialize skeleton sequence (if not already given)
         if skeleton_seq is None:
-            skeleton_seq = [set() for _ in range(self.dp_table.max_seq_len)]
+            skeleton_seq = [set() for _ in range(self.inferrer.seq.max_len)]
 
         # METHOD: Reject fragments which are not explained well by mass
         # differences. While iterating through the fragments, bin them
@@ -143,7 +143,7 @@ class SkeletonBuilder:
             neighbour_threshold = calculate_error_threshold(
                 fragments.item(frag_idx - 1, "observed_mass"),
                 fragments.item(frag_idx, "observed_mass"),
-                self.dp_table.tolerance,
+                self.inferrer.tolerance,
             )
 
             # Bin fragments with similar mass together
@@ -211,19 +211,19 @@ class SkeletonBuilder:
             for skeleton_pos in start_skeleton + end_skeleton
             for nuc in skeleton_pos
         }
-        self.dp_table.adapt_individual_modification_rates_by_alphabet_reduction(
+        self.inferrer.adapt_individual_modification_rates_by_alphabet_reduction(
             nucleotides
         )
 
         # Initialize nucleotide mass dict
         nucleoside_masses = {
-            mass.names[0]: mass.mass * self.dp_table.precision
-            for mass in self.dp_table.masses[1:]
+            mass.names[0]: mass.mass * self.inferrer.precision
+            for mass in self.inferrer.masses[1:]
         }
 
         # Determine lower and upper bound
-        min_len = compute_sequence_length_bound(dp_table=self.dp_table, dir="lower")
-        max_len = compute_sequence_length_bound(dp_table=self.dp_table, dir="upper")
+        min_len = compute_sequence_length_bound(inferrer=self.inferrer, dir="lower")
+        max_len = compute_sequence_length_bound(inferrer=self.inferrer, dir="upper")
 
         # Determine sequence length with best LP score
         best_len = -1
@@ -281,7 +281,7 @@ class SkeletonBuilder:
         try:
             lp_instance = LinearProgramInstance(
                 fragments=pl.concat([start_fragments, end_fragments]),
-                dp_table=self.dp_table,
+                inferrer=self.inferrer,
                 skeleton_seq=skeleton_seq,
             )
         except Exception:
@@ -310,7 +310,7 @@ class SkeletonBuilder:
         # Use MAX_VARIANCE to accommodate for uncertainty in sequence mass selection
         return (
             min_mass - MAX_VARIANCE
-            <= self.dp_table.seq.su_mass
+            <= self.inferrer.seq.su_mass
             <= max_mass + MAX_VARIANCE
         )
 
@@ -323,19 +323,19 @@ class SkeletonBuilder:
             for skeleton_pos in start_skeleton + end_skeleton
             for nuc in skeleton_pos
         }
-        self.dp_table.adapt_individual_modification_rates_by_alphabet_reduction(
+        self.inferrer.adapt_individual_modification_rates_by_alphabet_reduction(
             nucleotides
         )
 
         # Initialize nucleotide mass dict
         nucleoside_masses = {
-            mass.names[0]: mass.mass * self.dp_table.precision
-            for mass in self.dp_table.masses[1:]
+            mass.names[0]: mass.mass * self.inferrer.precision
+            for mass in self.inferrer.masses[1:]
         }
 
         # Determine lower and upper bound
-        min_len = compute_sequence_length_bound(dp_table=self.dp_table, dir="lower")
-        max_len = compute_sequence_length_bound(dp_table=self.dp_table, dir="upper")
+        min_len = compute_sequence_length_bound(inferrer=self.inferrer, dir="lower")
+        max_len = compute_sequence_length_bound(inferrer=self.inferrer, dir="upper")
 
         # Determine sequence length with highest similarity between skeleton parts
         best_len = min_len
@@ -433,12 +433,12 @@ class SkeletonBuilder:
         threshold = calculate_error_threshold(
             prev_mass,
             current_mass,
-            self.dp_table.tolerance,
+            self.inferrer.tolerance,
         )
         return calculate_explanations(
             diff,
             threshold,
-            self.dp_table,
+            self.inferrer,
         )
 
     def update_skeleton_for_given_explanations(
@@ -456,7 +456,7 @@ class SkeletonBuilder:
                     [
                         expl
                         for expl in explanations
-                        if 0 <= p + len(expl) - 1 < self.dp_table.seq.max_len
+                        if 0 <= p + len(expl) - 1 < self.inferrer.seq.max_len
                     ],
                     len,
                 )

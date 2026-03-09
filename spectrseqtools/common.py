@@ -5,7 +5,7 @@ from clr_loader import get_mono
 from typing import List
 
 from spectrseqtools.mass_explanation import explain_mass_with_matrix
-from spectrseqtools.mass_table import DynamicProgrammingTable
+from spectrseqtools.mass_table import CompositionInferrer
 
 rt = get_mono()
 
@@ -47,12 +47,12 @@ def calculate_error_threshold(mass1: float, mass2: float, threshold: float) -> f
 def calculate_explanations(
     diff: float,
     threshold: float,
-    dp_table: DynamicProgrammingTable,
+    inferrer: CompositionInferrer,
 ) -> List[Explanation]:
     explanation_list = explain_mass_with_matrix(
         diff,
-        dp_table=dp_table,
-        max_modifications=round(dp_table.seq.modification_rate * dp_table.seq.max_len),
+        inferrer=inferrer,
+        max_modifications=round(inferrer.seq.modification_rate * inferrer.seq.max_len),
         threshold=threshold,
     ).explanations
 
