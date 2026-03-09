@@ -124,7 +124,7 @@ class DynamicProgrammingTable:
         mass_names = []
         for mass in self.masses:
             mass_names += mass.names
-        masses = EXPLANATION_MASSES.sort("monoisotopic_mass").filter(
+        masses = EXPLANATION_MASSES.sort("nucleoside_mass").filter(
             pl.col("nucleoside").is_in(mass_names)
         )
 

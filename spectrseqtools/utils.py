@@ -15,7 +15,7 @@ def estimate_MS_error_tolerance(
 
     unique_natural_masses = (
         unique_masses.filter(pl.col("nucleoside").is_in(["A", "U", "G", "C"]))
-        .select(pl.col("monoisotopic_mass"))
+        .select(pl.col("nucleoside_mass"))
         .to_series()
         .to_list()
     )

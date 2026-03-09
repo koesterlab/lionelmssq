@@ -287,7 +287,7 @@ class Predictor:
 
     def collect_explanations_per_side(self, fragments: pl.DataFrame) -> dict:
         max_weight = (
-            max(self.explanation_masses.get_column("monoisotopic_mass").to_list())
+            max(self.explanation_masses.get_column("nucleoside_mass").to_list())
             + PHOSPHATE_LINK_MASS
         )
         su_masses = fragments.get_column("standard_unit_mass").to_list()

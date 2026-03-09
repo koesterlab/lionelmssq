@@ -20,7 +20,7 @@ def get_seq_weight(seq: tuple) -> float:
         .map_elements(
             lambda x: (
                 EXPLANATION_MASSES.filter(pl.col("nucleoside") == x)
-                .get_column("monoisotopic_mass")
+                .get_column("nucleoside_mass")
                 .to_list()[0]
             ),
             return_dtype=pl.Float64,

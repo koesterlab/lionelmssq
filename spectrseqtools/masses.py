@@ -66,11 +66,12 @@ def initialize_nucleotide_df() -> pl.DataFrame:
 
     # Round nucleoside masses, we consider DECIMAL_PLACES+1 for since
     # rounding errors propagate at the last decimal digit
-    masses = masses.with_columns(pl.col("monoisotopic_mass").round(DECIMAL_PLACES + 1))
+    masses = masses.with_columns(pl.col("monoisotopic_mass").round(
+        DECIMAL_PLACES + 1)).rename({"monoisotopic_mass": "nucleoside_mass"})
 
     # Group nucleosides by their mass, select a representative for each
     # group, and aggregate them into a list of equal-mass nucleosides
-    masses = masses.group_by("monoisotopic_mass", maintain_order=True).agg(
+    masses = masses.group_by("nucleoside_mass", maintain_order=True).agg(
         pl.col("nucleoside").first(),
         pl.col("nucleoside").unique().alias("nucleoside_list"),
         pl.col("modification_rate").max(),
@@ -79,13 +80,13 @@ def initialize_nucleotide_df() -> pl.DataFrame:
     # Convert nucleosides to nucleotides and add new columns for theoretical
     # m/z values and integer masses for the DP algorithm
     masses = masses.with_columns(
-        pl.col("monoisotopic_mass")
+        pl.col("nucleoside_mass")
         .add(
             PHOSPHATE_LINK_MASS - ELEMENT_MASSES["H+"]
         )  # Subtract one proton from nucleotide (for singleton charge)
         .alias("theoretical_mz")
     ).with_columns(
-        ((pl.col("monoisotopic_mass") + PHOSPHATE_LINK_MASS) / PRECISION)
+        ((pl.col("nucleoside_mass") + PHOSPHATE_LINK_MASS) / PRECISION)
         .round(0)
         .cast(pl.Int64)
         .alias("tolerated_integer_masses")
