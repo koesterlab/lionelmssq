@@ -3,7 +3,7 @@ import polars as pl
 from itertools import product
 
 _COLS = [
-    "nucleoside",
+    "id",
     "canonical_name",
     "monoisotopic_mass",
     "modification_rate",
@@ -72,8 +72,8 @@ def initialize_nucleotide_df() -> pl.DataFrame:
     # Group nucleosides by their mass, select a representative for each
     # group, and aggregate them into a list of equal-mass nucleosides
     masses = masses.group_by("nucleoside_mass", maintain_order=True).agg(
-        pl.col("nucleoside").first().alias("representative"),
-        pl.col("nucleoside").unique().alias("nucleoside_list"),
+        pl.col("id").first().alias("representative"),
+        pl.col("id").unique().alias("nucleoside_list"),
         pl.col("modification_rate").max(),
     )
 

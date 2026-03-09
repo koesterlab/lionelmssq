@@ -169,7 +169,7 @@ def select_singletons_from_peaks(peak_list: List[RawPeak]) -> pl.DataFrame:
     peak_df = peak_df.group_by("nucleoside_list").map_groups(
         lambda x: pl.DataFrame(
             {
-                "nucleoside": x["nucleoside_list"][0],
+                "id": x["nucleoside_list"][0],
                 "cluster_score": calculate_cluster_score(x["scan_time"]),
                 "count": len(x["nucleoside_list"]),
             }
@@ -179,7 +179,7 @@ def select_singletons_from_peaks(peak_list: List[RawPeak]) -> pl.DataFrame:
     # Filter candidate singletons by cluster score
     return (
         peak_df.filter(pl.col("cluster_score") >= 0).select(
-            ["nucleoside", "count", "cluster_score"]
+            ["id", "count", "cluster_score"]
         )
     ).sort("count", descending=True)
 

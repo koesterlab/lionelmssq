@@ -104,14 +104,14 @@ def test_testcase(testcase):
     if singletons is not None:
         # Map singletons to their mass representative
         singletons = singletons.with_columns(
-            pl.col("nucleoside").replace_strict(NUC_REPS).alias("nucleoside")
+            pl.col("id").replace_strict(NUC_REPS).alias("id")
         )
 
         # Select only bases found in singletons
         explanation_masses = explanation_masses.with_columns(
             pl.when(
                 pl.col("representative").is_in(
-                    singletons.get_column("nucleoside").to_list()
+                    singletons.get_column("id").to_list()
                 )
             )
             .then(pl.col("modification_rate"))
