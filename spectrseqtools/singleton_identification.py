@@ -15,10 +15,10 @@ rt = get_mono()
 
 PREPROCESS_TOL = 10e-6
 THEORETICAL_BOUNDARY_FACTOR = 2
-MIN_MZ = EXPLANATION_MASSES["theoretical_mz"].min() * (
+MIN_MZ = EXPLANATION_MASSES["singleton_mz"].min() * (
     1 - THEORETICAL_BOUNDARY_FACTOR * PREPROCESS_TOL
 )
-MAX_MZ = EXPLANATION_MASSES["theoretical_mz"].max() * (
+MAX_MZ = EXPLANATION_MASSES["singleton_mz"].max() * (
     1 + THEORETICAL_BOUNDARY_FACTOR * PREPROCESS_TOL
 )
 COL_TYPES_RAW = {
@@ -143,19 +143,19 @@ def select_singletons_from_peaks(peak_list: List[RawPeak]) -> pl.DataFrame:
         schema=COL_TYPES_RAW,
     )
 
-    # Match observed m/z to theoretical m/z from the reference table
+    # Match observed m/z to singleton m/z from the reference table
     peak_df = peak_df.sort("mz").join_asof(
-        EXPLANATION_MASSES.sort("theoretical_mz"),
+        EXPLANATION_MASSES.sort("singleton_mz"),
         left_on="mz",
-        right_on="theoretical_mz",
+        right_on="singleton_mz",
         strategy="nearest",
     )
 
-    # Compute mass error between observed and theoretical m/z
+    # Compute mass error between observed and singleton m/z
     peak_df = (
         peak_df.sort("mz")
         .with_columns(
-            (abs(pl.col("mz") - pl.col("theoretical_mz")) / pl.col("mz"))
+            (abs(pl.col("mz") - pl.col("singleton_mz")) / pl.col("mz"))
             .fill_null(0)
             .fill_nan(0)
             .lt(PREPROCESS_TOL)

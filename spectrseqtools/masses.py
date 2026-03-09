@@ -77,15 +77,14 @@ def initialize_nucleotide_df() -> pl.DataFrame:
         pl.col("modification_rate").max(),
     )
 
-    # Convert nucleosides to nucleotides and add new columns for theoretical
+    # Convert nucleosides to nucleotides and add new columns for singleton
     # m/z values and integer masses for the DP algorithm
     masses = masses.with_columns(
         pl.col("nucleoside_mass")
         .add(
             PHOSPHATE_LINK_MASS - ELEMENT_MASSES["H+"]
         )  # Subtract one proton from nucleotide (for singleton charge)
-        .alias("theoretical_mz")
-    ).with_columns(
+        .alias("singleton_mz"),
         ((pl.col("nucleoside_mass") + PHOSPHATE_LINK_MASS) / PRECISION)
         .round(0)
         .cast(pl.Int64)
