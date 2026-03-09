@@ -73,7 +73,7 @@ def initialize_nucleotide_df() -> pl.DataFrame:
     # group, and aggregate them into a list of equal-mass nucleosides
     masses = masses.group_by("nucleoside_mass", maintain_order=True).agg(
         pl.col("id").first().alias("representative"),
-        pl.col("id").unique().alias("nucleoside_list"),
+        pl.col("id").unique().alias("id_list"),
         pl.col("modification_rate").max(),
     )
 
@@ -99,7 +99,7 @@ EXPLANATION_MASSES = initialize_nucleotide_df()
 
 # Compute dict to map representatives to nucleotides
 _REP_IDX = EXPLANATION_MASSES.get_column_index("representative")
-_LIST_IDX = EXPLANATION_MASSES.get_column_index("nucleoside_list")
+_LIST_IDX = EXPLANATION_MASSES.get_column_index("id_list")
 NUC_REPS = {
     **{
         nuc: row[_REP_IDX]

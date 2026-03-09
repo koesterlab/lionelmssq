@@ -238,7 +238,7 @@ def format_sequence_to_full_version(seq: List[str]) -> str:
     for nuc in seq:
         alt_nucs = (
             EXPLANATION_MASSES.filter(pl.col("representative") == nuc)
-            .select("nucleoside_list")
+            .select("id_list")
             .item()
             .to_list()
         )
