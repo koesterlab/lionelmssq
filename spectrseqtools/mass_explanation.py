@@ -263,11 +263,7 @@ def explain_mass_with_recursion(
                 used_mods_all + 1 if IS_MOD[current_mass] else used_mods_all,
                 0
                 if i != start
-                else (
-                    used_mods_ind + 1
-                    if IS_MOD[current_mass]
-                    else used_mods_ind
-                ),
+                else (used_mods_ind + 1 if IS_MOD[current_mass] else used_mods_ind),
             )
             # Add current mass to all sub-combinations
             for combo in sub_combinations:

@@ -28,16 +28,14 @@ class SkeletonBuilder:
     ) -> Tuple[List[Set[str]], pl.DataFrame]:
         # Build skeleton sequence from 5'-end
         start_skeleton, start_fragments = self._predict_skeleton(
-            fragments=fragments.filter(pl.col("fragmentation").str.contains(
-                "START")),
+            fragments=fragments.filter(pl.col("fragmentation").str.contains("START")),
             skeleton_seq=[set() for _ in range(self.inferrer.seq.max_len)],
         )
         print("Skeleton sequence start = ", start_skeleton)
 
         # Build skeleton sequence from 3'-end and reverse it
         end_skeleton, end_fragments = self._predict_skeleton(
-            fragments=fragments.filter(pl.col("fragmentation").str.contains(
-                "END")),
+            fragments=fragments.filter(pl.col("fragmentation").str.contains("END")),
             skeleton_seq=[set() for _ in range(self.inferrer.seq.max_len)],
         )
         end_skeleton = end_skeleton[::-1]

@@ -169,8 +169,7 @@ def plot_prediction(
             alt.X("pos", axis=alt.Axis(grid=False)).title(None),
             alt.Y("type").title("Final sequence"),
             alt.Text("nuc"),
-            alt.Color("nuc", scale=alt.Scale(
-                scheme="category10")).legend(None),
+            alt.Color("nuc", scale=alt.Scale(scheme="category10")).legend(None),
         )
     )
 

@@ -262,12 +262,12 @@ class Predictor:
         # Collect explanation for all reasonable mass differences for each side
         explanations = {
             **self.collect_explanations_per_side(
-                fragments=fragments.filter(pl.col(
-                    "fragmentation").str.contains("START")),
+                fragments=fragments.filter(
+                    pl.col("fragmentation").str.contains("START")
+                ),
             ),
             **self.collect_explanations_per_side(
-                fragments=fragments.filter(pl.col(
-                    "fragmentation").str.contains("END")),
+                fragments=fragments.filter(pl.col("fragmentation").str.contains("END")),
             ),
         }
 

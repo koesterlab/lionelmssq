@@ -66,8 +66,9 @@ def initialize_nucleotide_df() -> pl.DataFrame:
 
     # Round nucleoside masses, we consider DECIMAL_PLACES+1 for since
     # rounding errors propagate at the last decimal digit
-    masses = masses.with_columns(pl.col("monoisotopic_mass").round(
-        DECIMAL_PLACES + 1)).rename({"monoisotopic_mass": "nucleoside_mass"})
+    masses = masses.with_columns(
+        pl.col("monoisotopic_mass").round(DECIMAL_PLACES + 1)
+    ).rename({"monoisotopic_mass": "nucleoside_mass"})
 
     # Group nucleosides by their mass, select a representative for each
     # group, and aggregate them into a list of equal-mass nucleosides
@@ -88,7 +89,7 @@ def initialize_nucleotide_df() -> pl.DataFrame:
         ((pl.col("nucleoside_mass") + PHOSPHATE_LINK_MASS) / PRECISION)
         .round(0)
         .cast(pl.Int64)
-        .alias("integer_mass")
+        .alias("integer_mass"),
     )
 
     return masses
@@ -100,11 +101,7 @@ NUCLEOTIDE_DF = initialize_nucleotide_df()
 _REP_IDX = NUCLEOTIDE_DF.get_column_index("representative")
 _LIST_IDX = NUCLEOTIDE_DF.get_column_index("id_list")
 NUC_REPS = {
-    **{
-        nuc: row[_REP_IDX]
-        for row in NUCLEOTIDE_DF.rows()
-        for nuc in row[_LIST_IDX]
-    }
+    **{nuc: row[_REP_IDX] for row in NUCLEOTIDE_DF.rows() for nuc in row[_LIST_IDX]}
 }
 
 

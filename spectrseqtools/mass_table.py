@@ -236,8 +236,7 @@ def set_up_bit_matrix(integer_masses, max_mass: int, compression_rate: int):
             # Consider cell defined by step
             if step + j < max_col:
                 matrix[i, j + step] |= settings["alt_first"] & (
-                    (matrix[i, j] >> (2 * shift) << 1)
-                    | (matrix[i, j] >> (2 * shift))
+                    (matrix[i, j] >> (2 * shift) << 1) | (matrix[i, j] >> (2 * shift))
                 )
 
             # If shift is needed, consider the next cell as well
@@ -248,8 +247,7 @@ def set_up_bit_matrix(integer_masses, max_mass: int, compression_rate: int):
                 )
 
     # Adjust last column for unused cells
-    matrix[:, -1] &= settings["full"] << 2 * (max_col - (max_mass + 1) %
-                                             max_col)
+    matrix[:, -1] &= settings["full"] << 2 * (max_col - (max_mass + 1) % max_col)
 
     return matrix
 

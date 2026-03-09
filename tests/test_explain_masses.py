@@ -58,11 +58,7 @@ def test_testcase_with_recursion(testcase, tolerance):
         max_len=int(
             testcase[0]
             / PRECISION
-            / min(
-                pl.Series(
-                    NUCLEOTIDE_DF.select("integer_mass")
-                ).to_list()
-            )
+            / min(pl.Series(NUCLEOTIDE_DF.select("integer_mass")).to_list())
         ),
         su_mass=testcase[0],
         obs_mass=testcase[0],
@@ -103,11 +99,7 @@ def test_testcase_with_matrix(testcase, compression, tolerance, memo):
         max_len=int(
             testcase[0]
             / PRECISION
-            / min(
-                pl.Series(
-                    NUCLEOTIDE_DF.select("integer_mass")
-                ).to_list()
-            )
+            / min(pl.Series(NUCLEOTIDE_DF.select("integer_mass")).to_list())
         ),
         su_mass=testcase[0],
         obs_mass=testcase[0],

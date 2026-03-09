@@ -115,14 +115,13 @@ def main():
     if singletons is not None:
         # Map singletons to their mass representative
         singletons = singletons.with_columns(
-            pl.col("id").replace_strict(NUC_REPS).alias("id"))
+            pl.col("id").replace_strict(NUC_REPS).alias("id")
+        )
 
         # Select only bases found in singletons
         nucleotide_df = nucleotide_df.with_columns(
             pl.when(
-                pl.col("representative").is_in(
-                    singletons.get_column("id").to_list()
-                )
+                pl.col("representative").is_in(singletons.get_column("id").to_list())
             )
             .then(pl.col("modification_rate"))
             .otherwise(pl.lit(0.0))
@@ -143,8 +142,9 @@ def main():
     end_tag = meta.setdefault("label_mass_3T", 455.1491)
 
     # Build fragmentation dict
-    fragmentation_dict = build_fragmentation_dict(mass_5_prime=start_tag,
-                                      mass_3_prime=end_tag)
+    fragmentation_dict = build_fragmentation_dict(
+        mass_5_prime=start_tag, mass_3_prime=end_tag
+    )
 
     # Standardize sequence mass (remove START_END fragmentation to gain SU mass)
     seq_mass_obs = meta["sequence_mass"]

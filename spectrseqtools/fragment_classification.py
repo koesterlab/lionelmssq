@@ -39,9 +39,9 @@ def classify_fragments(
     fragments = pl.concat(
         [
             fragment_masses.with_columns(
-                (
-                    pl.col("observed_mass") - (weight * inferrer.precision)
-                ).alias("standard_unit_mass"),
+                (pl.col("observed_mass") - (weight * inferrer.precision)).alias(
+                    "standard_unit_mass"
+                ),
                 pl.lit(fragmentation[0]).alias("fragmentation"),
             )
             for (weight, fragmentation) in fragmentation_dict.items()

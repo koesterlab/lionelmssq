@@ -110,9 +110,7 @@ def test_testcase(testcase):
         # Select only bases found in singletons
         nucleotide_df = nucleotide_df.with_columns(
             pl.when(
-                pl.col("representative").is_in(
-                    singletons.get_column("id").to_list()
-                )
+                pl.col("representative").is_in(singletons.get_column("id").to_list())
             )
             .then(pl.col("modification_rate"))
             .otherwise(pl.lit(0.0))
