@@ -180,7 +180,7 @@ def test_testcase(testcase):
     )
 
     print("Alphabet after singleton reduction:")
-    inferrer.print_masses()
+    inferrer.print_alphabet()
     print()
 
     # Classify preprocessed fragments

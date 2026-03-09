@@ -12,6 +12,7 @@ from itertools import combinations
 import polars as pl
 import numpy as np
 
+from spectrseqtools.mass_table import CompositionInferrer
 from spectrseqtools.masses import UNMODIFIED_BASES
 
 
@@ -33,16 +34,16 @@ def get_singleton_set_item(set_: Set[Any]) -> Any:
 
 
 class LinearProgramInstance:
-    def __init__(self, fragments, inferrer, skeleton_seq):
+    def __init__(self, fragments, inferrer: CompositionInferrer, skeleton_seq):
         # i = 1,...,n: positions in the sequence
         # j = 1,...,m: fragments
         # b = 1,...,k: (modified) bases
         self.fragments = fragments
         self.seq_len = len(skeleton_seq)
-        self.nucleoside_names = [mass.names[0] for mass in inferrer.masses[1:]]
+        self.nucleoside_names = [mass.names[0] for mass in inferrer.alphabet[1:]]
         self.nucleoside_masses = {
             mass.names[0]: mass.mass * inferrer.precision
-            for mass in inferrer.masses[1:]
+            for mass in inferrer.alphabet[1:]
         }
 
         fragment_masses = self.fragments.get_column("standard_unit_mass").to_list()
@@ -188,7 +189,7 @@ class LinearProgramInstance:
         ) <= np.ceil(inferrer.seq.modification_rate * self.seq_len)
 
         # Enforce individual modification rates
-        for mass in inferrer.masses:
+        for mass in inferrer.alphabet:
             for b in mass.names:
                 if b in self.nucleoside_names:
                     problem += lpSum(

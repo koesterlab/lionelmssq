@@ -106,7 +106,7 @@ class Predictor:
         print()
 
         print("Alphabet after skeleton-based reduction:")
-        self.inferrer.print_masses()
+        self.inferrer.print_alphabet()
         print()
 
         # Filter out all internal fragments that do not fit anywhere in skeleton
@@ -173,8 +173,8 @@ class Predictor:
         old_alphabet_size = -1
 
         explanations = {}
-        while old_alphabet_size != len(self.inferrer.masses):
-            old_alphabet_size = len(self.inferrer.masses)
+        while old_alphabet_size != len(self.inferrer.alphabet):
+            old_alphabet_size = len(self.inferrer.alphabet)
             # Roughly explain the mass differences (to reduce the alphabet)
             # Note there may be faulty mass fragments leading to not truly existent values
             explanations = self.collect_diff_explanations_for_su(fragments=fragments)
@@ -196,7 +196,7 @@ class Predictor:
             fragments = self._reduce_alphabet(observed_nucleotides, fragments)
 
         print("Alphabet after explanation-based reduction:")
-        self.inferrer.print_masses()
+        self.inferrer.print_alphabet()
         print()
 
         return fragments, explanations

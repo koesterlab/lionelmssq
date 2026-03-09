@@ -218,7 +218,7 @@ class SkeletonBuilder:
         # Initialize nucleotide mass dict
         nucleoside_masses = {
             mass.names[0]: mass.mass * self.inferrer.precision
-            for mass in self.inferrer.masses[1:]
+            for mass in self.inferrer.alphabet[1:]
         }
 
         # Determine lower and upper bound
@@ -330,7 +330,7 @@ class SkeletonBuilder:
         # Initialize nucleotide mass dict
         nucleoside_masses = {
             mass.names[0]: mass.mass * self.inferrer.precision
-            for mass in self.inferrer.masses[1:]
+            for mass in self.inferrer.alphabet[1:]
         }
 
         # Determine lower and upper bound

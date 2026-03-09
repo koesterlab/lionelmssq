@@ -61,7 +61,7 @@ class CompositionInferrer:
     precision: float
     tolerance: float
     seq: SequenceInformation
-    masses: List[NucleotideMass]
+    alphabet: List[NucleotideMass]
 
     def __init__(
         self,
@@ -75,7 +75,7 @@ class CompositionInferrer:
         self.tolerance = tolerance
         self.precision = precision
         self.seq = seq
-        self.masses = initialize_nucleotide_masses(nucleotide_df)
+        self.alphabet = initialize_nucleotide_alphabet(nucleotide_df)
         self.matrix = None
 
         # Adapt individual modification rates to universal one
@@ -85,49 +85,49 @@ class CompositionInferrer:
         if self.matrix is None:
             self.matrix = load_matrix(
                 path=set_matrix_path(precision, compression_rate),
-                integer_masses=[mass.mass for mass in self.masses],
+                integer_masses=[mass.mass for mass in self.alphabet],
             )
 
     def _adapt_individual_modification_rates_by_universal_one(self):
-        for nucleotide_mass in self.masses:
+        for nucleotide_mass in self.alphabet:
             if not nucleotide_mass.is_modification:
                 continue
             if nucleotide_mass.modification_rate > self.seq.modification_rate:
                 nucleotide_mass.modification_rate = self.seq.modification_rate
-        self._reduce_nucleotide_list()
+        self._reduce_nucleotide_alphabet()
 
     def adapt_individual_modification_rates_by_alphabet_reduction(self, alphabet):
-        for nucleotide_mass in self.masses:
+        for nucleotide_mass in self.alphabet:
             if not nucleotide_mass.is_modification:
                 continue
             if all(name not in alphabet for name in nucleotide_mass.names):
                 nucleotide_mass.modification_rate = 0.0
-        self._reduce_nucleotide_list()
+        self._reduce_nucleotide_alphabet()
 
-    def _reduce_nucleotide_list(self):
-        new_masses = [
+    def _reduce_nucleotide_alphabet(self):
+        new_alphabet = [
             mass
-            for mass in self.masses
+            for mass in self.alphabet
             if mass.mass == 0.0 or mass.modification_rate > 0.0
         ]
 
-        # Return if nucleotide list was not reduced
-        if len(new_masses) == len(self.masses):
+        # Return if alphabet was not reduced
+        if len(new_alphabet) == len(self.alphabet):
             return
 
         # Recompute matrix
         self.matrix = set_up_bit_matrix(
-            integer_masses=[mass.mass for mass in new_masses],
-            max_mass=max([mass.mass for mass in new_masses]) * MAX_SEQ_LENGTH,
+            integer_masses=[mass.mass for mass in new_alphabet],
+            max_mass=max([mass.mass for mass in new_alphabet]) * MAX_SEQ_LENGTH,
             compression_rate=self.compression_per_cell,
         )
 
-        # Update nucleotide list
-        self.masses = new_masses
+        # Update nucleotide alphabet
+        self.alphabet = new_alphabet
 
-    def print_masses(self):
+    def print_alphabet(self):
         mass_names = []
-        for mass in self.masses:
+        for mass in self.alphabet:
             mass_names += mass.names
         masses = NUCLEOTIDE_DF.sort("nucleoside_mass").filter(
             pl.col("representative").is_in(mass_names)
@@ -138,7 +138,7 @@ class CompositionInferrer:
                 masses.get_column_index("modification_rate"),
                 pl.Series(
                     "modification_rate",
-                    [mass.modification_rate for mass in self.masses[1:]],
+                    [mass.modification_rate for mass in self.alphabet[1:]],
                 ),
             )
         )
@@ -156,7 +156,7 @@ def set_matrix_path(precision, compression_rate):
     return path
 
 
-def initialize_nucleotide_masses(nucleotide_df):
+def initialize_nucleotide_alphabet(nucleotide_df):
     # Get list of integer masses
     integer_masses = nucleotide_df.get_column("integer_mass").to_list()
 
@@ -200,7 +200,7 @@ def initialize_nucleotide_masses(nucleotide_df):
         for mass in nucleotide_df.get_column("integer_mass").to_list()
     }
 
-    # Return list of NucleotideMass instances
+    # Return alphabet of NucleotideMass instances
     return [
         NucleotideMass(mass, names[mass], is_mod[mass], rates[mass])
         if mass != 0
@@ -377,7 +377,7 @@ def compute_sequence_length_bound(inferrer: CompositionInferrer, dir: str) -> in
             raise NotImplementedError(f"Support for '{dir}' is currently not given.")
 
     def backtrack(total_mass, current_idx, max_mods_all, max_mods_ind):
-        current_weight = inferrer.masses[current_idx].mass
+        current_weight = inferrer.alphabet[current_idx].mass
 
         # If the result for this state is already computed, return it
         if (total_mass, current_idx) in memo:
@@ -421,18 +421,18 @@ def compute_sequence_length_bound(inferrer: CompositionInferrer, dir: str) -> in
                     max_mods_all,
                     round(
                         inferrer.seq.max_len
-                        * inferrer.masses[current_idx - 1].modification_rate
+                        * inferrer.alphabet[current_idx - 1].modification_rate
                     ),
                 )
             )
 
         # Backtrack to the next left-side column if possible
         if (current_value >> 1) % 2 == 1:
-            if not inferrer.masses[current_idx].is_modification or (
+            if not inferrer.alphabet[current_idx].is_modification or (
                 max_mods_all > 0 and max_mods_ind > 0
             ):
                 # Adjust number of still allowed modifications if necessary
-                if inferrer.masses[current_idx].is_modification:
+                if inferrer.alphabet[current_idx].is_modification:
                     max_mods_all -= 1
                     max_mods_ind -= 1
 
@@ -471,9 +471,9 @@ def compute_sequence_length_bound(inferrer: CompositionInferrer, dir: str) -> in
         solutions.append(
             backtrack(
                 value,
-                len(inferrer.masses) - 1,
+                len(inferrer.alphabet) - 1,
                 max_modifications,
-                round(inferrer.seq.max_len * inferrer.masses[-1].modification_rate),
+                round(inferrer.seq.max_len * inferrer.alphabet[-1].modification_rate),
             )
         )
 

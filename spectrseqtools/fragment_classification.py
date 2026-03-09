@@ -72,7 +72,7 @@ def classify_fragments(
         .map_elements(
             lambda x: is_singleton(
                 mass=x["standard_unit_mass"],
-                integer_masses=[mass.mass for mass in inferrer.masses],
+                integer_masses=[mass.mass for mass in inferrer.alphabet],
                 inferrer=inferrer,
                 threshold=inferrer.tolerance * x["observed_mass"],
             ),

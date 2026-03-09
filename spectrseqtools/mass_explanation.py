@@ -116,7 +116,7 @@ def explain_mass_with_matrix(
     memo = {}
 
     def backtrack(total_mass, current_idx, max_mods_all, max_mods_ind):
-        current_weight = inferrer.masses[current_idx].mass
+        current_weight = inferrer.alphabet[current_idx].mass
 
         # If the result for this state is already computed, return it
         if with_memo and (total_mass, current_idx) in memo:
@@ -157,17 +157,17 @@ def explain_mass_with_matrix(
                 max_mods_all,
                 round(
                     inferrer.seq.max_len
-                    * inferrer.masses[current_idx - 1].modification_rate
+                    * inferrer.alphabet[current_idx - 1].modification_rate
                 ),
             )
 
         # Backtrack to the next left-side column if possible
         if (current_value >> 1) % 2 == 1:
-            if not inferrer.masses[current_idx].is_modification or (
+            if not inferrer.alphabet[current_idx].is_modification or (
                 max_mods_all > 0 and max_mods_ind > 0
             ):
                 # Adjust number of still allowed modifications if necessary
-                if inferrer.masses[current_idx].is_modification:
+                if inferrer.alphabet[current_idx].is_modification:
                     max_mods_all -= 1
                     max_mods_ind -= 1
 
@@ -195,9 +195,9 @@ def explain_mass_with_matrix(
     ):
         solutions += backtrack(
             value,
-            len(inferrer.masses) - 1,
+            len(inferrer.alphabet) - 1,
             max_modifications,
-            round(inferrer.seq.max_len * inferrer.masses[-1].modification_rate),
+            round(inferrer.seq.max_len * inferrer.alphabet[-1].modification_rate),
         )
 
     return convert_nucleotide_masses_to_names(solutions=solutions)
@@ -212,7 +212,7 @@ def explain_mass_with_recursion(
     """
     Returns all the possible combinations of nucleosides that could sum up to the given mass.
     """
-    mass_list = [mass.mass for mass in inferrer.masses]
+    mass_list = [mass.mass for mass in inferrer.alphabet]
 
     # Convert the target to an integer for easy operations
     target = int(round(mass / inferrer.precision, 0))
@@ -230,7 +230,7 @@ def explain_mass_with_recursion(
     def dp(remaining, start, used_mods_all, used_mods_ind):
         # If too many modifications are used, return empty list
         if used_mods_all > max_modifications or used_mods_ind > round(
-            inferrer.seq.max_len * inferrer.masses[start].modification_rate
+            inferrer.seq.max_len * inferrer.alphabet[start].modification_rate
         ):
             return []
 
