@@ -4,7 +4,7 @@ import re
 from clr_loader import get_mono
 from typing import List
 
-from spectrseqtools.mass_explanation import explain_mass_with_table
+from spectrseqtools.mass_explanation import explain_mass_with_matrix
 from spectrseqtools.mass_table import DynamicProgrammingTable
 
 rt = get_mono()
@@ -49,7 +49,7 @@ def calculate_explanations(
     threshold: float,
     dp_table: DynamicProgrammingTable,
 ) -> List[Explanation]:
-    explanation_list = explain_mass_with_table(
+    explanation_list = explain_mass_with_matrix(
         diff,
         dp_table=dp_table,
         max_modifications=round(dp_table.seq.modification_rate * dp_table.seq.max_len),

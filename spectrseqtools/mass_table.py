@@ -10,11 +10,11 @@ import os
 from spectrseqtools.masses import NUCLEOTIDE_DF, UNMODIFIED_BASES
 
 
-# Set OS-independent cache directory for DP table
-TABLE_DIR = user_cache_dir(
-    appname="spectrseqtools/dp_table", version="1.4", ensure_exists=True
+# Set OS-independent cache directory for traceback matrix
+MATRIX_DIR = user_cache_dir(
+    appname="spectrseqtools/traceback_matrix", version="1.0", ensure_exists=True
 )
-# Set maximum sequence length to be represented in DP table
+# Set maximum sequence length to be represented in traceback matrix
 MAX_SEQ_LENGTH = 35
 
 
@@ -49,9 +49,14 @@ class NucleotideMass:
         return self.mass > other.mass
 
 
+# METHOD: Use dynamic programming to build a traceback matrix that implicitly
+# contains all inferable compositions up to a specific target mass (based on
+# an underlying nucleotide alphabet).
+
+
 @dataclass
 class DynamicProgrammingTable:
-    table: np.ndarray
+    matrix: np.ndarray
     compression_per_cell: int
     precision: float
     tolerance: float
@@ -71,15 +76,15 @@ class DynamicProgrammingTable:
         self.precision = precision
         self.seq = seq
         self.masses = initialize_nucleotide_masses(nucleotide_df)
-        self.table = None
+        self.matrix = None
 
         # Adapt individual modification rates to universal one
         self._adapt_individual_modification_rates_by_universal_one()
 
-        # Initialize table form file (for no alphabet reduction)
-        if self.table is None:
-            self.table = load_dp_table(
-                table_path=set_table_path(precision, compression_rate),
+        # Initialize matrix from file (for no alphabet reduction)
+        if self.matrix is None:
+            self.matrix = load_matrix(
+                path=set_matrix_path(precision, compression_rate),
                 integer_masses=[mass.mass for mass in self.masses],
             )
 
@@ -110,8 +115,8 @@ class DynamicProgrammingTable:
         if len(new_masses) == len(self.masses):
             return
 
-        # Recompute table
-        self.table = set_up_bit_table(
+        # Recompute matrix
+        self.matrix = set_up_bit_matrix(
             integer_masses=[mass.mass for mass in new_masses],
             max_mass=max([mass.mass for mass in new_masses]) * MAX_SEQ_LENGTH,
             compression_rate=self.compression_per_cell,
@@ -139,11 +144,11 @@ class DynamicProgrammingTable:
         )
 
 
-def set_table_path(precision, compression_rate):
-    # Set path for DP table
-    path = f"{TABLE_DIR}/tol_{precision:.0E}.{compression_rate}_per_cell"
+def set_matrix_path(precision, compression_rate):
+    # Set path for traceback matrix
+    path = f"{MATRIX_DIR}/tol_{precision:.0E}.{compression_rate}_per_cell"
 
-    # Create directory for DP table if it does not already exist
+    # Create directory for traceback matrix if it does not already exist
     subdir = "/".join(path.split("/")[:-1])
     if not os.path.exists(subdir):
         os.makedirs(subdir)
@@ -204,22 +209,22 @@ def initialize_nucleotide_masses(nucleotide_df):
     ]
 
 
-def set_up_bit_table(integer_masses, max_mass: int, compression_rate: int):
+def set_up_bit_matrix(integer_masses, max_mass: int, compression_rate: int):
     """
-    Calculate complete bit-representation mass table with dynamic programming.
+    Calculate complete bit-representation matrix with dynamic programming.
     """
-    settings = select_table_building_settings(compression_rate)
+    settings = select_matrix_building_settings(compression_rate)
 
-    # Initialize bit-representation numpy table
+    # Initialize bit-representation matrix as numpy table
     max_col = int(np.ceil((max_mass + 1) / compression_rate))
-    dp_table = np.zeros((len(integer_masses), max_col), dtype=settings["type"])
-    dp_table[0, 0] = settings["init"]
+    matrix = np.zeros((len(integer_masses), max_col), dtype=settings["type"])
+    matrix[0, 0] = settings["init"]
 
-    # Fill DP table row-wise
+    # Fill traceback matrix row-wise
     for i in range(1, len(integer_masses)):
         # Case: Start new row (i.e. move on to new nucleotide) by initializing reachable cells from before
-        dp_table[i] = [
-            ((val | (val >> 1)) & settings["alt_sec"]) for val in dp_table[i - 1]
+        matrix[i] = [
+            ((val | (val >> 1)) & settings["alt_sec"]) for val in matrix[i - 1]
         ]
 
         # Define number of cells to move (step) and bit shift in a cell (shift)
@@ -230,25 +235,26 @@ def set_up_bit_table(integer_masses, max_mass: int, compression_rate: int):
         for j in range(max_col):
             # Consider cell defined by step
             if step + j < max_col:
-                dp_table[i, j + step] |= settings["alt_first"] & (
-                    (dp_table[i, j] >> (2 * shift) << 1)
-                    | (dp_table[i, j] >> (2 * shift))
+                matrix[i, j + step] |= settings["alt_first"] & (
+                    (matrix[i, j] >> (2 * shift) << 1)
+                    | (matrix[i, j] >> (2 * shift))
                 )
 
             # If shift is needed, consider the next cell as well
             if shift != 0 and j + step + 1 < max_col:
-                dp_table[i, j + step + 1] |= settings["alt_first"] & (
-                    (dp_table[i, j] << 2 * (compression_rate - shift) << 1)
-                    | (dp_table[i, j] << 2 * (compression_rate - shift))
+                matrix[i, j + step + 1] |= settings["alt_first"] & (
+                    (matrix[i, j] << 2 * (compression_rate - shift) << 1)
+                    | (matrix[i, j] << 2 * (compression_rate - shift))
                 )
 
     # Adjust last column for unused cells
-    dp_table[:, -1] &= settings["full"] << 2 * (max_col - (max_mass + 1) % max_col)
+    matrix[:, -1] &= settings["full"] << 2 * (max_col - (max_mass + 1) %
+                                             max_col)
 
-    return dp_table
+    return matrix
 
 
-def select_table_building_settings(compression_rate: int):
+def select_matrix_building_settings(compression_rate: int):
     match compression_rate:
         case 4:
             return {
@@ -285,59 +291,59 @@ def select_table_building_settings(compression_rate: int):
         case _:
             raise ValueError(
                 f"The compression rate {compression_rate} is "
-                f"not compatible with the table setup."
+                f"not compatible with the matrix setup."
             )
 
 
-def set_up_mass_table(integer_masses, max_mass):
+def set_up_matrix(integer_masses, max_mass):
     """
-    Calculate complete mass table with dynamic programming.
+    Calculate complete matrix with dynamic programming.
     """
-    # Initialize numpy table
-    dp_table = np.zeros((len(integer_masses), max_mass + 1), dtype=np.uint8)
-    dp_table[0, 0] = 3.0
+    # Initialize matrix as numpy table
+    matrix = np.zeros((len(integer_masses), max_mass + 1), dtype=np.uint8)
+    matrix[0, 0] = 3.0
 
-    # Fill DP table row-wise
+    # Fill traceback matrix row-wise
     for i in range(1, len(integer_masses)):
         # Case: Start new row (i.e. move on to new nucleoside) by initializing
         # reachable cells from before
-        dp_table[i] = [int(val != 0.0) for val in dp_table[i - 1]]
+        matrix[i] = [int(val != 0.0) for val in matrix[i - 1]]
 
         # Case: Add more of current nucleoside
         for j in range(max_mass + 1):
             # If cell is not reachable, skip it
-            if dp_table[i, j] == 0.0:
+            if matrix[i, j] == 0.0:
                 continue
 
             # Add another nucleoside if possible
             if integer_masses[i] + j <= max_mass:
-                dp_table[i, j + integer_masses[i]] += 2.0
+                matrix[i, j + integer_masses[i]] += 2.0
 
-    return dp_table
+    return matrix
 
 
-def load_dp_table(table_path, integer_masses):
+def load_matrix(path, integer_masses):
     """
-    Load dynamic-programming table if it exists and compute it otherwise.
+    Load traceback matrix if it exists and compute it otherwise.
     """
     # Select compression rate from path string
-    compression_rate = int(table_path.split(".")[-1].rstrip("_per_cell"))
+    compression_rate = int(path.split(".")[-1].rstrip("_per_cell"))
 
-    # Select maximum integer mass for which table should be built
+    # Select maximum integer mass for which matrix should be built
     max_mass = max(integer_masses) * MAX_SEQ_LENGTH
 
-    # Compute and save bit-representation DP table if not existing
-    if not pathlib.Path(f"{table_path}.npy").is_file():
-        print("Table not found")
-        dp_table = (
-            set_up_mass_table(integer_masses, max_mass)
+    # Compute and save bit-representation matrix if not existing
+    if not pathlib.Path(f"{path}.npy").is_file():
+        print("Matrix not found")
+        matrix = (
+            set_up_matrix(integer_masses, max_mass)
             if compression_rate == 1
-            else (set_up_bit_table(integer_masses, max_mass, compression_rate))
+            else set_up_bit_matrix(integer_masses, max_mass, compression_rate)
         )
-        np.save(table_path, dp_table)
+        np.save(path, matrix)
 
-    # Read DP table
-    return np.load(f"{table_path}.npy")
+    # Read traceback matrix
+    return np.load(f"{path}.npy")
 
 
 def compute_sequence_length_bound(dp_table: DynamicProgrammingTable, dir: str) -> int:
@@ -377,25 +383,25 @@ def compute_sequence_length_bound(dp_table: DynamicProgrammingTable, dir: str) -
         if (total_mass, current_idx) in memo:
             return memo[(total_mass, current_idx)]
 
-        # Return default value for cells outside of table
+        # Return default value for cells outside of matrix
         if total_mass < 0:
             return default_bound
 
-        # Initialize new counter for valid start in table
+        # Initialize new counter for valid start in matrix
         if total_mass == 0:
             return 0
 
-        # Raise error if mass is not in table (due to its size)
-        if total_mass >= len(dp_table.table[0]) * compression_rate:
+        # Raise error if mass is not in matrix (due to its size)
+        if total_mass >= len(dp_table.matrix[0]) * compression_rate:
             raise NotImplementedError(
-                f"The value {value} is not in the DP table. Extend its "
-                f"size if you want to compute larger masses."
+                f"The value {value} is not in the traceback matrix. "
+                f"Extend its size if you want to compute larger masses."
             )
 
         current_value = (
-            dp_table[current_idx, total_mass]
+            dp_table.matrix[current_idx, total_mass]
             if compression_rate == 1
-            else dp_table.table[current_idx, total_mass // compression_rate]
+            else dp_table.matrix[current_idx, total_mass // compression_rate]
             >> 2 * (compression_rate - 1 - total_mass % compression_rate)
         )
 

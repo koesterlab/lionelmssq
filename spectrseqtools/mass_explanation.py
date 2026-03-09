@@ -59,23 +59,23 @@ def is_valid_mass(
 
     compression_rate = dp_table.compression_per_cell
 
-    current_idx = len(dp_table.table) - 1
+    current_idx = len(dp_table.matrix) - 1
     for value in range(target - threshold, target + threshold + 1):
         # Skip non-positive masses
         if value <= 0:
             continue
 
-        # Raise error if mass is not in table (due to its size)
-        if value >= len(dp_table.table[0]) * compression_rate:
+        # Raise error if mass is not in matrix (due to its size)
+        if value >= len(dp_table.matrix[0]) * compression_rate:
             raise NotImplementedError(
-                f"The value {value} is not in the DP table. Extend its "
-                f"size if you want to compute larger masses."
+                f"The value {value} is not in the traceback matrix. "
+                f"Extend its size if you want to compute larger masses."
             )
 
         current_value = (
-            dp_table.table[current_idx, value]
+            dp_table.matrix[current_idx, value]
             if compression_rate == 1
-            else dp_table.table[current_idx, value // compression_rate]
+            else dp_table.matrix[current_idx, value // compression_rate]
             >> 2 * (compression_rate - 1 - value % compression_rate)
         )
 
@@ -83,13 +83,13 @@ def is_valid_mass(
         if compression_rate != 1 and current_value % compression_rate == 0.0:
             continue
 
-        # Return True when mass corresponds to valid entry in table
+        # Return True when mass corresponds to valid entry in matrix
         if current_value % 2 == 1 or (current_value >> 1) % 2 == 1:
             return True
     return False
 
 
-def explain_mass_with_table(
+def explain_mass_with_matrix(
     mass: float,
     dp_table: DynamicProgrammingTable,
     max_modifications=np.inf,
@@ -122,25 +122,25 @@ def explain_mass_with_table(
         if with_memo and (total_mass, current_idx) in memo:
             return memo[(total_mass, current_idx)]
 
-        # Return empty list for cells outside of table
+        # Return empty list for cells outside of matrix
         if total_mass < 0:
             return []
 
-        # Initialize a new nucleoside set for a valid start in table
+        # Initialize a new nucleoside set for a valid start in matrix
         if total_mass == 0:
             return [[]]
 
-        # Raise error if mass is not in table (due to its size)
-        if total_mass >= len(dp_table.table[0]) * compression_rate:
+        # Raise error if mass is not in matrix (due to its size)
+        if total_mass >= len(dp_table.matrix[0]) * compression_rate:
             raise NotImplementedError(
-                f"The value {value} is not in the DP table. Extend its "
-                f"size if you want to compute larger masses."
+                f"The value {value} is not in the traceback matrix. "
+                f"Extend its size if you want to compute larger masses."
             )
 
         current_value = (
-            dp_table[current_idx, total_mass]
+            dp_table.matrix[current_idx, total_mass]
             if compression_rate == 1
-            else dp_table.table[current_idx, total_mass // compression_rate]
+            else dp_table.matrix[current_idx, total_mass // compression_rate]
             >> 2 * (compression_rate - 1 - total_mass % compression_rate)
         )
 

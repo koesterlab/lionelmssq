@@ -3,7 +3,7 @@ import polars as pl
 
 from spectrseqtools.mass_explanation import (
     explain_mass_with_recursion,
-    explain_mass_with_table,
+    explain_mass_with_matrix,
 )
 from spectrseqtools.masses import (
     NUCLEOTIDE_DF,
@@ -98,7 +98,7 @@ COMPRESSION_RATES = [32]
 @pytest.mark.parametrize("compression", COMPRESSION_RATES)
 @pytest.mark.parametrize("memo", WITH_MEMO)
 @pytest.mark.parametrize("tolerance", TOLERANCES)
-def test_testcase_with_table(testcase, compression, tolerance, memo):
+def test_testcase_with_matrix(testcase, compression, tolerance, memo):
     seq_info = SequenceInformation(
         max_len=int(
             testcase[0]
@@ -122,7 +122,7 @@ def test_testcase_with_table(testcase, compression, tolerance, memo):
         seq=seq_info,
     )
 
-    predicted_mass_explanations = explain_mass_with_table(
+    predicted_mass_explanations = explain_mass_with_matrix(
         testcase[0],
         dp_table=dp_table,
         max_modifications=round(MOD_RATE * len(testcase[1])),

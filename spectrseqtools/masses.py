@@ -22,7 +22,7 @@ DEFAULT_INTENSITY_CUTOFF = 115000
 FULL_FRAGMENTATION_DICT = False
 
 
-# Set number of binary-compressed masses per integer cell in DP table
+# Set number of binary-compressed masses per integer cell in traceback matrix
 COMPRESSION_RATE = 32
 
 
