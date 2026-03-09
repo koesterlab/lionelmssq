@@ -21,7 +21,7 @@ MASS_NAMES = {
         on="tolerated_integer_masses",
         how="left",
     )
-    .get_column("nucleoside")
+    .get_column("representative")
     .to_list()
     for mass in EXPLANATION_MASSES.get_column("tolerated_integer_masses").to_list()
 }
@@ -35,7 +35,7 @@ IS_MOD = {
             on="tolerated_integer_masses",
             how="left",
         )
-        .get_column("nucleoside")
+        .get_column("representative")
         .to_list()
     )
     for mass in EXPLANATION_MASSES.get_column("tolerated_integer_masses").to_list()

@@ -121,7 +121,7 @@ def main():
         # Select only bases found in singletons
         explanation_masses = explanation_masses.with_columns(
             pl.when(
-                pl.col("nucleoside").is_in(
+                pl.col("representative").is_in(
                     singletons.get_column("nucleoside").to_list()
                 )
             )
@@ -132,7 +132,7 @@ def main():
 
     # Ensure modification rates of unmodified bases are set to 1
     explanation_masses = explanation_masses.with_columns(
-        pl.when(~pl.col("nucleoside").is_in(UNMODIFIED_BASES))
+        pl.when(~pl.col("representative").is_in(UNMODIFIED_BASES))
         .then(pl.col("modification_rate"))
         .otherwise(pl.lit(1.0))
         .alias("modification_rate")
@@ -238,7 +238,7 @@ def format_sequence_to_full_version(seq: List[str]) -> str:
     output = ""
     for nuc in seq:
         alt_nucs = (
-            EXPLANATION_MASSES.filter(pl.col("nucleoside") == nuc)
+            EXPLANATION_MASSES.filter(pl.col("representative") == nuc)
             .select("nucleoside_list")
             .item()
             .to_list()

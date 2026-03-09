@@ -162,7 +162,7 @@ def select_singletons_from_peaks(peak_list: List[RawPeak]) -> pl.DataFrame:
             .alias("is_match")
         )
         .filter(pl.col("is_match"))
-        .sort(["nucleoside", "scan_time"])
+        .sort(["representative", "scan_time"])
     )
 
     # Map representative nucleoside, cluster score, and count to each nucleoside group

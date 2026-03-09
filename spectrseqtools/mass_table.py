@@ -125,7 +125,7 @@ class DynamicProgrammingTable:
         for mass in self.masses:
             mass_names += mass.names
         masses = EXPLANATION_MASSES.sort("nucleoside_mass").filter(
-            pl.col("nucleoside").is_in(mass_names)
+            pl.col("representative").is_in(mass_names)
         )
 
         print(
@@ -169,7 +169,7 @@ def initialize_nucleotide_masses(nucleotide_df):
             on="tolerated_integer_masses",
             how="left",
         )
-        .get_column("nucleoside")
+        .get_column("representative")
         .to_list()
         for mass in nucleotide_df.get_column("tolerated_integer_masses").to_list()
     }

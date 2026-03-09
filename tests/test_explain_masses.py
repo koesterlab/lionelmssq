@@ -19,7 +19,7 @@ def get_seq_weight(seq: tuple) -> float:
         pl.col("name")
         .map_elements(
             lambda x: (
-                EXPLANATION_MASSES.filter(pl.col("nucleoside") == x)
+                EXPLANATION_MASSES.filter(pl.col("representative") == x)
                 .get_column("nucleoside_mass")
                 .to_list()[0]
             ),
