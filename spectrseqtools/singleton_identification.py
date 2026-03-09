@@ -9,16 +9,16 @@ from sklearn.metrics import silhouette_score
 from typing import List
 
 from spectrseqtools.common import initialize_raw_file_iterator
-from spectrseqtools.masses import EXPLANATION_MASSES
+from spectrseqtools.masses import NUCLEOTIDE_DF
 
 rt = get_mono()
 
 PREPROCESS_TOL = 10e-6
 THEORETICAL_BOUNDARY_FACTOR = 2
-MIN_MZ = EXPLANATION_MASSES["singleton_mz"].min() * (
+MIN_MZ = NUCLEOTIDE_DF["singleton_mz"].min() * (
     1 - THEORETICAL_BOUNDARY_FACTOR * PREPROCESS_TOL
 )
-MAX_MZ = EXPLANATION_MASSES["singleton_mz"].max() * (
+MAX_MZ = NUCLEOTIDE_DF["singleton_mz"].max() * (
     1 + THEORETICAL_BOUNDARY_FACTOR * PREPROCESS_TOL
 )
 COL_TYPES_RAW = {
@@ -145,7 +145,7 @@ def select_singletons_from_peaks(peak_list: List[RawPeak]) -> pl.DataFrame:
 
     # Match observed m/z to singleton m/z from the reference table
     peak_df = peak_df.sort("mz").join_asof(
-        EXPLANATION_MASSES.sort("singleton_mz"),
+        NUCLEOTIDE_DF.sort("singleton_mz"),
         left_on="mz",
         right_on="singleton_mz",
         strategy="nearest",

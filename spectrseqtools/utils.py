@@ -1,6 +1,6 @@
 import polars as pl
 
-from spectrseqtools.masses import EXPLANATION_MASSES as UNIQUE_MASSES
+from spectrseqtools.masses import NUCLEOTIDE_DF as UNIQUE_MASSES
 
 
 def estimate_MS_error_tolerance(

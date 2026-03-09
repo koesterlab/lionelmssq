@@ -55,9 +55,9 @@ class Predictor:
     def __init__(
         self,
         dp_table: DynamicProgrammingTable,
-        explanation_masses: pl.DataFrame,
+        nucleotide_df: pl.DataFrame,
     ):
-        self.explanation_masses = explanation_masses
+        self.nucleotide_df = nucleotide_df
         self.dp_table = dp_table
 
     def predict(
@@ -287,7 +287,7 @@ class Predictor:
 
     def collect_explanations_per_side(self, fragments: pl.DataFrame) -> dict:
         max_weight = (
-            max(self.explanation_masses.get_column("nucleoside_mass").to_list())
+            max(self.nucleotide_df.get_column("nucleoside_mass").to_list())
             + PHOSPHATE_LINK_MASS
         )
         su_masses = fragments.get_column("standard_unit_mass").to_list()

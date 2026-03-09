@@ -94,15 +94,15 @@ def initialize_nucleotide_df() -> pl.DataFrame:
     return masses
 
 
-EXPLANATION_MASSES = initialize_nucleotide_df()
+NUCLEOTIDE_DF = initialize_nucleotide_df()
 
 # Compute dict to map representatives to nucleotides
-_REP_IDX = EXPLANATION_MASSES.get_column_index("representative")
-_LIST_IDX = EXPLANATION_MASSES.get_column_index("id_list")
+_REP_IDX = NUCLEOTIDE_DF.get_column_index("representative")
+_LIST_IDX = NUCLEOTIDE_DF.get_column_index("id_list")
 NUC_REPS = {
     **{
         nuc: row[_REP_IDX]
-        for row in EXPLANATION_MASSES.rows()
+        for row in NUCLEOTIDE_DF.rows()
         for nuc in row[_LIST_IDX]
     }
 }

@@ -6,7 +6,7 @@ import polars as pl
 import numpy as np
 
 from spectrseqtools.mass_table import DynamicProgrammingTable
-from spectrseqtools.masses import EXPLANATION_MASSES, UNMODIFIED_BASES
+from spectrseqtools.masses import NUCLEOTIDE_DF, UNMODIFIED_BASES
 
 
 @dataclass
@@ -17,13 +17,13 @@ class MassExplanations:
 MASS_NAMES = {
     mass: pl.DataFrame({"integer_mass": mass})
     .join(
-        EXPLANATION_MASSES,
+        NUCLEOTIDE_DF,
         on="integer_mass",
         how="left",
     )
     .get_column("representative")
     .to_list()
-    for mass in EXPLANATION_MASSES.get_column("integer_mass").to_list()
+    for mass in NUCLEOTIDE_DF.get_column("integer_mass").to_list()
 }
 
 IS_MOD = {
@@ -31,14 +31,14 @@ IS_MOD = {
         base not in UNMODIFIED_BASES
         for base in pl.DataFrame({"integer_mass": mass})
         .join(
-            EXPLANATION_MASSES,
+            NUCLEOTIDE_DF,
             on="integer_mass",
             how="left",
         )
         .get_column("representative")
         .to_list()
     )
-    for mass in EXPLANATION_MASSES.get_column("integer_mass").to_list()
+    for mass in NUCLEOTIDE_DF.get_column("integer_mass").to_list()
 }
 
 

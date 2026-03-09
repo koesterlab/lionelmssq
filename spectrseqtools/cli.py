@@ -10,10 +10,10 @@ from spectrseqtools.mass_table import DynamicProgrammingTable, SequenceInformati
 from spectrseqtools.masses import (
     COMPRESSION_RATE,
     DEFAULT_INTENSITY_CUTOFF,
-    EXPLANATION_MASSES,
-    TOLERANCE,
     NUC_REPS,
+    NUCLEOTIDE_DF,
     PRECISION,
+    TOLERANCE,
     UNMODIFIED_BASES,
     build_fragmentation_dict,
 )
@@ -109,7 +109,7 @@ def main():
     print("Singletons identified during preprocessing:", singletons)
     print()
 
-    explanation_masses = EXPLANATION_MASSES
+    nucleotide_df = NUCLEOTIDE_DF
 
     # Filter by singletons
     if singletons is not None:
@@ -118,7 +118,7 @@ def main():
             pl.col("id").replace_strict(NUC_REPS).alias("id"))
 
         # Select only bases found in singletons
-        explanation_masses = explanation_masses.with_columns(
+        nucleotide_df = nucleotide_df.with_columns(
             pl.when(
                 pl.col("representative").is_in(
                     singletons.get_column("id").to_list()
@@ -130,7 +130,7 @@ def main():
         )
 
     # Ensure modification rates of unmodified bases are set to 1
-    explanation_masses = explanation_masses.with_columns(
+    nucleotide_df = nucleotide_df.with_columns(
         pl.when(~pl.col("representative").is_in(UNMODIFIED_BASES))
         .then(pl.col("modification_rate"))
         .otherwise(pl.lit(1.0))
@@ -164,7 +164,7 @@ def main():
             / PRECISION
             / min(
                 pl.Series(
-                    explanation_masses.filter(pl.col("modification_rate") > 0.0).select(
+                    nucleotide_df.filter(pl.col("modification_rate") > 0.0).select(
                         "integer_mass"
                     )
                 ).to_list()
@@ -177,7 +177,7 @@ def main():
 
     # Initialize DynamicProgrammingTable class
     dp_table = DynamicProgrammingTable(
-        nucleotide_df=explanation_masses,
+        nucleotide_df=nucleotide_df,
         compression_rate=int(COMPRESSION_RATE),
         tolerance=TOLERANCE,
         precision=PRECISION,
@@ -200,7 +200,7 @@ def main():
     # Predict sequence
     prediction = Predictor(
         dp_table=dp_table,
-        explanation_masses=explanation_masses,
+        nucleotide_df=nucleotide_df,
     ).predict(
         fragments=fragments,
         solver_params=solver_params,
@@ -237,7 +237,7 @@ def format_sequence_to_full_version(seq: List[str]) -> str:
     output = ""
     for nuc in seq:
         alt_nucs = (
-            EXPLANATION_MASSES.filter(pl.col("representative") == nuc)
+            NUCLEOTIDE_DF.filter(pl.col("representative") == nuc)
             .select("id_list")
             .item()
             .to_list()

@@ -6,7 +6,7 @@ from spectrseqtools.mass_explanation import (
     explain_mass_with_table,
 )
 from spectrseqtools.masses import (
-    EXPLANATION_MASSES,
+    NUCLEOTIDE_DF,
     PHOSPHATE_LINK_MASS,
     PRECISION,
 )
@@ -19,7 +19,7 @@ def get_seq_weight(seq: tuple) -> float:
         pl.col("name")
         .map_elements(
             lambda x: (
-                EXPLANATION_MASSES.filter(pl.col("representative") == x)
+                NUCLEOTIDE_DF.filter(pl.col("representative") == x)
                 .get_column("nucleoside_mass")
                 .to_list()[0]
             ),
@@ -60,7 +60,7 @@ def test_testcase_with_recursion(testcase, tolerance):
             / PRECISION
             / min(
                 pl.Series(
-                    EXPLANATION_MASSES.select("integer_mass")
+                    NUCLEOTIDE_DF.select("integer_mass")
                 ).to_list()
             )
         ),
@@ -70,7 +70,7 @@ def test_testcase_with_recursion(testcase, tolerance):
     )
 
     dp_table = DynamicProgrammingTable(
-        EXPLANATION_MASSES,
+        nucleotide_df=NUCLEOTIDE_DF,
         compression_rate=32,
         tolerance=tolerance,
         precision=PRECISION,
@@ -105,7 +105,7 @@ def test_testcase_with_table(testcase, compression, tolerance, memo):
             / PRECISION
             / min(
                 pl.Series(
-                    EXPLANATION_MASSES.select("integer_mass")
+                    NUCLEOTIDE_DF.select("integer_mass")
                 ).to_list()
             )
         ),
@@ -115,7 +115,7 @@ def test_testcase_with_table(testcase, compression, tolerance, memo):
     )
 
     dp_table = DynamicProgrammingTable(
-        EXPLANATION_MASSES,
+        nucleotide_df=NUCLEOTIDE_DF,
         compression_rate=compression,
         tolerance=tolerance,
         precision=PRECISION,

@@ -7,7 +7,7 @@ import pathlib
 import numpy as np
 import os
 
-from spectrseqtools.masses import EXPLANATION_MASSES, UNMODIFIED_BASES
+from spectrseqtools.masses import NUCLEOTIDE_DF, UNMODIFIED_BASES
 
 
 # Set OS-independent cache directory for DP table
@@ -124,7 +124,7 @@ class DynamicProgrammingTable:
         mass_names = []
         for mass in self.masses:
             mass_names += mass.names
-        masses = EXPLANATION_MASSES.sort("nucleoside_mass").filter(
+        masses = NUCLEOTIDE_DF.sort("nucleoside_mass").filter(
             pl.col("representative").is_in(mass_names)
         )
 

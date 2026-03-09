@@ -15,8 +15,8 @@ from spectrseqtools.preprocessing import preprocess
 from spectrseqtools.masses import (
     COMPRESSION_RATE,
     DEFAULT_INTENSITY_CUTOFF,
-    EXPLANATION_MASSES,
     NUC_REPS,
+    NUCLEOTIDE_DF,
     PRECISION,
     TOLERANCE,
     UNMODIFIED_BASES,
@@ -97,7 +97,7 @@ def test_testcase(testcase):
         if ("intensity_cutoff" in meta)
         else DEFAULT_INTENSITY_CUTOFF
     )
-    explanation_masses = EXPLANATION_MASSES
+    nucleotide_df = NUCLEOTIDE_DF
     tolerance = TOLERANCE
 
     # Filter by singletons
@@ -108,7 +108,7 @@ def test_testcase(testcase):
         )
 
         # Select only bases found in singletons
-        explanation_masses = explanation_masses.with_columns(
+        nucleotide_df = nucleotide_df.with_columns(
             pl.when(
                 pl.col("representative").is_in(
                     singletons.get_column("id").to_list()
@@ -120,7 +120,7 @@ def test_testcase(testcase):
         )
 
     # Ensure modification rates of unmodified bases are set to 1
-    explanation_masses = explanation_masses.with_columns(
+    nucleotide_df = nucleotide_df.with_columns(
         pl.when(~pl.col("representative").is_in(UNMODIFIED_BASES))
         .then(pl.col("modification_rate"))
         .otherwise(pl.lit(1.0))
@@ -159,7 +159,7 @@ def test_testcase(testcase):
             / PRECISION
             / min(
                 pl.Series(
-                    explanation_masses.filter(pl.col("modification_rate") > 0.0).select(
+                    nucleotide_df.filter(pl.col("modification_rate") > 0.0).select(
                         "integer_mass"
                     )
                 ).to_list()
@@ -172,7 +172,7 @@ def test_testcase(testcase):
 
     # Initialize DynamicProgrammingTable class
     dp_table = DynamicProgrammingTable(
-        explanation_masses,
+        nucleotide_df=nucleotide_df,
         compression_rate=COMPRESSION_RATE,
         tolerance=tolerance,
         precision=PRECISION,
@@ -195,7 +195,7 @@ def test_testcase(testcase):
     # Predict sequence
     prediction = Predictor(
         dp_table=dp_table,
-        explanation_masses=explanation_masses,
+        nucleotide_df=nucleotide_df,
     ).predict(
         fragments=fragments,
         solver_params=solver_params,
