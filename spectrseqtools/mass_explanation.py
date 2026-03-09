@@ -15,30 +15,30 @@ class MassExplanations:
 
 
 MASS_NAMES = {
-    mass: pl.DataFrame({"tolerated_integer_masses": mass})
+    mass: pl.DataFrame({"integer_mass": mass})
     .join(
         EXPLANATION_MASSES,
-        on="tolerated_integer_masses",
+        on="integer_mass",
         how="left",
     )
     .get_column("representative")
     .to_list()
-    for mass in EXPLANATION_MASSES.get_column("tolerated_integer_masses").to_list()
+    for mass in EXPLANATION_MASSES.get_column("integer_mass").to_list()
 }
 
 IS_MOD = {
     mass: any(
         base not in UNMODIFIED_BASES
-        for base in pl.DataFrame({"tolerated_integer_masses": mass})
+        for base in pl.DataFrame({"integer_mass": mass})
         .join(
             EXPLANATION_MASSES,
-            on="tolerated_integer_masses",
+            on="integer_mass",
             how="left",
         )
         .get_column("representative")
         .to_list()
     )
-    for mass in EXPLANATION_MASSES.get_column("tolerated_integer_masses").to_list()
+    for mass in EXPLANATION_MASSES.get_column("integer_mass").to_list()
 }
 
 
@@ -212,7 +212,7 @@ def explain_mass_with_recursion(
     """
     Returns all the possible combinations of nucleosides that could sum up to the given mass.
     """
-    tolerated_integer_masses = [mass.mass for mass in dp_table.masses]
+    mass_list = [mass.mass for mass in dp_table.masses]
 
     # Convert the target to an integer for easy operations
     target = int(round(mass / dp_table.precision, 0))
@@ -253,25 +253,25 @@ def explain_mass_with_recursion(
         # List to store all combinations for this state
         combinations = []
 
-        # Try each tolerated_integer_mass starting from the current position to avoid duplicates
-        for i in range(start, len(tolerated_integer_masses)):
-            tolerated_integer_mass = tolerated_integer_masses[i]
-            # Recurse with reduced target and the current tolerated_integer_mass
+        # Try each mass starting from the current position to avoid duplicates
+        for i in range(start, len(mass_list)):
+            current_mass = mass_list[i]
+            # Recurse with reduced target and the current mass
             sub_combinations = dp(
-                remaining - tolerated_integer_mass,
+                remaining - current_mass,
                 i,
-                used_mods_all + 1 if IS_MOD[tolerated_integer_mass] else used_mods_all,
+                used_mods_all + 1 if IS_MOD[current_mass] else used_mods_all,
                 0
                 if i != start
                 else (
                     used_mods_ind + 1
-                    if IS_MOD[tolerated_integer_mass]
+                    if IS_MOD[current_mass]
                     else used_mods_ind
                 ),
             )
-            # Add current tolerated_integer_mass to all sub-combinations
+            # Add current mass to all sub-combinations
             for combo in sub_combinations:
-                combinations.append([tolerated_integer_mass] + combo)
+                combinations.append([current_mass] + combo)
 
         # Store result in memo
         memo[(remaining, start)] = combinations

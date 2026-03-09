@@ -60,7 +60,7 @@ def test_testcase_with_recursion(testcase, tolerance):
             / PRECISION
             / min(
                 pl.Series(
-                    EXPLANATION_MASSES.select("tolerated_integer_masses")
+                    EXPLANATION_MASSES.select("integer_mass")
                 ).to_list()
             )
         ),
@@ -105,7 +105,7 @@ def test_testcase_with_table(testcase, compression, tolerance, memo):
             / PRECISION
             / min(
                 pl.Series(
-                    EXPLANATION_MASSES.select("tolerated_integer_masses")
+                    EXPLANATION_MASSES.select("integer_mass")
                 ).to_list()
             )
         ),

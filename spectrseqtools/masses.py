@@ -89,7 +89,7 @@ def initialize_nucleotide_df() -> pl.DataFrame:
         ((pl.col("nucleoside_mass") + PHOSPHATE_LINK_MASS) / PRECISION)
         .round(0)
         .cast(pl.Int64)
-        .alias("tolerated_integer_masses")
+        .alias("integer_mass")
     )
 
     return masses

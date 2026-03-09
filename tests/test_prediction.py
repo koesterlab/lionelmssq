@@ -160,7 +160,7 @@ def test_testcase(testcase):
             / min(
                 pl.Series(
                     explanation_masses.filter(pl.col("modification_rate") > 0.0).select(
-                        "tolerated_integer_masses"
+                        "integer_mass"
                     )
                 ).to_list()
             )

@@ -153,7 +153,7 @@ def set_table_path(precision, compression_rate):
 
 def initialize_nucleotide_masses(nucleotide_df):
     # Get list of integer masses
-    integer_masses = nucleotide_df.get_column("tolerated_integer_masses").to_list()
+    integer_masses = nucleotide_df.get_column("integer_mass").to_list()
 
     # Add a default weight for easier initialization
     integer_masses += [0]
@@ -163,36 +163,36 @@ def initialize_nucleotide_masses(nucleotide_df):
 
     # Create dict with all associated nucleotide names for each mass
     names = {
-        mass: pl.DataFrame({"tolerated_integer_masses": mass})
+        mass: pl.DataFrame({"integer_mass": mass})
         .join(
             nucleotide_df,
-            on="tolerated_integer_masses",
+            on="integer_mass",
             how="left",
         )
         .get_column("representative")
         .to_list()
-        for mass in nucleotide_df.get_column("tolerated_integer_masses").to_list()
+        for mass in nucleotide_df.get_column("integer_mass").to_list()
     }
 
     # Create dict with indicator whether each mass is associated with a modified base
     is_mod = {
         mass: any(base not in UNMODIFIED_BASES for base in names[mass])
-        for mass in nucleotide_df.get_column("tolerated_integer_masses").to_list()
+        for mass in nucleotide_df.get_column("integer_mass").to_list()
     }
 
     # Create dict with the largest associated modification rate for each mass
     rates = {
         mass: max(
-            pl.DataFrame({"tolerated_integer_masses": mass})
+            pl.DataFrame({"integer_mass": mass})
             .join(
                 nucleotide_df,
-                on="tolerated_integer_masses",
+                on="integer_mass",
                 how="left",
             )
             .get_column("modification_rate")
             .to_list()
         )
-        for mass in nucleotide_df.get_column("tolerated_integer_masses").to_list()
+        for mass in nucleotide_df.get_column("integer_mass").to_list()
     }
 
     # Return list of NucleotideMass instances
