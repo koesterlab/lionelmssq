@@ -199,7 +199,7 @@ def main():
 
     # Predict sequence
     prediction = Predictor(
-        inferrrer=inferrer,
+        inferrer=inferrer,
         nucleotide_df=nucleotide_df,
     ).predict(
         fragments=fragments,

@@ -15,6 +15,4 @@ AVERAGINE = {
 @pytest.mark.parametrize("backbone", AVERAGINE.keys())
 def test_set_averagine(backbone):
     averagine = set_averagine(backbone=backbone)
-    print(averagine)
-    print(AVERAGINE[backbone])
     assert averagine == AVERAGINE[backbone]
