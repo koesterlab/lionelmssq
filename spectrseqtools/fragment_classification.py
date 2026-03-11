@@ -9,7 +9,7 @@ MAX_VARIANCE = 1
 
 
 # METHOD: For each fragmentation option that yields a valid mass (i.e. one that
-# can be explained by any valid composition) for a given fragment, duplicate
+# have any valid composition) for a given fragment, duplicate
 # the fragment and determine its fragmentation-independent standard-unit
 # mass by subtracting the weight imposed by the fragmentation.
 
@@ -48,7 +48,7 @@ def classify_fragments(
         ]
     )
 
-    # Filter out all fragments without any explanations
+    # Filter out all fragments with no valid compositions
     fragments = (
         fragments.with_columns(
             pl.struct("observed_mass", "standard_unit_mass")

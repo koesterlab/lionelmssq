@@ -4,7 +4,7 @@ import re
 from clr_loader import get_mono
 from typing import List
 
-from spectrseqtools.mass_explanation import explain_mass_with_matrix
+from spectrseqtools.mass_explanation import infer_compositions_with_matrix
 from spectrseqtools.mass_table import CompositionInferrer
 
 rt = get_mono()
@@ -17,7 +17,7 @@ def parse_nucleosides(sequence: str):
     return _NUCLEOSIDE_RE.findall(sequence)
 
 
-class Explanation:
+class Composition:
     def __init__(self, *nucleosides):
         self.nucleosides = tuple(sorted(nucleosides))
 
@@ -44,25 +44,25 @@ def calculate_error_threshold(mass1: float, mass2: float, threshold: float) -> f
             raise NotImplementedError("This error method is not implemented.")
 
 
-def calculate_explanations(
+def calculate_compositions(
     diff: float,
     threshold: float,
     inferrer: CompositionInferrer,
-) -> List[Explanation]:
-    explanation_list = explain_mass_with_matrix(
+) -> List[Composition]:
+    composition_list = infer_compositions_with_matrix(
         diff,
         inferrer=inferrer,
         max_modifications=round(inferrer.seq.modification_rate * inferrer.seq.max_len),
         threshold=threshold,
-    ).explanations
+    ).compositions
 
-    # Return None if no explanation was found
-    if explanation_list is None:
+    # Return None if no composition was found
+    if composition_list is None:
         return None
 
-    # Return all found explanations
-    explanation_list = list(explanation_list)
-    return [Explanation(*explanation_list[i]) for i in range(len(explanation_list))]
+    # Return all found compositions
+    composition_list = list(composition_list)
+    return [Composition(*composition_list[i]) for i in range(len(composition_list))]
 
 
 def initialize_raw_file_iterator(

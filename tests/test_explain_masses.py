@@ -2,8 +2,8 @@ import pytest
 import polars as pl
 
 from spectrseqtools.mass_explanation import (
-    explain_mass_with_recursion,
-    explain_mass_with_matrix,
+    infer_compositions_with_recursion,
+    infer_compositions_with_matrix,
 )
 from spectrseqtools.masses import (
     NUCLEOTIDE_DF,
@@ -73,17 +73,17 @@ def test_testcase_with_recursion(testcase, tolerance):
         seq=seq_info,
     )
 
-    predicted_mass_explanations = explain_mass_with_recursion(
+    predicted_compositions = infer_compositions_with_recursion(
         testcase[0],
         inferrer=inferrer,
         max_modifications=round(MOD_RATE * len(testcase[1])),
-    ).explanations
+    ).compositions
 
-    assert predicted_mass_explanations is not None
+    assert predicted_compositions is not None
 
-    explanations = [tuple(expl) for expl in predicted_mass_explanations]
+    compositions = [tuple(comp) for comp in predicted_compositions]
 
-    assert tuple(testcase[1]) in explanations
+    assert tuple(testcase[1]) in compositions
 
 
 WITH_MEMO = [True]
@@ -114,15 +114,15 @@ def test_testcase_with_matrix(testcase, compression, tolerance, memo):
         seq=seq_info,
     )
 
-    predicted_mass_explanations = explain_mass_with_matrix(
+    predicted_compositions = infer_compositions_with_matrix(
         testcase[0],
         inferrer=inferrer,
         max_modifications=round(MOD_RATE * len(testcase[1])),
         with_memo=memo,
-    ).explanations
+    ).compositions
 
-    assert predicted_mass_explanations is not None
+    assert predicted_compositions is not None
 
-    explanations = [tuple(expl) for expl in predicted_mass_explanations]
+    compositions = [tuple(comp) for comp in predicted_compositions]
 
-    assert tuple(testcase[1]) in explanations
+    assert tuple(testcase[1]) in compositions

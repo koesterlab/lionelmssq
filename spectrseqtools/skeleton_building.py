@@ -6,9 +6,9 @@ import numpy as np
 import polars as pl
 
 from spectrseqtools.common import (
-    Explanation,
+    Composition,
     calculate_error_threshold,
-    calculate_explanations,
+    calculate_compositions,
 )
 from spectrseqtools.fragment_classification import MAX_VARIANCE
 from spectrseqtools.linear_program import LinearProgramInstance
@@ -20,7 +20,7 @@ from spectrseqtools.mass_table import (
 
 @dataclass
 class SkeletonBuilder:
-    explanations: list[Explanation]
+    compositions: dict
     inferrer: CompositionInferrer
 
     def build_skeleton(
@@ -152,14 +152,14 @@ class SkeletonBuilder:
                 if frag_idx + 1 < len(fragments):
                     continue
 
-            explanations = self.explain_bin_differences(
+            compositions = self.infer_compositions_for_bin_differences(
                 prev_bin=last_valid_bin,
                 current_bin=current_bin,
                 fragments=fragments,
             )
 
-            # Skip bins without any explanation
-            if explanations is None:
+            # Skip bins with no valid compositions
+            if compositions is None:
                 for idx in current_bin:
                     # Add a warning in the log for the skipped fragment
                     logger.warning(
@@ -167,14 +167,14 @@ class SkeletonBuilder:
                         f"fragment {fragments.item(idx, 'index')} with observed "
                         f"mass {fragments.item(idx, 'observed_mass'):.4f} and "
                         f"SU mass {fragments.item(idx, 'standard_unit_mass'):.4f}"
-                        f" because no explanations were found."
+                        f" because no valid compositions were found."
                     )
 
                     invalid_list.append(fragments.item(idx, "index"))
             else:
                 # Continue skeleton building
-                pos, skeleton_seq = self.update_skeleton_for_given_explanations(
-                    explanations=explanations,
+                pos, skeleton_seq = self.update_skeleton_for_given_compositions(
+                    compositions=compositions,
                     pos=pos,
                     skeleton_seq=skeleton_seq,
                 )
@@ -369,16 +369,16 @@ class SkeletonBuilder:
 
         return best_len
 
-    def explain_bin_differences(
+    def infer_compositions_for_bin_differences(
         self,
         prev_bin: list,
         current_bin: list,
         fragments: pl.DataFrame,
-    ) -> List[Explanation]:
-        # Collect mass explanations for first bin
+    ) -> List[Composition]:
+        # Collect compositions for first bin
         if prev_bin is None:
-            explanations = [
-                self.explain_mass_difference(
+            compositions = [
+                self.infer_compositions_for_mass_difference(
                     diff=fragments.item(idx, "standard_unit_mass"),
                     prev_mass=0.0,
                     current_mass=fragments.item(idx, "observed_mass"),
@@ -386,10 +386,10 @@ class SkeletonBuilder:
                 for idx in current_bin
             ]
 
-        # Collect mass explanations between previous and current bin
+        # Collect compositions between previous and current bin
         else:
-            explanations = [
-                self.explain_mass_difference(
+            compositions = [
+                self.infer_compositions_for_mass_difference(
                     diff=fragments.item(current_idx, "standard_unit_mass")
                     - fragments.item(prev_idx, "standard_unit_mass"),
                     prev_mass=fragments.item(prev_idx, "observed_mass"),
@@ -399,77 +399,77 @@ class SkeletonBuilder:
                 for current_idx in current_bin
             ]
 
-        # If no explanation was found, return None
-        if all(expl is None for expl in explanations):
+        # If no valid composition was found, return None
+        if all(comp is None for comp in compositions):
             return None
 
-        # Flatten explanation list
-        explanations = [
-            expl
-            for expl_list in explanations
-            if expl_list is not None
-            for expl in expl_list
-            if expl is not None
+        # Flatten composition list
+        compositions = [
+            comp
+            for comp_list in compositions
+            if comp_list is not None
+            for comp in comp_list
+            if comp is not None
         ]
 
-        # Remove duplicates from explanation list
-        unique_explanations = []
-        for expl in explanations:
-            if expl not in unique_explanations:
-                unique_explanations.append(expl)
+        # Remove duplicates from composition list
+        unique_compositions = []
+        for comp in compositions:
+            if comp not in unique_compositions:
+                unique_compositions.append(comp)
 
-        return unique_explanations
+        return unique_compositions
 
-    def explain_mass_difference(
+    def infer_compositions_for_mass_difference(
         self,
         diff: float,
         prev_mass: float,
         current_mass: float,
-    ) -> List[Explanation]:
-        if diff in self.explanations:
-            return self.explanations.get(diff, [])
+    ) -> List[Composition]:
+        if diff in self.compositions:
+            return self.compositions.get(diff, [])
         threshold = calculate_error_threshold(
             prev_mass,
             current_mass,
             self.inferrer.tolerance,
         )
-        return calculate_explanations(
+        return calculate_compositions(
             diff,
             threshold,
             self.inferrer,
         )
 
-    def update_skeleton_for_given_explanations(
+    def update_skeleton_for_given_compositions(
         self,
-        explanations: List[Explanation],
+        compositions: List[Composition],
         pos: Set[int],
         skeleton_seq: List[Set[str]],
     ):
         next_pos = set()
         for p in pos:
-            # Group explanations by length in dict
-            alphabet_per_expl_len = {
-                expl_len: set(chain(*expls))
-                for expl_len, expls in groupby(
+            # Group compositions by length in dict
+            alphabet_per_len = {
+                comp_len: set(chain(*comps))
+                for comp_len, comps in groupby(
                     [
-                        expl
-                        for expl in explanations
-                        if 0 <= p + len(expl) - 1 < self.inferrer.seq.max_len
+                        comp
+                        for comp in compositions
+                        if 0 <= p + len(comp) - 1 < self.inferrer.seq.max_len
                     ],
                     len,
                 )
             }
 
-            # Constrain current sets in range of explanation by the new nucleotides
-            for expl_len, alphabet in alphabet_per_expl_len.items():
-                for i in range(expl_len):
+            # Constrain current sets in range of compositions by the new nucleotides
+            for comp_len, alphabet in alphabet_per_len.items():
+                for i in range(comp_len):
                     possible_nucleotides = skeleton_seq[p + i]
 
-                    # Clear nucleotide set if the new explanation sharpens it
+                    # Clear nucleotide set if the new composition sharpens it
                     if possible_nucleotides.issuperset(alphabet):
                         possible_nucleotides.clear()
 
-                    # Add all nucleotides in current explanation to set
+                    # Add all nucleotides in current composition to set
                     for j in alphabet:
                         possible_nucleotides.add(j)
                         # TODO: We need to do this better.
@@ -478,7 +478,7 @@ class SkeletonBuilder:
                         #  able to constrain the LP!
 
             # Update possible follow-up positions
-            next_pos.update(p + expl_len for expl_len in alphabet_per_expl_len)
+            next_pos.update(p + comp_len for comp_len in alphabet_per_len)
         return next_pos, skeleton_seq
 
 

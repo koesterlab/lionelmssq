@@ -10,8 +10,8 @@ from spectrseqtools.masses import NUCLEOTIDE_DF, UNMODIFIED_BASES
 
 
 @dataclass
-class MassExplanations:
-    explanations: Set[Tuple[str]]
+class MassCompositions:
+    compositions: Set[Tuple[str]]
 
 
 MASS_NAMES = {
@@ -89,16 +89,16 @@ def is_valid_mass(
     return False
 
 
-def explain_mass_with_matrix(
+def infer_compositions_with_matrix(
     mass: float,
     inferrer: CompositionInferrer,
     max_modifications=np.inf,
     compression_rate=None,
     threshold=None,
     with_memo=True,
-) -> MassExplanations:
+) -> MassCompositions:
     """
-    Return all possible combinations of nucleosides that could sum up to the given mass.
+    Return all possible nucleotide compositions that could sum up to the given mass.
     """
     if compression_rate is None:
         compression_rate = inferrer.compression_per_cell
@@ -203,14 +203,14 @@ def explain_mass_with_matrix(
     return convert_nucleotide_masses_to_names(solutions=solutions)
 
 
-def explain_mass_with_recursion(
+def infer_compositions_with_recursion(
     mass: float,
     inferrer: CompositionInferrer,
     max_modifications=np.inf,
     threshold=None,
-) -> MassExplanations:
+) -> MassCompositions:
     """
-    Returns all the possible combinations of nucleosides that could sum up to the given mass.
+    Returns all possible nucleotide compositions that could sum up to the given mass.
     """
     mass_list = [mass.mass for mass in inferrer.alphabet]
 
@@ -238,26 +238,26 @@ def explain_mass_with_recursion(
         if (remaining, start) in memo:
             return memo[(remaining, start)]
 
-        # Base case: if abs(target) is less than threshold, return a list with one empty combination
+        # Base case: if abs(target) is less than threshold, return a list with one empty composition
         if abs(remaining) <= threshold:
             return [[]]
 
-        # Base case: if target is zero, return a list with one empty combination
+        # Base case: if target is zero, return a list with one empty composition
         if remaining == 0:
             return [[]]
 
-        # Base case: if target is negative, no combinations possible
+        # Base case: if target is negative, no compositions possible
         if remaining < 0:
             return []
 
-        # List to store all combinations for this state
-        combinations = []
+        # List to store all compositions for this state
+        compositions = []
 
         # Try each mass starting from the current position to avoid duplicates
         for i in range(start, len(mass_list)):
             current_mass = mass_list[i]
             # Recurse with reduced target and the current mass
-            sub_combinations = dp(
+            sub_compositions = dp(
                 remaining - current_mass,
                 i,
                 used_mods_all + 1 if IS_MOD[current_mass] else used_mods_all,
@@ -265,14 +265,14 @@ def explain_mass_with_recursion(
                 if i != start
                 else (used_mods_ind + 1 if IS_MOD[current_mass] else used_mods_ind),
             )
-            # Add current mass to all sub-combinations
-            for combo in sub_combinations:
-                combinations.append([current_mass] + combo)
+            # Add current mass to all sub-compositions
+            for combo in sub_compositions:
+                compositions.append([current_mass] + combo)
 
         # Store result in memo
-        memo[(remaining, start)] = combinations
+        memo[(remaining, start)] = compositions
 
-        return combinations
+        return compositions
 
     # Compute all solutions for the full target and all allowed masses (except 0.0)
     solutions = dp(target, 1, 0, 0)
@@ -280,12 +280,12 @@ def explain_mass_with_recursion(
     return convert_nucleotide_masses_to_names(solutions=solutions)
 
 
-def convert_nucleotide_masses_to_names(solutions: List[List[int]]) -> MassExplanations:
+def convert_nucleotide_masses_to_names(solutions: List[List[int]]) -> MassCompositions:
     # Store the nucleotide names (as tuples) for the given masses in a set
     solution_names = set()
-    # Return None if no explanation is found
+    # Return None if no composition is found
     if len(solutions) == 0:
-        return MassExplanations(None)
+        return MassCompositions(None)
     # Convert the masses to their respective nucleotide names
     for solution in solutions:
         if len(solution) == 0:
@@ -312,5 +312,5 @@ def convert_nucleotide_masses_to_names(solutions: List[List[int]]) -> MassExplan
             ]
         )
 
-    # Return list of explanations
-    return MassExplanations(solution_names)
+    # Return composition set
+    return MassCompositions(solution_names)

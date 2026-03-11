@@ -6,7 +6,7 @@ from loguru import logger
 
 from spectrseqtools.common import (
     calculate_error_threshold,
-    calculate_explanations,
+    calculate_compositions,
     parse_nucleosides,
 )
 from spectrseqtools.linear_program import LinearProgramInstance
@@ -78,10 +78,10 @@ class Predictor:
             pl.lit(-1, dtype=pl.Int64).alias("max_end"),
         )
 
-        fragments, explanations = self.filter_by_explanation(fragments)
+        fragments, compositions = self.filter_by_composition(fragments)
 
         skeleton_builder = SkeletonBuilder(
-            explanations=explanations,
+            compositions=compositions,
             inferrer=self.inferrer,
         )
 
@@ -167,17 +167,17 @@ class Predictor:
         except Exception:
             return Prediction.default()
 
-    def filter_by_explanation(
+    def filter_by_composition(
         self, fragments: pl.DataFrame
     ) -> Tuple[pl.DataFrame, dict]:
         old_alphabet_size = -1
 
-        explanations = {}
+        compositions = {}
         while old_alphabet_size != len(self.inferrer.alphabet):
             old_alphabet_size = len(self.inferrer.alphabet)
-            # Roughly explain the mass differences (to reduce the alphabet)
+            # Roughly infer compositions for mass differences (to reduce the alphabet)
             # Note there may be faulty mass fragments leading to not truly existent values
-            explanations = self.collect_diff_explanations_for_su(fragments=fragments)
+            compositions = self.collect_diff_compositions_for_su(fragments=fragments)
 
             # TODO: Also consider that the observations are not complete and that
             #  we probably don't see all the letters as diffs or singletons.
@@ -188,18 +188,18 @@ class Predictor:
             # Reduce nucleotide alphabet based on fragments
             observed_nucleotides = {
                 nuc
-                for expls in explanations.values()
-                if expls is not None
-                for expl in expls
-                for nuc in expl
+                for comps in compositions.values()
+                if comps is not None
+                for comp in comps
+                for nuc in comp
             }
             fragments = self._reduce_alphabet(observed_nucleotides, fragments)
 
-        print("Alphabet after explanation-based reduction:")
+        print("Alphabet after composition-based reduction:")
         self.inferrer.print_alphabet()
         print()
 
-        return fragments, explanations
+        return fragments, compositions
 
     def _reduce_alphabet(
         self, nucleotide_list: Set[str], fragments: pl.DataFrame
@@ -208,7 +208,7 @@ class Predictor:
             nucleotide_list
         )
 
-        # Filter out all fragments without any explanations
+        # Filter out all fragments with no valid composition
         return (
             fragments.with_columns(
                 pl.struct("observed_mass", "standard_unit_mass")
@@ -258,15 +258,16 @@ class Predictor:
         # Return only valid fragments
         return fragments.filter(~pl.col("index").is_in(is_invalid))
 
-    def collect_diff_explanations_for_su(self, fragments: pl.DataFrame) -> dict:
-        # Collect explanation for all reasonable mass differences for each side
-        explanations = {
-            **self.collect_explanations_per_side(
+    def collect_diff_compositions_for_su(self, fragments: pl.DataFrame) -> (
+            dict):
+        # Collect compositions for all reasonable mass differences for each side
+        compositions = {
+            **self.collect_compositions_per_side(
                 fragments=fragments.filter(
                     pl.col("fragmentation").str.contains("START")
                 ),
             ),
-            **self.collect_explanations_per_side(
+            **self.collect_compositions_per_side(
                 fragments=fragments.filter(pl.col("fragmentation").str.contains("END")),
             ),
         }
@@ -277,15 +278,15 @@ class Predictor:
         idx_observed_mass = fragments.get_column_index("observed_mass")
         idx_su_mass = fragments.get_column_index("standard_unit_mass")
         for singleton in singleton_list.rows():
-            explanations[singleton[idx_su_mass]] = calculate_explanations(
+            compositions[singleton[idx_su_mass]] = calculate_compositions(
                 diff=singleton[idx_su_mass],
                 threshold=self.inferrer.tolerance * singleton[idx_observed_mass],
                 inferrer=self.inferrer,
             )
 
-        return explanations
+        return compositions
 
-    def collect_explanations_per_side(self, fragments: pl.DataFrame) -> dict:
+    def collect_compositions_per_side(self, fragments: pl.DataFrame) -> dict:
         max_weight = (
             max(self.nucleotide_df.get_column("nucleoside_mass").to_list())
             + PHOSPHATE_LINK_MASS
@@ -295,7 +296,7 @@ class Predictor:
         start = 0
         end = 1
 
-        explanations = {}
+        compositions = {}
         while end < len(fragments):
             # Skip singletons
             if (end - start) <= 0:
@@ -316,16 +317,16 @@ class Predictor:
                 observed_masses[end],
                 self.inferrer.tolerance,
             )
-            expl = calculate_explanations(
+            comp = calculate_compositions(
                 diff=diff,
                 threshold=diff_error,
                 inferrer=self.inferrer,
             )
-            if expl is not None and len(expl) >= 1:
-                explanations[diff] = expl
+            if comp is not None and len(comp) >= 1:
+                compositions[diff] = comp
             if end == len(fragments) - 1:
                 start += 1
             else:
                 end += 1
 
-        return explanations
+        return compositions
