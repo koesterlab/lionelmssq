@@ -46,6 +46,7 @@ class Prediction:
                     "predicted_diff": pl.Float64,
                     "predicted_seq": pl.String,
                     "orig_index": pl.UInt32,
+                    "intensity": pl.Float64,
                 }
             ),
         )
@@ -123,7 +124,7 @@ class Predictor:
         # TODO: Investigate LP initialization of highly modified sequences
         #  for being wrong-length predictions (min/max length issue?)
         try:
-            fragments = self.filter_with_lp(
+            fragments = self.filter_with_linear_optimization(
                 fragments=fragments,
                 skeleton_seq=skeleton_seq,
                 solver_params=solver_params,
@@ -177,7 +178,7 @@ class Predictor:
             old_alphabet_size = len(self.inferrer.alphabet)
             # Roughly infer compositions for mass differences (to reduce the alphabet)
             # Note there may be faulty mass fragments leading to not truly existent values
-            compositions = self.collect_diff_compositions_for_su(fragments=fragments)
+            compositions = self.collect_diff_compositions(fragments=fragments)
 
             # TODO: Also consider that the observations are not complete and that
             #  we probably don't see all the letters as diffs or singletons.
@@ -226,7 +227,7 @@ class Predictor:
             .drop("is_valid")
         )
 
-    def filter_with_lp(
+    def filter_with_linear_optimization(
         self,
         fragments: pl.DataFrame,
         skeleton_seq: list,
@@ -258,16 +259,14 @@ class Predictor:
         # Return only valid fragments
         return fragments.filter(~pl.col("index").is_in(is_invalid))
 
-    def collect_diff_compositions_for_su(self, fragments: pl.DataFrame) -> (
+    def collect_diff_compositions(self, fragments: pl.DataFrame) -> (
             dict):
         # Collect compositions for all reasonable mass differences for each side
         compositions = {
-            **self.collect_compositions_per_side(
-                fragments=fragments.filter(
-                    pl.col("fragmentation").str.contains("START")
-                ),
+            **self.collect_diff_compositions_per_side(
+                fragments=fragments.filter(pl.col("fragmentation").str.contains("START")),
             ),
-            **self.collect_compositions_per_side(
+            **self.collect_diff_compositions_per_side(
                 fragments=fragments.filter(pl.col("fragmentation").str.contains("END")),
             ),
         }
@@ -286,7 +285,8 @@ class Predictor:
 
         return compositions
 
-    def collect_compositions_per_side(self, fragments: pl.DataFrame) -> dict:
+    def collect_diff_compositions_per_side(self, fragments: pl.DataFrame) -> (
+            dict):
         max_weight = (
             max(self.nucleotide_df.get_column("nucleoside_mass").to_list())
             + PHOSPHATE_LINK_MASS
