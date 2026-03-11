@@ -150,7 +150,7 @@ def process_and_deisotope_scan_bunch(ms1, ms2prec_final, ms2prec_charge, ms2_fin
                 ).priorities#.neutral_mass
     deisotopedscanbunches = []
     for i in range(len(ms2prec_final)):
-        decon_frags = deconvolute_scan(ms2_final[i], params = decon_params, extract_all = True)
+        decon_frags = deconvolute_scan(ms2_final[i], params = decon_params)
         deisotopedscanbunches.append(DeisotopedScanBunch(
         scan_time = ms1.scan_time,
         precursor_raw_mz = ms2prec_final[i].mz,
