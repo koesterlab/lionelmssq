@@ -33,8 +33,6 @@ TESTS = ["test_01", "test_02", "test_03"]
 
 @pytest.mark.parametrize(
     "testcase",
-    # [tc for tc in _TESTCASES.iterdir() if tc.name not in [".DS_Store"]],
-    # ids=[tc.name for tc in _TESTCASES.iterdir() if tc.name not in [".DS_Store"]],
     [tc for tc in _TESTCASES.iterdir() if tc.name in TESTS],
     ids=[tc.name for tc in _TESTCASES.iterdir() if tc.name in TESTS],
 )

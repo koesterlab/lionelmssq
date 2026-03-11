@@ -53,7 +53,7 @@ MOD_RATE = 0.5
 
 @pytest.mark.parametrize("testcase", MASS_SEQ_DICT.items())
 @pytest.mark.parametrize("tolerance", TOLERANCES)
-def test_testcase_with_recursion(testcase, tolerance):
+def test_infer_composition_with_recursion(testcase, tolerance):
     seq_info = SequenceInformation(
         max_len=int(
             testcase[0]
@@ -94,7 +94,7 @@ COMPRESSION_RATES = [32]
 @pytest.mark.parametrize("compression", COMPRESSION_RATES)
 @pytest.mark.parametrize("memo", WITH_MEMO)
 @pytest.mark.parametrize("tolerance", TOLERANCES)
-def test_testcase_with_matrix(testcase, compression, tolerance, memo):
+def test_infer_composition_with_matrix(testcase, compression, tolerance, memo):
     seq_info = SequenceInformation(
         max_len=int(
             testcase[0]
