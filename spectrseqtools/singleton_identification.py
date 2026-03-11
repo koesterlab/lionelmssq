@@ -165,7 +165,7 @@ def select_singletons_from_peaks(peak_list: List[RawPeak]) -> pl.DataFrame:
         .sort(["representative", "scan_time"])
     )
 
-    # Map representative nucleoside, cluster score, and count to each nucleoside group
+    # Map representative nucleotide, cluster score, and count to each nucleotide group
     peak_df = peak_df.group_by("id_list").map_groups(
         lambda x: pl.DataFrame(
             {
