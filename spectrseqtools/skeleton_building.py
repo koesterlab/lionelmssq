@@ -31,7 +31,7 @@ class SkeletonBuilder:
             fragments=fragments.filter(pl.col("fragmentation").str.contains("START")),
             skeleton_seq=[set() for _ in range(self.inferrer.seq.max_len)],
         )
-        print("Skeleton sequence start = ", start_skeleton)
+        print("Skeleton sequence (5'-end) = ", start_skeleton)
 
         # Build skeleton sequence from 3'-end and reverse it
         end_skeleton, end_fragments = self._predict_skeleton(
@@ -39,7 +39,7 @@ class SkeletonBuilder:
             skeleton_seq=[set() for _ in range(self.inferrer.seq.max_len)],
         )
         end_skeleton = end_skeleton[::-1]
-        print("Skeleton sequence end = ", end_skeleton)
+        print("Skeleton sequence (3'-end) = ", end_skeleton)
 
         # Select best sequence length with LP
         seq_len = self.select_sequence_length_with_lp(
@@ -123,6 +123,7 @@ class SkeletonBuilder:
         # METHOD: Reject fragments which are not explained well by mass
         # differences. While iterating through the fragments, bin them
         # to keep track of similar masses and reject them in bulk.
+
         pos = {0}
         last_valid_bin = None
 
@@ -134,18 +135,18 @@ class SkeletonBuilder:
                 invalid_list.append(fragments.item(frag_idx, "index"))
                 continue
 
-            # Define mass difference and threshold between neighbouring fragments
-            neighbour_diff = fragments.item(
+            # Define mass difference and threshold between neighboring fragments
+            neighbor_diff = fragments.item(
                 frag_idx, "standard_unit_mass"
             ) - fragments.item(frag_idx - 1, "standard_unit_mass")
-            neighbour_threshold = calculate_error_threshold(
+            neighbor_threshold = calculate_error_threshold(
                 fragments.item(frag_idx - 1, "observed_mass"),
                 fragments.item(frag_idx, "observed_mass"),
                 self.inferrer.tolerance,
             )
 
             # Bin fragments with similar mass together
-            if neighbour_diff <= neighbour_threshold:
+            if neighbor_diff <= neighbor_threshold:
                 current_bin.append(frag_idx)
 
                 # Only process bin immediately if there are no unbinned fragments left
@@ -214,7 +215,7 @@ class SkeletonBuilder:
         )
 
         # Initialize nucleotide mass dict
-        nucleoside_masses = {
+        nucleotide_masses = {
             mass.names[0]: mass.mass * self.inferrer.precision
             for mass in self.inferrer.alphabet[1:]
         }
@@ -223,7 +224,7 @@ class SkeletonBuilder:
         min_len = compute_sequence_length_bound(inferrer=self.inferrer, dir="lower")
         max_len = compute_sequence_length_bound(inferrer=self.inferrer, dir="upper")
 
-        # Determine sequence length with best LP score
+        # Determine sequence length with the best LP score
         best_len = -1
         best_val = np.inf
         for len_cand in range(min_len, max_len + 1):
@@ -244,7 +245,7 @@ class SkeletonBuilder:
             if value < best_val and self.validate_sequence_length_by_mass(
                 start_skeleton=start_skeleton[:len_cand],
                 end_skeleton=end_skeleton[len(end_skeleton) - len_cand :],
-                nuc_masses=nucleoside_masses,
+                nuc_masses=nucleotide_masses,
             ):
                 best_val = value
                 best_len = len_cand
@@ -335,7 +336,7 @@ class SkeletonBuilder:
         min_len = compute_sequence_length_bound(inferrer=self.inferrer, dir="lower")
         max_len = compute_sequence_length_bound(inferrer=self.inferrer, dir="upper")
 
-        # Determine sequence length with highest similarity between skeleton parts
+        # Determine sequence length with the highest similarity between skeleton parts
         best_len = min_len
         best_val = -1
         for len_cand in range(min_len, max_len + 1):
