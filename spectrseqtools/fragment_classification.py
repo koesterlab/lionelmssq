@@ -9,9 +9,9 @@ MAX_VARIANCE = 1
 
 
 # METHOD: For each fragmentation option that yields a valid mass (i.e. one that
-# have any valid composition) for a given fragment, duplicate
-# the fragment and determine its fragmentation-independent standard-unit
-# mass by subtracting the weight imposed by the fragmentation.
+# has any valid composition) for a given fragment, duplicate the fragment
+# and determine its fragmentation-independent standard-unit mass by
+# subtracting the weight imposed by the fragmentation.
 
 
 def classify_fragments(
@@ -48,7 +48,7 @@ def classify_fragments(
         ]
     )
 
-    # Filter out all fragments with no valid compositions
+    # Filter out all fragments with no valid composition
     fragments = (
         fragments.with_columns(
             pl.struct("observed_mass", "standard_unit_mass")
@@ -127,7 +127,7 @@ def filter_by_sequence_mass(
         pl.col("standard_unit_mass") < mass_cutoff + MAX_VARIANCE
     )
 
-    # Filter out all "complete" fragments with a too low SU mass (within variance)
+    # Filter out all intact fragments with a too low SU mass (within variance)
     fragments = fragments.filter(
         (pl.col("standard_unit_mass") > mass_cutoff - MAX_VARIANCE)
         | ~(
