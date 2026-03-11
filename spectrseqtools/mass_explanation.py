@@ -260,11 +260,11 @@ def infer_compositions_with_recursion(
                     target_mass - current_mass,
                     i,
                     used_mods_all + 1 if IS_MOD[current_mass] else used_mods_all,
-                    0 if i != current_idx else (used_mods_ind + 1 if IS_MOD[
-                        current_mass] else used_mods_ind),
+                    0
+                    if i != current_idx
+                    else (used_mods_ind + 1 if IS_MOD[current_mass] else used_mods_ind),
                 )
             ]
-
 
         # Store result in memo
         memo[(target_mass, current_idx)] = compositions

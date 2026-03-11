@@ -175,7 +175,9 @@ class LinearProgramInstance:
 
         # Select one nucleotide per position
         for k in range(self.seq_len):
-            problem += (lpSum([self.y[i][k] for i in range(len(self.nucleoside_names))]) == 1)
+            problem += (
+                lpSum([self.y[i][k] for i in range(len(self.nucleoside_names))]) == 1
+            )
 
         # Enforce universal modification rate
         problem += lpSum(
@@ -213,7 +215,7 @@ class LinearProgramInstance:
                     problem += (self.x[j][k1] + self.x[j][k2] - 1) * (
                         k2 - k1 - 1
                     ) <= lpSum(
-                        [self.x[j][k_between] for k_between in range(k1 + 1,k2)]
+                        [self.x[j][k_between] for k_between in range(k1 + 1, k2)]
                     )
 
         # Constrain predicted_mass_diff_abs to be the absolute value of predicted_mass_diff

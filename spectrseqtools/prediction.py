@@ -259,12 +259,13 @@ class Predictor:
         # Return only valid fragments
         return fragments.filter(~pl.col("index").is_in(is_invalid))
 
-    def collect_diff_compositions(self, fragments: pl.DataFrame) -> (
-            dict):
+    def collect_diff_compositions(self, fragments: pl.DataFrame) -> dict:
         # Collect compositions for all reasonable mass differences for each side
         compositions = {
             **self.collect_diff_compositions_per_side(
-                fragments=fragments.filter(pl.col("fragmentation").str.contains("START")),
+                fragments=fragments.filter(
+                    pl.col("fragmentation").str.contains("START")
+                ),
             ),
             **self.collect_diff_compositions_per_side(
                 fragments=fragments.filter(pl.col("fragmentation").str.contains("END")),
@@ -285,8 +286,7 @@ class Predictor:
 
         return compositions
 
-    def collect_diff_compositions_per_side(self, fragments: pl.DataFrame) -> (
-            dict):
+    def collect_diff_compositions_per_side(self, fragments: pl.DataFrame) -> dict:
         max_weight = (
             max(self.nucleotide_df.get_column("nucleoside_mass").to_list())
             + PHOSPHATE_LINK_MASS
