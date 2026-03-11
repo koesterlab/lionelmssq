@@ -113,46 +113,49 @@ def infer_compositions_with_matrix(
     # Convert the threshold to integer
     threshold = int(np.ceil(threshold / inferrer.precision))
 
+    # Memoization dictionary to store results for a given target
     memo = {}
 
-    def backtrack(total_mass, current_idx, max_mods_all, max_mods_ind):
-        current_weight = inferrer.alphabet[current_idx].mass
+    def backtrack(target_mass, current_idx, max_mods_all, max_mods_ind):
+        current_mass = inferrer.alphabet[current_idx].mass
 
         # If the result for this state is already computed, return it
-        if with_memo and (total_mass, current_idx) in memo:
-            return memo[(total_mass, current_idx)]
+        if with_memo and (target_mass, current_idx) in memo:
+            return memo[(target_mass, current_idx)]
 
         # Return empty list for cells outside of matrix
-        if total_mass < 0:
+        if target_mass < 0:
             return []
 
-        # Initialize a new nucleoside set for a valid start in matrix
-        if total_mass == 0:
+        # Initialize a new composition for a valid start in matrix
+        if target_mass == 0:
             return [[]]
 
         # Raise error if mass is not in matrix (due to its size)
-        if total_mass >= len(inferrer.matrix[0]) * compression_rate:
+        if target_mass >= len(inferrer.matrix[0]) * compression_rate:
             raise NotImplementedError(
                 f"The value {value} is not in the traceback matrix. "
                 f"Extend its size if you want to compute larger masses."
             )
 
         current_value = (
-            inferrer.matrix[current_idx, total_mass]
+            inferrer.matrix[current_idx, target_mass]
             if compression_rate == 1
-            else inferrer.matrix[current_idx, total_mass // compression_rate]
-            >> 2 * (compression_rate - 1 - total_mass % compression_rate)
+            else inferrer.matrix[current_idx, target_mass // compression_rate]
+            >> 2 * (compression_rate - 1 - target_mass % compression_rate)
         )
 
         # Return empty list for unreachable cells
         if compression_rate != 1 and current_value % compression_rate == 0.0:
             return []
 
-        solutions = []
+        # Initialize list to store all compositions for this state
+        compositions = []
+
         # Backtrack to the next row above if possible
         if current_value % 2 == 1:
-            solutions += backtrack(
-                total_mass,
+            compositions += backtrack(
+                target_mass,
                 current_idx - 1,
                 max_mods_all,
                 round(
@@ -171,10 +174,10 @@ def infer_compositions_with_matrix(
                     max_mods_all -= 1
                     max_mods_ind -= 1
 
-                solutions += [
-                    entry + [current_weight]
+                compositions += [
+                    entry + [current_mass]
                     for entry in backtrack(
-                        total_mass - current_weight,
+                        target_mass - current_mass,
                         current_idx,
                         max_mods_all,
                         max_mods_ind,
@@ -183,16 +186,13 @@ def infer_compositions_with_matrix(
 
         # Store result in memo
         if with_memo:
-            memo[(total_mass, current_idx)] = solutions
+            memo[(target_mass, current_idx)] = compositions
 
-        return solutions
+        return compositions
 
     # Compute all valid solutions within the threshold interval
     solutions = []
-    for value in range(
-        target - threshold,
-        target + threshold + 1,
-    ):
+    for value in range(target - threshold, target + threshold + 1):
         solutions += backtrack(
             value,
             len(inferrer.alphabet) - 1,
@@ -227,55 +227,52 @@ def infer_compositions_with_recursion(
     # Memoization dictionary to store results for a given target
     memo = {}
 
-    def dp(remaining, start, used_mods_all, used_mods_ind):
+    def backtrack(target_mass, current_idx, used_mods_all, used_mods_ind):
         # If too many modifications are used, return empty list
         if used_mods_all > max_modifications or used_mods_ind > round(
-            inferrer.seq.max_len * inferrer.alphabet[start].modification_rate
+            inferrer.seq.max_len * inferrer.alphabet[current_idx].modification_rate
         ):
             return []
 
         # If the result for this state is already computed, return it
-        if (remaining, start) in memo:
-            return memo[(remaining, start)]
+        if (target_mass, current_idx) in memo:
+            return memo[(target_mass, current_idx)]
 
-        # Base case: if abs(target) is less than threshold, return a list with one empty composition
-        if abs(remaining) <= threshold:
+        # Initialize a new composition for a valid start (i.e. target within threshold)
+        if abs(target_mass) <= threshold:
             return [[]]
 
-        # Base case: if target is zero, return a list with one empty composition
-        if remaining == 0:
-            return [[]]
-
-        # Base case: if target is negative, no compositions possible
-        if remaining < 0:
+        # Return empty list for a negative target mass outside of threshold
+        if target_mass < 0:
             return []
 
-        # List to store all compositions for this state
+        # Initialize list to store all compositions for this state
         compositions = []
 
         # Try each mass starting from the current position to avoid duplicates
-        for i in range(start, len(mass_list)):
+        for i in range(current_idx, len(mass_list)):
             current_mass = mass_list[i]
-            # Recurse with reduced target and the current mass
-            sub_compositions = dp(
-                remaining - current_mass,
-                i,
-                used_mods_all + 1 if IS_MOD[current_mass] else used_mods_all,
-                0
-                if i != start
-                else (used_mods_ind + 1 if IS_MOD[current_mass] else used_mods_ind),
-            )
-            # Add current mass to all sub-compositions
-            for combo in sub_compositions:
-                compositions.append([current_mass] + combo)
+
+            # Add compositions for recursion with reduced target and current mass
+            compositions += [
+                [current_mass] + entry
+                for entry in backtrack(
+                    target_mass - current_mass,
+                    i,
+                    used_mods_all + 1 if IS_MOD[current_mass] else used_mods_all,
+                    0 if i != current_idx else (used_mods_ind + 1 if IS_MOD[
+                        current_mass] else used_mods_ind),
+                )
+            ]
+
 
         # Store result in memo
-        memo[(remaining, start)] = compositions
+        memo[(target_mass, current_idx)] = compositions
 
         return compositions
 
     # Compute all solutions for the full target and all allowed masses (except 0.0)
-    solutions = dp(target, 1, 0, 0)
+    solutions = backtrack(target, 1, 0, 0)
 
     return convert_nucleotide_masses_to_names(solutions=solutions)
 
