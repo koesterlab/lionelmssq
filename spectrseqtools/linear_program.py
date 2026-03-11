@@ -35,9 +35,9 @@ def get_singleton_set_item(set_: Set[Any]) -> Any:
 
 class LinearProgramInstance:
     def __init__(self, fragments, inferrer: CompositionInferrer, skeleton_seq):
-        # i = 1,...,n: positions in the sequence
-        # j = 1,...,m: fragments
-        # b = 1,...,k: (modified) bases
+        # i = 1,...,N: (modified) nucleotides
+        # j = 1,...,M: fragments
+        # k = 1,...,S: positions in the sequence
         self.fragments = fragments
         self.seq_len = len(skeleton_seq)
         self.nucleoside_names = [mass.names[0] for mass in inferrer.alphabet[1:]]
@@ -49,14 +49,15 @@ class LinearProgramInstance:
         fragment_masses = self.fragments.get_column("standard_unit_mass").to_list()
         valid_fragment_range = list(range(len(fragment_masses)))
 
-        # x: binary variables indicating fragment j presence at position i
+        # x: binary variables indicating fragment j presence at position k
         self.x = self._set_x(valid_fragment_range, fragments)
-        # y: binary variables indicating base b at position i
+        # y: binary variables indicating nucleotide i at position k
         self.y = self._set_y(skeleton_seq)
         # z: binary variables indicating product of x and y
         self.z = self._set_z(valid_fragment_range)
 
-        # weight_diff: difference between fragment monoisotopic mass and sum of masses of bases in fragment as estimated in the MILP
+        # predicted_mass_diff: difference between a fragment's SU-mass
+        # and the sum of nucleotide masses assigned by the MILP prediction
         self.predicted_mass_diff = self._set_predicted_mass_difference(
             fragment_masses, valid_fragment_range
         )
@@ -66,40 +67,40 @@ class LinearProgramInstance:
     def _set_x(self, valid_fragment_range, fragments):
         x = [
             [
-                LpVariable(f"x_{i},{j}", lowBound=0, upBound=1, cat=LpInteger)
-                for j in valid_fragment_range
+                LpVariable(f"x_{j},{k}", lowBound=0, upBound=1, cat=LpInteger)
+                for k in range(self.seq_len)
             ]
-            for i in range(self.seq_len)
+            for j in valid_fragment_range
         ]
 
         for j in range(len(fragments)):
-            # Ensure complete fragments are aligned at the whole sequence
+            # Ensure intact fragments are aligned at the whole sequence
             if fragments.item(j, "fragmentation") == "START_END":
-                for i in range(self.seq_len):
-                    x[i][j].setInitialValue(1)
-                    x[i][j].fixValue()
+                for k in range(self.seq_len):
+                    x[j][k].setInitialValue(1)
+                    x[j][k].fixValue()
                 continue
 
             # Ensure START fragments are aligned at the beginning of the sequence
             if "START" in fragments.item(j, "fragmentation"):
                 # min_end is exclusive
-                for i in range(fragments.item(j, "min_end") + 1):
-                    x[i][j].setInitialValue(1)
-                    x[i][j].fixValue()
-                for i in range(fragments.item(j, "max_end") + 1, self.seq_len):
-                    x[i][j].setInitialValue(0)
-                    x[i][j].fixValue()
+                for k in range(fragments.item(j, "min_end") + 1):
+                    x[j][k].setInitialValue(1)
+                    x[j][k].fixValue()
+                for k in range(fragments.item(j, "max_end") + 1, self.seq_len):
+                    x[j][k].setInitialValue(0)
+                    x[j][k].fixValue()
                 continue
 
             # Ensure END fragments are aligned at the end of the sequence
             if "END" in fragments.item(j, "fragmentation"):
                 # min_end is exclusive
-                for i in range(fragments.item(j, "max_end")):
-                    x[i][j].setInitialValue(0)
-                    x[i][j].fixValue()
-                for i in range(fragments.item(j, "min_end"), self.seq_len):
-                    x[i][j].setInitialValue(1)
-                    x[i][j].fixValue()
+                for k in range(fragments.item(j, "max_end")):
+                    x[j][k].setInitialValue(0)
+                    x[j][k].fixValue()
+                for k in range(fragments.item(j, "min_end"), self.seq_len):
+                    x[j][k].setInitialValue(1)
+                    x[j][k].fixValue()
                 continue
 
             # Internal fragments are not further constrained in both their
@@ -109,43 +110,41 @@ class LinearProgramInstance:
 
     def _set_y(self, skeleton_seq):
         y = [
-            {
-                b: LpVariable(f"y_{i},{b}", lowBound=0, upBound=1, cat=LpInteger)
-                for b in self.nucleoside_names
-            }
-            for i in range(self.seq_len)
+            [
+                LpVariable(f"y_{i},{k}", lowBound=0, upBound=1, cat=LpInteger)
+                for k in range(self.seq_len)
+            ]
+            for i in range(len(self.nucleoside_names))
         ]
 
-        # use skeleton seq to fix bases
-        for i, nucs in enumerate(skeleton_seq):
+        # Use skeleton sequence to fix nucleotides
+        for k, nucs in enumerate(skeleton_seq):
             if not nucs:
-                # nothing known, do not constrain
+                # Do not constrain if nothing is known
                 continue
-            for b in self.nucleoside_names:
-                if b not in nucs:
-                    # do not allow bases that are not observed in the skeleton
-                    y[i][b].setInitialValue(0)
-                    y[i][b].fixValue()
-            if len(nucs) == 1:
-                nuc = get_singleton_set_item(nucs)
-                # only one base is possible, already set it to 1
-                y[i][nuc].setInitialValue(1)
-                y[i][nuc].fixValue()
+            for i, nuc in enumerate(self.nucleoside_names):
+                # Do not allow nucleotides that are not observed in the skeleton
+                if nuc not in nucs:
+                    y[i][k].setInitialValue(0)
+                    y[i][k].fixValue()
+                # If only one nucleotide is possible, fix the value already
+                if len(nucs) == 1:
+                    if nuc == get_singleton_set_item(nucs):
+                        y[i][k].setInitialValue(1)
+                        y[i][k].fixValue()
 
         return y
 
     def _set_z(self, valid_fragment_range):
         z = [
             [
-                {
-                    b: LpVariable(
-                        f"z_{i},{j},{b}", lowBound=0, upBound=1, cat=LpInteger
-                    )
-                    for b in self.nucleoside_names
-                }
+                [
+                    LpVariable(f"z_{i},{j},{k}", lowBound=0, upBound=1, cat=LpInteger)
+                    for k in range(self.seq_len)
+                ]
                 for j in valid_fragment_range
             ]
-            for i in range(self.seq_len)
+            for i in range(len(self.nucleoside_names))
         ]
         return z
 
@@ -154,9 +153,9 @@ class LinearProgramInstance:
             fragment_masses[j]
             - lpSum(
                 [
-                    self.z[i][j][b] * self.nucleoside_masses[b]
-                    for i in range(self.seq_len)
-                    for b in self.nucleoside_names
+                    self.z[i][j][k] * self.nucleoside_masses[nuc]
+                    for i, nuc in enumerate(self.nucleoside_names)
+                    for k in range(self.seq_len)
                 ]
             )
             for j in valid_fragment_range
@@ -165,61 +164,60 @@ class LinearProgramInstance:
     def _define_lp_problem(self, valid_fragment_range, inferrer):
         problem = LpProblem("fragment_filter", LpMinimize)
 
-        # weight_diff_abs: absolute value of weight_diff
+        # predicted_mass_diff_abs: absolute value of predicted_mass_diff
         predicted_mass_diff_abs = [
             LpVariable(f"predicted_mass_diff_abs_{j}", lowBound=0, cat=LpContinuous)
             for j in valid_fragment_range
         ]
 
-        # optimization function
+        # Set optimization function
         problem += lpSum([predicted_mass_diff_abs[j] for j in valid_fragment_range])
 
-        # select one base per position
-        for i in range(self.seq_len):
-            problem += lpSum([self.y[i][b] for b in self.nucleoside_names]) == 1
+        # Select one nucleotide per position
+        for k in range(self.seq_len):
+            problem += (lpSum([self.y[i][k] for i in range(len(self.nucleoside_names))]) == 1)
 
         # Enforce universal modification rate
         problem += lpSum(
             [
-                self.y[i][b]
-                for i in range(self.seq_len)
-                for b in self.nucleoside_names
-                if b not in UNMODIFIED_BASES
+                self.y[i][k]
+                for k in range(self.seq_len)
+                for i, nuc in enumerate(self.nucleoside_names)
+                if nuc not in UNMODIFIED_BASES
             ]
         ) <= np.ceil(inferrer.seq.modification_rate * self.seq_len)
 
         # Enforce individual modification rates
         for mass in inferrer.alphabet:
-            for b in mass.names:
-                if b in self.nucleoside_names:
+            for i in mass.names:
+                if i in range(len(self.nucleoside_names)):
                     problem += lpSum(
-                        [self.y[i][b] for i in range(self.seq_len)]
+                        [self.y[i][k] for k in range(self.seq_len)]
                     ) <= np.ceil(mass.modification_rate * self.seq_len)
 
-        # fill z with the product of binary variables x and y
-        for i in range(self.seq_len):
+        # Fill z with the product of binary variables x and y
+        for k in range(self.seq_len):
             for j in valid_fragment_range:
-                for b in self.nucleoside_names:
-                    problem += self.z[i][j][b] <= self.x[i][j]
-                    problem += self.z[i][j][b] <= self.y[i][b]
-                    problem += self.z[i][j][b] >= self.x[i][j] + self.y[i][b] - 1
+                for i in range(len(self.nucleoside_names)):
+                    problem += self.z[i][j][k] <= self.x[j][k]
+                    problem += self.z[i][j][k] <= self.y[i][k]
+                    problem += self.z[i][j][k] >= self.x[j][k] + self.y[i][k] - 1
 
-        # ensure that fragment is aligned continuously
-        # (no gaps: if x[i1,j] = 1 and x[i2,j] = 1, then x[i_between,j] = 1)
+        # Ensure that fragments are aligned continuously (i.e. no gaps:
+        # if x[j, k1] = 1 and x[j, k2] = 1, then x[j, k_between] = 1)
         for j in valid_fragment_range:
-            for i1, i2 in combinations(range(self.seq_len), 2):
-                # i2 and i1 are inclusive
-                assert i2 > i1
-                if i2 - i1 > 1:
-                    problem += (self.x[i1][j] + self.x[i2][j] - 1) * (
-                        i2 - i1 - 1
+            for k1, k2 in combinations(range(self.seq_len), 2):
+                # k1 and k2 are inclusive
+                assert k2 > k1
+                if k2 - k1 > 1:
+                    problem += (self.x[j][k1] + self.x[j][k2] - 1) * (
+                        k2 - k1 - 1
                     ) <= lpSum(
-                        [self.x[i_between][j] for i_between in range(i1 + 1, i2)]
+                        [self.x[j][k_between] for k_between in range(k1 + 1,k2)]
                     )
 
-        # constrain weight_diff_abs to be the absolute value of weight_diff
+        # Constrain predicted_mass_diff_abs to be the absolute value of predicted_mass_diff
         for j in valid_fragment_range:
-            # if j not in invalid_start_fragments and j not in invalid_end_fragments:
             problem += predicted_mass_diff_abs[j] >= self.predicted_mass_diff[j]
             problem += predicted_mass_diff_abs[j] >= -self.predicted_mass_diff[j]
 
@@ -247,7 +245,7 @@ class LinearProgramInstance:
         _ = self.problem.solve(solver)
 
         # Interpret solution
-        seq = [self._get_base(i) for i in range(self.seq_len)]
+        seq = [self._get_sequence_nucleotide(k) for k in range(self.seq_len)]
 
         fragment_masses = self.fragments.get_column("standard_unit_mass").to_list()
 
@@ -255,9 +253,9 @@ class LinearProgramInstance:
         fragment_seq = [
             "".join(
                 [
-                    self._get_base_fragmentwise(i, j)
-                    for i in range(self.seq_len)
-                    if self._get_base_fragmentwise(i, j) is not None
+                    self._get_fragment_nucleotide(j, k)
+                    for k in range(self.seq_len)
+                    if self._get_fragment_nucleotide(j, k) is not None
                 ]
             )
             for j in list(range(len(fragment_masses)))
@@ -267,9 +265,9 @@ class LinearProgramInstance:
         predicted_fragment_mass = [
             sum(
                 [
-                    self.nucleoside_masses[self._get_base_fragmentwise(i, j)]
-                    for i in range(self.seq_len)
-                    if self._get_base_fragmentwise(i, j) is not None
+                    self.nucleoside_masses[self._get_fragment_nucleotide(j, k)]
+                    for k in range(self.seq_len)
+                    if self._get_fragment_nucleotide(j, k) is not None
                 ]
             )
             for j in list(range(len(fragment_masses)))
@@ -281,14 +279,14 @@ class LinearProgramInstance:
                 {
                     # Because of the relaxation of the LP, sometimes the value is not exactly 1
                     "left": min(
-                        (i for i in range(self.seq_len) if milp_is_one(self.x[i][j])),
+                        (k for k in range(self.seq_len) if milp_is_one(self.x[j][k])),
                         default=0,
                     ),
                     "right": max(
-                        (i for i in range(self.seq_len) if milp_is_one(self.x[i][j])),
+                        (k for k in range(self.seq_len) if milp_is_one(self.x[j][k])),
                         default=-1,
                     )
-                    + 1,  # right bound shall be exclusive, hence add 1
+                    + 1,  # Right-side bound shall be exclusive, hence add 1
                     "observed_mass": observed_masses[j],
                     "standard_unit_mass": fragment_masses[j],
                     "predicted_mass": predicted_fragment_mass[j],
@@ -308,19 +306,19 @@ class LinearProgramInstance:
             how="horizontal",
         )
 
-        # reorder fragment predictions so that they match the original order again
+        # Reorder fragment predictions to again match the original order
         fragment_predictions = fragment_predictions.sort("orig_index")
 
         return seq, fragment_predictions
 
-    def _get_base(self, i):
-        for b in self.nucleoside_names:
-            if milp_is_one(self.y[i][b]):
-                return b
+    def _get_sequence_nucleotide(self, k):
+        for i, nuc in enumerate(self.nucleoside_names):
+            if milp_is_one(self.y[i][k]):
+                return nuc
         return None
 
-    def _get_base_fragmentwise(self, i, j):
-        for b in self.nucleoside_names:
-            if milp_is_one(self.z[i][j][b]):
-                return b
+    def _get_fragment_nucleotide(self, j, k):
+        for i, nuc in enumerate(self.nucleoside_names):
+            if milp_is_one(self.z[i][j][k]):
+                return nuc
         return None
