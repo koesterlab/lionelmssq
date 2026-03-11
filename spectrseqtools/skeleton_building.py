@@ -11,8 +11,8 @@ from spectrseqtools.common import (
     calculate_compositions,
 )
 from spectrseqtools.fragment_classification import MAX_VARIANCE
-from spectrseqtools.linear_program import LinearProgramInstance
-from spectrseqtools.mass_table import (
+from spectrseqtools.sequence_inference import LinearProgramInstance
+from spectrseqtools.traceback_matrix import (
     CompositionInferrer,
     compute_sequence_length_bound,
 )

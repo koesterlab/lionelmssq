@@ -4,8 +4,8 @@ import re
 from clr_loader import get_mono
 from typing import List
 
-from spectrseqtools.mass_explanation import infer_compositions_with_matrix
-from spectrseqtools.mass_table import CompositionInferrer
+from spectrseqtools.composition_inference import infer_compositions_with_matrix
+from spectrseqtools.traceback_matrix import CompositionInferrer
 
 rt = get_mono()
 

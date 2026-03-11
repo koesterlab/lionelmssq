@@ -6,7 +6,6 @@ from tap import Tap
 from typing import List, Literal
 
 from spectrseqtools.fragment_classification import classify_fragments
-from spectrseqtools.mass_table import CompositionInferrer, SequenceInformation
 from spectrseqtools.masses import (
     COMPRESSION_RATE,
     DEFAULT_INTENSITY_CUTOFF,
@@ -19,6 +18,7 @@ from spectrseqtools.masses import (
 )
 from spectrseqtools.prediction import Predictor
 from spectrseqtools.preprocessing import preprocess
+from spectrseqtools.traceback_matrix import CompositionInferrer, SequenceInformation
 
 
 class Settings(Tap):

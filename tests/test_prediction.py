@@ -6,12 +6,8 @@ import pytest
 from clr_loader import get_mono
 
 from spectrseqtools.cli import format_sequence_to_full_version, select_solver
-from spectrseqtools.mass_table import CompositionInferrer, SequenceInformation
-from spectrseqtools.prediction import Predictor
 from spectrseqtools.common import parse_nucleosides
-from spectrseqtools.plotting import plot_prediction
 from spectrseqtools.fragment_classification import classify_fragments
-from spectrseqtools.preprocessing import preprocess
 from spectrseqtools.masses import (
     COMPRESSION_RATE,
     DEFAULT_INTENSITY_CUTOFF,
@@ -22,6 +18,10 @@ from spectrseqtools.masses import (
     UNMODIFIED_BASES,
     build_fragmentation_dict,
 )
+from spectrseqtools.plotting import plot_prediction
+from spectrseqtools.prediction import Predictor
+from spectrseqtools.preprocessing import preprocess
+from spectrseqtools.traceback_matrix import CompositionInferrer, SequenceInformation
 
 rt = get_mono()
 
