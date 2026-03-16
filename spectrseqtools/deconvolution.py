@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from typing import List, Tuple
 
 from spectrseqtools.common import initialize_raw_file_iterator
-from spectrseqtools.masses import ELEMENT_MASSES
 
 rt = get_mono()
 

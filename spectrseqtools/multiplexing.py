@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import List
 
 from spectrseqtools.masses import EXPLANATION_MASSES
-from spectrseqtools.deconvolution import deconvolute_scan, DeisotopedPeak, select_min_intensity, MIN_MS1_CHARGE_STATE, PREPROCESS_TOL, DeconvolutionParameters, aggregate_peaks_into_fragments
+from spectrseqtools.deconvolution import deconvolute_scan, DeisotopedPeak, select_min_intensity, PREPROCESS_TOL, DeconvolutionParameters, aggregate_peaks_into_fragments
 from spectrseqtools.singleton_identification import process_scan, RawPeak, COL_TYPES_RAW, calculate_cluster_score
 
 rt = get_mono()
@@ -28,6 +28,8 @@ class DeisotopedScanBunch:
     fragments: List[DeisotopedPeak]
     singleton_raw_peaks: List[RawPeak]
     num_fragments : int
+
+MIN_MS1_CHARGE_STATE = 2
 
 COL_TYPES_PRECURSOR = {
     "scan_time": pl.Float64,
