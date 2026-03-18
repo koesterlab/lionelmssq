@@ -2,5 +2,5 @@ identity: Simulated_data
 3_prime_tag: 455.1491
 5_prime_tag: 555.1294
 predicted_sequence: CUA104GU0A
-sequence_mass: 3134.6876
+intact_mass: 3134.6876
 true_sequence: CUA104GU0A

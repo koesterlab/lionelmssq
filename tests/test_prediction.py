@@ -137,8 +137,9 @@ def test_testcase(testcase):
         start_tag=meta["5_prime_tag"], end_tag=meta["3_prime_tag"]
     )
 
-    # Standardize sequence mass (remove START_END fragmentation to gain SU mass)
-    seq_mass_obs = meta["sequence_mass"]
+    # Standardize intact sequence mass by removing START_END fragmentation to
+    # gain SU mass
+    seq_mass_obs = meta["intact_mass"]
     seq_mass_su = (
         seq_mass_obs
         - [

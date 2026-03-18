@@ -2,5 +2,5 @@ identity: 2025-10-14_SJH_20mer_RNA_03_ms2
 3_prime_tag: 455.1491
 5_prime_tag: 555.1294
 predicted_sequence: AGAGGCUAAUAGUAAGUUAA
-sequence_mass: 7434.1794
+intact_mass: 7434.1794
 true_sequence: AGAGGCUAAUAGUAAGUUAA

@@ -2,5 +2,5 @@ identity: 2025-10-14_SJH_30mer_RNA_test1_ms2
 3_prime_tag: 455.1491
 5_prime_tag: 555.1294
 predicted_sequence: CAGCAACAACGUUUGUCUUUGAUCCGCAGU
-sequence_mass: 10572.588
+intact_mass: 10572.588
 true_sequence: CAGCAAAACGAUCAUAUGCAGAUCCGCAGU

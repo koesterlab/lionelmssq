@@ -2,5 +2,5 @@ identity: simulated data
 3_prime_tag: 455.1491
 5_prime_tag: 555.1294
 predicted_sequence: CAGCAAAACGAUCAUAUAGAGAUCCGCAGU
-sequence_mass: 10596.650872
+intact_mass: 10596.650872
 true_sequence: CAGCAAAACGAUCAUAUAGAGAUCCGCAGU

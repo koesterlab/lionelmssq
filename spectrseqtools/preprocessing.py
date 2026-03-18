@@ -53,7 +53,7 @@ def preprocess(
     # Update meta parameters (if needed)
     meta_params.setdefault("identity", file_path.stem)
     meta_params.setdefault(
-        "sequence_mass", select_sequence_mass(fragments, meta_params)
+        "intact_mass", select_intact_mass(fragments, meta_params)
     )
     meta_params.setdefault("true_sequence", None)
 
@@ -67,7 +67,7 @@ def preprocess(
     return fragments, singletons, meta_params
 
 
-def select_sequence_mass(
+def select_intact_mass(
     fragments: pl.DataFrame,
     meta_params: dict,
 ) -> float:

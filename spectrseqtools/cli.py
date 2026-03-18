@@ -146,8 +146,9 @@ def main():
         start_tag=start_tag, end_tag=end_tag
     )
 
-    # Standardize sequence mass (remove START_END fragmentation to gain SU mass)
-    seq_mass_obs = meta["sequence_mass"]
+    # Standardize intact sequence mass by removing START_END fragmentation to
+    # gain SU mass
+    seq_mass_obs = meta["intact_mass"]
     seq_mass_su = (
         seq_mass_obs
         - [

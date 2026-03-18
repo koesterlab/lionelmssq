@@ -92,7 +92,7 @@ def classify_fragments(
     mass_cutoff = inferrer.seq.su_mass
 
     # Filter fragments based on mass cutoff
-    fragments = filter_by_sequence_mass(mass_cutoff, fragments)
+    fragments = filter_by_intact_mass(mass_cutoff, fragments)
 
     # Write terminal fragments to file if file name is given
     if output_file_path is not None:
@@ -119,7 +119,7 @@ def is_singleton(mass, integer_masses, inferrer, threshold=None):
     return False
 
 
-def filter_by_sequence_mass(
+def filter_by_intact_mass(
     mass_cutoff: float, fragments: pl.DataFrame
 ) -> pl.DataFrame:
     # Filter out fragments that have a too high SU mass (within variance)
