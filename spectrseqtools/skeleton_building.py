@@ -31,7 +31,7 @@ class SkeletonBuilder:
             fragments=fragments.filter(pl.col("fragmentation").str.contains("START")),
             skeleton_seq=[set() for _ in range(self.inferrer.seq.max_len)],
         )
-        print("Skeleton sequence (5'-end) = ", start_skeleton)
+        print("Skeleton sequence (5'-end)\t= ", start_skeleton)
 
         # Build skeleton sequence from 3'-end and reverse it
         end_skeleton, end_fragments = self._predict_skeleton(
@@ -39,7 +39,7 @@ class SkeletonBuilder:
             skeleton_seq=[set() for _ in range(self.inferrer.seq.max_len)],
         )
         end_skeleton = end_skeleton[::-1]
-        print("Skeleton sequence (3'-end) = ", end_skeleton)
+        print("Skeleton sequence (3'-end)\t= ", end_skeleton)
 
         # Select best sequence length with LP
         seq_len = self.select_sequence_length_with_lp(
@@ -62,7 +62,7 @@ class SkeletonBuilder:
             start_skeleton=start_skeleton,
             end_skeleton=end_skeleton,
         )
-        print("Skeleton sequence = ", skeleton_seq)
+        print("Skeleton sequence (combined)\t= ", skeleton_seq)
 
         # Ensure fragments only occur once
         end_fragments = end_fragments.filter(
