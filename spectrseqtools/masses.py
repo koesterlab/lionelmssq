@@ -110,13 +110,13 @@ NUC_REPS = {
 # We consider tags at the 5'- or 3'-end to be possible fragmentation options.
 
 
-def build_fragmentation_dict(mass_5_prime, mass_3_prime):
+def build_fragmentation_dict(start_tag, end_tag):
     element_masses = ELEMENT_MASSES
 
     # Initialize dict with masses for 5'-end of fragments
     start_dict = {
         # Remove O from SU and add START tag (without H)
-        "START": mass_5_prime - element_masses["O"] - element_masses["H+"],
+        "START": start_tag - element_masses["O"] - element_masses["H+"],
         # Add H to SU to achieve neutral charge
         "c/y": element_masses["H+"],
     }
@@ -124,7 +124,7 @@ def build_fragmentation_dict(mass_5_prime, mass_3_prime):
     # Initialize dict with masses for 3'-end of fragments
     end_dict = {
         # Remove PO3H from SU and add END tag (without H)
-        "END": mass_3_prime
+        "END": end_tag
         - element_masses["P"]
         - 3 * element_masses["O"]
         - 2 * element_masses["H+"],

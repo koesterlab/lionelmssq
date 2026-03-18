@@ -138,12 +138,12 @@ def main():
 
     # Read additional parameter from meta file
     intensity_cutoff = meta.setdefault("intensity_cutoff", DEFAULT_INTENSITY_CUTOFF)
-    start_tag = meta.setdefault("label_mass_5T", 555.1294)
-    end_tag = meta.setdefault("label_mass_3T", 455.1491)
+    start_tag = meta.setdefault("5_prime_tag", 555.1294)
+    end_tag = meta.setdefault("3_prime_tag", 455.1491)
 
     # Build fragmentation dict
     fragmentation_dict = build_fragmentation_dict(
-        mass_5_prime=start_tag, mass_3_prime=end_tag
+        start_tag=start_tag, end_tag=end_tag
     )
 
     # Standardize sequence mass (remove START_END fragmentation to gain SU mass)

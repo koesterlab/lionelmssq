@@ -134,7 +134,7 @@ def test_testcase(testcase):
 
     # Build fragmentation dict
     fragmentation_dict = build_fragmentation_dict(
-        mass_5_prime=meta["label_mass_5T"], mass_3_prime=meta["label_mass_3T"]
+        start_tag=meta["5_prime_tag"], end_tag=meta["3_prime_tag"]
     )
 
     # Standardize sequence mass (remove START_END fragmentation to gain SU mass)

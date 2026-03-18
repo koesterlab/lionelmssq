@@ -101,7 +101,7 @@ def select_sequence_mass(
             (pl.col("is_precursor_deisotoped"))
             & (
                 pl.col("neutral_mass")
-                > (meta_params["label_mass_5T"] + meta_params["label_mass_3T"])
+                > (meta_params["5_prime_tag"] + meta_params["3_prime_tag"])
             )
         )
         .filter((pl.col("intensity") == pl.col("intensity").max()))["neutral_mass"]
