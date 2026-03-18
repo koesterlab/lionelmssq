@@ -52,9 +52,7 @@ def preprocess(
 
     # Update meta parameters (if needed)
     meta_params.setdefault("identity", file_path.stem)
-    meta_params.setdefault(
-        "intact_mass", select_intact_mass(fragments, meta_params)
-    )
+    meta_params.setdefault("intact_mass", select_intact_mass(fragments, meta_params))
     meta_params.setdefault("true_sequence", None)
 
     # Set intensity cutoff

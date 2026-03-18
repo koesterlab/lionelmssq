@@ -142,9 +142,7 @@ def main():
     end_tag = meta.setdefault("3_prime_tag", 455.1491)
 
     # Build fragmentation dict
-    fragmentation_dict = build_fragmentation_dict(
-        start_tag=start_tag, end_tag=end_tag
-    )
+    fragmentation_dict = build_fragmentation_dict(start_tag=start_tag, end_tag=end_tag)
 
     # Standardize intact sequence mass by removing START_END fragmentation to
     # gain SU mass

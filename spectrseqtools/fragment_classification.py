@@ -119,9 +119,7 @@ def is_singleton(mass, integer_masses, inferrer, threshold=None):
     return False
 
 
-def filter_by_intact_mass(
-    mass_cutoff: float, fragments: pl.DataFrame
-) -> pl.DataFrame:
+def filter_by_intact_mass(mass_cutoff: float, fragments: pl.DataFrame) -> pl.DataFrame:
     # Filter out fragments that have a too high SU mass (within variance)
     fragments = fragments.filter(
         pl.col("standard_unit_mass") < mass_cutoff + MAX_VARIANCE
