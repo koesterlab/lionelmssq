@@ -1,21 +1,21 @@
 import polars as pl
 
-from spectrseqtools.masses import EXPLANATION_MASSES as UNIQUE_MASSES
+from spectrseqtools.masses import NUCLEOTIDE_DF as UNIQUE_MASSES
 
 
-def estimate_MS_error_matching_threshold(
+def estimate_MS_error_tolerance(
     fragments, unique_masses=UNIQUE_MASSES, rejection_threshold=0.5, simulation=False
 ):
     """
     Using the mass of the single nucleosides, A, U, G, C, estimate the
     relative error that the MS makes, this is used to determine the
-    MATCHING_THRESHOLD for the DP algorithm!
+    TOLERANCE for the DP algorithm!
 
     """
 
     unique_natural_masses = (
-        unique_masses.filter(pl.col("nucleoside").is_in(["A", "U", "G", "C"]))
-        .select(pl.col("monoisotopic_mass"))
+        unique_masses.filter(pl.col("representative").is_in(["A", "U", "G", "C"]))
+        .select(pl.col("nucleoside_mass"))
         .to_series()
         .to_list()
     )

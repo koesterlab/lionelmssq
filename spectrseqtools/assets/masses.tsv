@@ -1,4 +1,4 @@
-nucleoside	canonical_name	monoisotopic_mass	modification_rate	encoding
+id	canonical_name	monoisotopic_mass	modification_rate	encoding
 A	A	267.09675	1.0	A
 C	C	243.08552	1.0	C
 G	G	283.09167	1.0	G

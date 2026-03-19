@@ -3,8 +3,8 @@ import polars as pl
 import altair as alt
 import importlib.resources
 
-from spectrseqtools.prediction import Prediction
 from spectrseqtools.common import parse_nucleosides
+from spectrseqtools.prediction import Prediction
 
 MASSES = pl.read_csv(
     (importlib.resources.files(__package__) / "assets" / "masses.tsv"),
@@ -19,7 +19,7 @@ STATUS_COLORS = {
 
 def convert_seq(seq: List[str]) -> List[str]:
     return [
-        MASSES.row(named=True, by_predicate=(pl.col("nucleoside") == val))["encoding"]
+        MASSES.row(named=True, by_predicate=(pl.col("id") == val))["encoding"]
         for val in seq
     ]
 
@@ -33,7 +33,7 @@ def plot_prediction(
     pred_seq = convert_seq(seq=prediction.sequence)
     seq_data = pl.DataFrame(
         {
-            "nucleoside": true_seq + pred_seq,
+            "nuc": true_seq + pred_seq,
             "pos": list(range(len(true_seq))) + list(range(len(pred_seq))),
             "type": ["truth"] * len(true_seq) + ["predicted"] * len(pred_seq),
         }
@@ -168,8 +168,8 @@ def plot_prediction(
         .encode(
             alt.X("pos", axis=alt.Axis(grid=False)).title(None),
             alt.Y("type").title("Final sequence"),
-            alt.Text("nucleoside"),
-            alt.Color("nucleoside", scale=alt.Scale(scheme="category10")).legend(None),
+            alt.Text("nuc"),
+            alt.Color("nuc", scale=alt.Scale(scheme="category10")).legend(None),
         )
     )
 

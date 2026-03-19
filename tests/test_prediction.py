@@ -6,22 +6,22 @@ import pytest
 from clr_loader import get_mono
 
 from spectrseqtools.cli import format_sequence_to_full_version, select_solver
-from spectrseqtools.mass_table import DynamicProgrammingTable, SequenceInformation
-from spectrseqtools.prediction import Predictor
 from spectrseqtools.common import parse_nucleosides
-from spectrseqtools.plotting import plot_prediction
 from spectrseqtools.fragment_classification import classify_fragments
-from spectrseqtools.preprocessing import preprocess
 from spectrseqtools.masses import (
     COMPRESSION_RATE,
     DEFAULT_INTENSITY_CUTOFF,
-    EXPLANATION_MASSES,
     NUC_REPS,
+    NUCLEOTIDE_DF,
+    PRECISION,
     TOLERANCE,
-    MATCHING_THRESHOLD,
     UNMODIFIED_BASES,
-    build_breakage_dict,
+    build_fragmentation_dict,
 )
+from spectrseqtools.plotting import plot_prediction
+from spectrseqtools.prediction import Predictor
+from spectrseqtools.preprocessing import preprocess
+from spectrseqtools.traceback_matrix import CompositionInferrer, SequenceInformation
 
 rt = get_mono()
 
@@ -33,8 +33,6 @@ TESTS = ["test_01", "test_02", "test_03"]
 
 @pytest.mark.parametrize(
     "testcase",
-    # [tc for tc in _TESTCASES.iterdir() if tc.name not in [".DS_Store"]],
-    # ids=[tc.name for tc in _TESTCASES.iterdir() if tc.name not in [".DS_Store"]],
     [tc for tc in _TESTCASES.iterdir() if tc.name in TESTS],
     ids=[tc.name for tc in _TESTCASES.iterdir() if tc.name in TESTS],
 )
@@ -97,22 +95,20 @@ def test_testcase(testcase):
         if ("intensity_cutoff" in meta)
         else DEFAULT_INTENSITY_CUTOFF
     )
-    explanation_masses = EXPLANATION_MASSES
-    matching_threshold = MATCHING_THRESHOLD
+    nucleotide_df = NUCLEOTIDE_DF
+    tolerance = TOLERANCE
 
     # Filter by singletons
     if singletons is not None:
         # Map singletons to their mass representative
         singletons = singletons.with_columns(
-            pl.col("nucleoside").replace_strict(NUC_REPS).alias("nucleoside")
+            pl.col("id").replace_strict(NUC_REPS).alias("id")
         )
 
         # Select only bases found in singletons
-        explanation_masses = explanation_masses.with_columns(
+        nucleotide_df = nucleotide_df.with_columns(
             pl.when(
-                pl.col("nucleoside").is_in(
-                    singletons.get_column("nucleoside").to_list()
-                )
+                pl.col("representative").is_in(singletons.get_column("id").to_list())
             )
             .then(pl.col("modification_rate"))
             .otherwise(pl.lit(0.0))
@@ -120,35 +116,36 @@ def test_testcase(testcase):
         )
 
     # Ensure modification rates of unmodified bases are set to 1
-    explanation_masses = explanation_masses.with_columns(
-        pl.when(~pl.col("nucleoside").is_in(UNMODIFIED_BASES))
+    nucleotide_df = nucleotide_df.with_columns(
+        pl.when(~pl.col("representative").is_in(UNMODIFIED_BASES))
         .then(pl.col("modification_rate"))
         .otherwise(pl.lit(1.0))
         .alias("modification_rate")
     )
 
     # TODO: Discuss why it doesn't work with the estimated error!
-    # matching_threshold, _, _ = estimate_MS_error_matching_threshold(
+    # tolerance, _, _ = estimate_MS_error_tolerance(
     #     fragments, unique_masses=unique_masses, simulation=simulation
     # )
     # print(
-    #     "Matching threshold (rel error) estimated from singleton masses = ",
-    #     matching_threshold,
+    #     "Tolerance (rel error) estimated from singleton masses = ",
+    #     tolerance,
     # )
 
-    # Build breakage dict
-    breakage_dict = build_breakage_dict(
-        mass_5_prime=meta["label_mass_5T"], mass_3_prime=meta["label_mass_3T"]
+    # Build fragmentation dict
+    fragmentation_dict = build_fragmentation_dict(
+        start_tag=meta["5_prime_tag"], end_tag=meta["3_prime_tag"]
     )
 
-    # Standardize sequence mass (remove START_END breakage to gain SU mass)
-    seq_mass_obs = meta["sequence_mass"]
+    # Standardize intact sequence mass by removing START_END fragmentation to
+    # gain SU mass
+    seq_mass_obs = meta["intact_mass"]
     seq_mass_su = (
         seq_mass_obs
         - [
-            mass * TOLERANCE
-            for mass in breakage_dict
-            if "START_END" in breakage_dict[mass]
+            mass * PRECISION
+            for mass in fragmentation_dict
+            if "START_END" in fragmentation_dict[mass]
         ][0]
     )
 
@@ -156,11 +153,11 @@ def test_testcase(testcase):
     seq_info = SequenceInformation(
         max_len=int(
             seq_mass_su
-            / TOLERANCE
+            / PRECISION
             / min(
                 pl.Series(
-                    explanation_masses.filter(pl.col("modification_rate") > 0.0).select(
-                        "tolerated_integer_masses"
+                    nucleotide_df.filter(pl.col("modification_rate") > 0.0).select(
+                        "integer_mass"
                     )
                 ).to_list()
             )
@@ -170,32 +167,32 @@ def test_testcase(testcase):
         modification_rate=0.5,
     )
 
-    # Initialize DynamicProgrammingTable class
-    dp_table = DynamicProgrammingTable(
-        explanation_masses,
+    # Initialize CompositionInferrer class
+    inferrer = CompositionInferrer(
+        nucleotide_df=nucleotide_df,
         compression_rate=COMPRESSION_RATE,
-        tolerance=matching_threshold,
-        precision=TOLERANCE,
+        tolerance=tolerance,
+        precision=PRECISION,
         seq=seq_info,
     )
 
     print("Alphabet after singleton reduction:")
-    dp_table.print_masses()
+    inferrer.print_alphabet()
     print()
 
     # Classify preprocessed fragments
     fragments = classify_fragments(
         fragment_masses=fragments,
-        dp_table=dp_table,
-        breakage_dict=breakage_dict,
+        inferrer=inferrer,
+        fragmentation_dict=fragmentation_dict,
         output_file_path=base_path / "fragments.standard_unit_fragments.tsv",
         intensity_cutoff=intensity_cutoff,
     )
 
     # Predict sequence
     prediction = Predictor(
-        dp_table=dp_table,
-        explanation_masses=explanation_masses,
+        inferrer=inferrer,
+        nucleotide_df=nucleotide_df,
     ).predict(
         fragments=fragments,
         solver_params=solver_params,
@@ -234,4 +231,4 @@ def test_testcase(testcase):
     #         assert abs(
     #             prediction.fragments.item(idx, "standard_unit_mass")
     #             - prediction.fragments.item(idx, "predicted_mass")
-    #         ) <= matching_threshold * prediction.fragments.item(idx, "observed_mass")
+    #         ) <= tolerance * prediction.fragments.item(idx, "observed_mass")
