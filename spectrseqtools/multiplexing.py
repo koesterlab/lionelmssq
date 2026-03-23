@@ -9,43 +9,63 @@ from typing import List
 from spectrseqtools.masses import EXPLANATION_MASSES
 from spectrseqtools.deconvolution import deconvolute_scan, DeisotopedPeak, select_min_intensity, PREPROCESS_TOL, DeconvolutionParameters, aggregate_peaks_into_fragments
 from spectrseqtools.singleton_identification import process_scan, RawPeak, COL_TYPES_RAW, calculate_cluster_score
+from collections import defaultdict
 
 rt = get_mono()
 
-@dataclass
-class PrecursorPeak:
-    scan_time: float
-    mz: float
-    intensity: float
-    charge: int
+# @dataclass
+# class PrecursorPeak:
+#     scan_time: float
+#     mz: float
+#     intensity: float
+#     charge: int
+
+# @dataclass
+# class DeisotopedScanBunch:
+#     scan_time: float
+#     precursor_raw_mz: float
+#     precursor_raw_intensity: float
+#     precursor_neutral_mass: float
+#     fragments: List[DeisotopedPeak]
+#     singleton_raw_peaks: List[RawPeak]
+#     num_fragments : int
+
+MIN_MS1_CHARGE_STATE = 1
+
+# COL_TYPES_PRECURSOR = {
+#     "scan_time": pl.Float64,
+#     "mz": pl.Float64,
+#     "intensity": pl.Float64,
+#     "charge": pl.Int64,
+# }
+
+# COL_TYPES_DEISOTOPED_SCAN_BUNCH = {
+#     "scan_time": pl.Float64,
+#     "precursor_raw_mz": pl.Float64,
+#     "precursor_raw_intensity": pl.Float64,
+#     "precursor_neutral_mass": pl.Float64,
+#     "num_fragments": pl.Int64,
+# }
 
 @dataclass
-class DeisotopedScanBunch:
-    scan_time: float
-    precursor_raw_mz: float
-    precursor_raw_intensity: float
+class DeisotopedPrecursorPeak:
+    min_average_scan_time: float
+    max_average_scan_time: float
     precursor_neutral_mass: float
-    fragments: List[DeisotopedPeak]
-    singleton_raw_peaks: List[RawPeak]
-    num_fragments : int
+    precursor_intensity: float
+    product_scan: ms_ditp.data_source.scan.scan.Scan
 
-MIN_MS1_CHARGE_STATE = 2
-
-COL_TYPES_PRECURSOR = {
-    "scan_time": pl.Float64,
-    "mz": pl.Float64,
-    "intensity": pl.Float64,
-    "charge": pl.Int64,
-}
-
-COL_TYPES_DEISOTOPED_SCAN_BUNCH = {
-    "scan_time": pl.Float64,
-    "precursor_raw_mz": pl.Float64,
-    "precursor_raw_intensity": pl.Float64,
+COL_TYPES_AVERAGED_PRECURSORS = {
     "precursor_neutral_mass": pl.Float64,
-    "num_fragments": pl.Int64,
+    "precursor_intensity": pl.Float64,
 }
 
+COL_TYPES_GROUPED_PRECURSORS = {
+    "min_average_scan_time": pl.Float64,
+    "max_average_scan_time": pl.Float64,
+    "precursor_neutral_mass": pl.Float64,
+    "precursor_intensity": pl.Float64,
+}
 
 def initialize_raw_file_iterator_ungrouped(
     file_path: str,
@@ -71,57 +91,57 @@ def initialize_raw_file_iterator_ungrouped(
 
     return raw_file
 
-def get_precursor_peaks(raw_file):
+# def get_precursor_peaks(raw_file):
 
-    scan_processor = ms_ditp.ScanProcessor(raw_file)
+#     scan_processor = ms_ditp.ScanProcessor(raw_file)
 
-    precursor_scans = []
+#     precursor_scans = []
 
-    while True:
-        try:
-            scan_bunch = next(raw_file)
+#     while True:
+#         try:
+#             scan_bunch = next(raw_file)
 
-            ms1, precursors, _ = scan_processor.process_scan_group(scan_bunch.precursor, scan_bunch.products)
+#             ms1, precursors, _ = scan_processor.process_scan_group(scan_bunch.precursor, scan_bunch.products)
 
-            scan_time = ms1.scan_time
-            for p in precursors:
-                precursor_scans.append(PrecursorPeak(
-                    scan_time = scan_time,
-                    mz = p.peak.mz,
-                    intensity = p.peak.intensity,
-                    charge = 0 if type(p.charge) is not int else p.charge,
-                ))
-        except StopIteration:
-            break
+#             scan_time = ms1.scan_time
+#             for p in precursors:
+#                 precursor_scans.append(PrecursorPeak(
+#                     scan_time = scan_time,
+#                     mz = p.peak.mz,
+#                     intensity = p.peak.intensity,
+#                     charge = 0 if type(p.charge) is not int else p.charge,
+#                 ))
+#         except StopIteration:
+#             break
     
-    return precursor_scans
+#     return precursor_scans
 
-def get_representative_peaks(raw_file):
+# def get_representative_peaks(raw_file):
 
-    precursor_scans = get_precursor_peaks(raw_file)
+#     precursor_scans = get_precursor_peaks(raw_file)
 
-    df_precursors = pl.DataFrame(
-        data=np.array(
-            [[peak.__dict__[key] for key in COL_TYPES_PRECURSOR.keys()] for peak in precursor_scans]
-        ),
-        schema=COL_TYPES_PRECURSOR,
-    )
+#     df_precursors = pl.DataFrame(
+#         data=np.array(
+#             [[peak.__dict__[key] for key in COL_TYPES_PRECURSOR.keys()] for peak in precursor_scans]
+#         ),
+#         schema=COL_TYPES_PRECURSOR,
+#     )
 
-    df_precursors = df_precursors.filter(pl.col("charge")>MIN_MS1_CHARGE_STATE).sort("mz").with_columns(
-            (
-                abs(pl.col("mz").shift(1) - pl.col("mz"))
-                / pl.col("mz").shift(1)
-            )
-            .fill_null(0)
-            .fill_nan(0)
-            .gt(PREPROCESS_TOL)
-            .cum_sum()
-            .alias("cluster_group"))
+#     df_precursors = df_precursors.filter(pl.col("charge")>MIN_MS1_CHARGE_STATE).sort("mz").with_columns(
+#             (
+#                 abs(pl.col("mz").shift(1) - pl.col("mz"))
+#                 / pl.col("mz").shift(1)
+#             )
+#             .fill_null(0)
+#             .fill_nan(0)
+#             .gt(PREPROCESS_TOL)
+#             .cum_sum()
+#             .alias("cluster_group"))
 
-    df_precursors_agg = df_precursors.group_by("cluster_group").agg(average_mz = pl.col("mz").mean(),
-                                                                    intensity = pl.col("intensity").sum(),
-                                                                    max_charge = pl.col("charge").max()).sort("cluster_group")
-    return df_precursors_agg
+#     df_precursors_agg = df_precursors.group_by("cluster_group").agg(average_mz = pl.col("mz").mean(),
+#                                                                     intensity = pl.col("intensity").sum(),
+#                                                                     max_charge = pl.col("charge").max()).sort("cluster_group")
+#     return df_precursors_agg
 
 def filter_precursor_charges(ms2prec, ms2s):
     ms2prec_final = []
@@ -135,33 +155,33 @@ def filter_precursor_charges(ms2prec, ms2s):
             ms2_final.append(ms2s[p])
     return ms2prec_final, ms2prec_charge, ms2_final
     
-def process_and_deisotope_scan_bunch(ms1, ms2prec_final, ms2prec_charge, ms2_final, decon_params):
+# def process_and_deisotope_scan_bunch(ms1, ms2prec_final, ms2prec_charge, ms2_final, decon_params):
 
-    max_prec_charge_state = max(ms2prec_charge)
-    ms1_charge_range = (ms1.polarity, ms1.polarity*max_prec_charge_state)
-    ms1_min_intensity = select_min_intensity(
-                    scan=ms1, min_intensity=decon_params.minimum_intensity
-                )
+#     max_prec_charge_state = max(ms2prec_charge)
+#     ms1_charge_range = (ms1.polarity, ms1.polarity*max_prec_charge_state)
+#     ms1_min_intensity = select_min_intensity(
+#                     scan=ms1, min_intensity=decon_params.minimum_intensity
+#                 )
     
-    #prec_peaks = [ms1.has_peak(prec_mz, 10) for prec_mz in df_precursor_agg_arr]
-    decon_prec = ms_ditp.deconvolute_peaks(
-                    peaklist=ms1, priority_list = ms2prec_final,
-                    charge_range = ms1_charge_range,
-                    minimum_intensity= ms1_min_intensity,
-                    **decon_params.scan_independent_params,
-                ).priorities#.neutral_mass
-    deisotopedscanbunches = []
-    for i in range(len(ms2prec_final)):
-        decon_frags = deconvolute_scan(ms2_final[i], params = decon_params)
-        deisotopedscanbunches.append(DeisotopedScanBunch(
-        scan_time = ms1.scan_time,
-        precursor_raw_mz = ms2prec_final[i].mz,
-        precursor_raw_intensity = ms2prec_final[i].peak.intensity,
-        precursor_neutral_mass = 0 if decon_prec[i] is None else decon_prec[i].neutral_mass,
-        fragments = decon_frags,
-        singleton_raw_peaks = process_scan(ms2_final[i]),
-        num_fragments = len(decon_frags),))
-    return deisotopedscanbunches
+#     #prec_peaks = [ms1.has_peak(prec_mz, 10) for prec_mz in df_precursor_agg_arr]
+#     decon_prec = ms_ditp.deconvolute_peaks(
+#                     peaklist=ms1, priority_list = ms2prec_final,
+#                     charge_range = ms1_charge_range,
+#                     minimum_intensity= ms1_min_intensity,
+#                     **decon_params.scan_independent_params,
+#                 ).priorities#.neutral_mass
+#     deisotopedscanbunches = []
+#     for i in range(len(ms2prec_final)):
+#         decon_frags = deconvolute_scan(ms2_final[i], params = decon_params)
+#         deisotopedscanbunches.append(DeisotopedScanBunch(
+#         scan_time = ms1.scan_time,
+#         precursor_raw_mz = ms2prec_final[i].mz,
+#         precursor_raw_intensity = ms2prec_final[i].peak.intensity,
+#         precursor_neutral_mass = 0 if decon_prec[i] is None else decon_prec[i].neutral_mass,
+#         fragments = decon_frags,
+#         singleton_raw_peaks = process_scan(ms2_final[i]),
+#         num_fragments = len(decon_frags),))
+#     return deisotopedscanbunches
 
 def select_singletons_from_peaks_raw(peak_list: List[RawPeak]) -> pl.DataFrame:
     """
@@ -229,97 +249,251 @@ def select_singletons_from_peaks_raw(peak_list: List[RawPeak]) -> pl.DataFrame:
         # )
     ).sort("count", descending=True)
 
-def deconvolute_scanbunch(file_path: str, params: dict, min_scan_time = 0, max_scan_time = np.inf):
-    """
-    Deconvolute/deisotope MS1 and MS2 scan bunches ThermoFisher RAW file.
+# def deconvolute_scanbunch(file_path: str, params: dict, min_scan_time = 0, max_scan_time = np.inf):
+#     """
+#     Deconvolute/deisotope MS1 and MS2 scan bunches ThermoFisher RAW file.
 
-    Parameters
-    ----------
-    file_path : str
-        Path of RAW file from ThermoFisher.
-    params : dict
-        Dictionary containing deconvolution parameters.
+#     Parameters
+#     ----------
+#     file_path : str
+#         Path of RAW file from ThermoFisher.
+#     params : dict
+#         Dictionary containing deconvolution parameters.
 
-    Returns
-    -------
-    List
-        List containing deisotoped and deconvoluted scan bunches tagged to its precursor mass.
+#     Returns
+#     -------
+#     List
+#         List containing deisotoped and deconvoluted scan bunches tagged to its precursor mass.
 
-    """
-    # Load deconvolution parameter based on parameter dict
-    decon_params = DeconvolutionParameters(params)
+#     """
+#     # Load deconvolution parameter based on parameter dict
+#     decon_params = DeconvolutionParameters(params)
 
-    # Initialize iterator for RAW file
-    raw_file_read = initialize_raw_file_iterator_ungrouped(file_path=file_path)
-    raw_file_read = raw_file_read.start_from_scan(rt = min_scan_time)
+#     # Initialize iterator for RAW file
+#     raw_file_read = initialize_raw_file_iterator_ungrouped(file_path=file_path)
+#     raw_file_read = raw_file_read.start_from_scan(rt = min_scan_time)
+#     scan_processor = ms_ditp.ScanProcessor(raw_file_read)
+
+#     deisotopedscanbunches = []
+
+#     prev_scan_time = min_scan_time
+#     max_scan_time = min(max_scan_time, raw_file_read.get_scan_by_index(len(raw_file_read)-1).scan_time)
+
+#     with tqdm.tqdm(total = round(max_scan_time-min_scan_time,3)) as pbar:
+#         while True:
+#             try:
+#                 scan_bunch = next(raw_file_read)
+
+#                 if len(scan_bunch.products) < 1:
+#                     continue
+
+#                 ms1, ms2prec, ms2s = scan_processor.process_scan_group(scan_bunch.precursor, scan_bunch.products)
+                
+#                 if ms1.scan_time > max_scan_time:
+#                     break
+#                 dt = ms1.scan_time-prev_scan_time
+#                 pbar.update(round(dt,3))
+#                 prev_scan_time = ms1.scan_time
+                
+#                 ms2prec_final, ms2prec_charge, ms2_final = filter_precursor_charges(ms2prec, ms2s)
+
+#                 if len(ms2prec_charge) <1 or  max(ms2prec_charge) < 0: 
+#                     continue
+#                 deisotopedscanbunches += process_and_deisotope_scan_bunch(ms1, ms2prec_final, ms2prec_charge, ms2_final, decon_params)
+                
+                
+#             except StopIteration:
+#                 break
+    
+
+#     df_deisotoped_scan_bunch = pl.DataFrame(
+#             data=np.array(
+#                 [[sbunch.__dict__[key] for key in COL_TYPES_DEISOTOPED_SCAN_BUNCH.keys()] for sbunch in deisotopedscanbunches]
+#             ),
+#             schema=COL_TYPES_DEISOTOPED_SCAN_BUNCH,
+#         ).with_row_index().sort("precursor_neutral_mass").with_columns(
+#                 (
+#                     abs(pl.col("precursor_neutral_mass").shift(1) - pl.col("precursor_neutral_mass"))
+#                     / pl.col("precursor_neutral_mass").shift(1)
+#                 )
+#                 .fill_null(0)
+#                 .fill_nan(0)
+#                 .gt(PREPROCESS_TOL)
+#                 .cum_sum()
+#                 .alias("neutral_mass_grp")).rename({"precursor_neutral_mass": "neutral_mass", "precursor_raw_intensity": "intensity"})
+
+#     return df_deisotoped_scan_bunch, deisotopedscanbunches
+
+# def get_frags_sings(df_grp_filtered, deisotopedscanbunches):
+#     #df_filtered = df_deisotoped_scan_bunch.filter(pl.col("neutral_mass_grp") == grp_index).sort("scan_time")
+#     indices = df_grp_filtered["index"].to_numpy()
+#     fragment_peaks = []
+#     singleton_raw_peaks_filtered = []
+
+#     for idx in indices:
+#         fragment_peaks += deisotopedscanbunches[idx].fragments
+#         singleton_raw_peaks_filtered += deisotopedscanbunches[idx].singleton_raw_peaks
+#     try: 
+#         fragments = aggregate_peaks_into_fragments(fragment_peaks)
+#     except ValueError:
+#         fragments = pl.DataFrame(schema={"is_precursor_deisotoped":pl.Boolean, "intensity":pl.Float64, "neutral_mass":pl.Float64, "ppm_group":pl.Int32})
+    
+#     try:
+#         singletons = select_singletons_from_peaks_raw(singleton_raw_peaks_filtered)
+#     except pl.exceptions.ComputeError:
+#         singletons = pl.DataFrame(schema={"nucleoside":pl.Utf8, "count":pl.Int32, "cluster_score":pl.Float64})
+#     return fragments, singletons
+
+def ms1_to_ms2_dict(raw_file_read):
+    raw_file_read.reset()
+    raw_file_read.make_iterator(grouped = False)
+    
+    ms2_to_ms1_idx = {}
+
+    for _ in tqdm.tqdm(range(len(raw_file_read) - 1)):
+        # Select next scan
+        scan = next(raw_file_read)
+
+        # Skip scan if it is no MS2 scan
+        if scan.ms_level != 2:
+            continue
+        
+        prod_idx = scan.index
+        prec_idx = scan.precursor_information.precursor.index
+        
+        ms2_to_ms1_idx[prod_idx] = prec_idx
+
+    ms1_to_ms2_idx = defaultdict(list)
+    for prod_idx, prec_idx in ms2_to_ms1_idx.items():
+        ms1_to_ms2_idx[prec_idx].append(prod_idx)
+    
+    return ms1_to_ms2_idx
+
+def deconvolute_averaged_precursors(new_precursor, final_priority_peaks, priority_charges, final_products, decon_params):
+    
+    max_prec_charge_state = max(priority_charges)
+    ms1_charge_range = (new_precursor.polarity, new_precursor.polarity*max_prec_charge_state)
+    ms1_min_intensity = select_min_intensity(
+                    scan=new_precursor, min_intensity=decon_params.minimum_intensity
+                )
+
+    decon_priority = ms_ditp.deconvolute_peaks(
+                        peaklist=new_precursor, priority_list = final_priority_peaks,
+                        charge_range = ms1_charge_range,
+                        minimum_intensity= ms1_min_intensity,
+                        **decon_params.scan_independent_params,
+                    ).priorities
+
+    ungrouped_precursors = []
+    for i in range(len(decon_priority)):
+        if decon_priority[i] is None:
+            continue
+
+        precursor_neutral_mass = decon_priority[i].neutral_mass
+        precursor_intensity = decon_priority[i].intensity
+        ungrouped_precursors.append(
+            DeisotopedPrecursorPeak(
+                min_average_scan_time=np.nan,
+                max_average_scan_time=np.nan,
+                precursor_neutral_mass=precursor_neutral_mass, 
+                precursor_intensity= precursor_intensity,
+                product_scan = final_products[i]
+                ))
+    if len(ungrouped_precursors)>0:
+        df_averaged_precursors = pl.DataFrame(
+                data=np.array(
+                    [[frag.__dict__[key] for key in COL_TYPES_AVERAGED_PRECURSORS.keys()] for frag in ungrouped_precursors]
+                ),
+                schema=COL_TYPES_AVERAGED_PRECURSORS,
+            ).with_row_index().sort("precursor_neutral_mass").with_columns(
+                    (
+                        abs(pl.col("precursor_neutral_mass").shift(1) - pl.col("precursor_neutral_mass"))
+                        / pl.col("precursor_neutral_mass").shift(1)
+                    )
+                    .fill_null(0)
+                    .fill_nan(0)
+                    .gt(PREPROCESS_TOL)
+                    .cum_sum()
+                    .alias("average_grp"))
+    else:
+        df_averaged_precursors = pl.DataFrame(schema=COL_TYPES_AVERAGED_PRECURSORS,)
+    return df_averaged_precursors, ungrouped_precursors
+
+def averaged_precursors_products(raw_file_read, decon_params, min_scan_time, max_scan_time, dt_window):
+    ms1_to_ms2_idx = ms1_to_ms2_dict(raw_file_read)
+
+    raw_file_read.reset()
+    raw_file_read.make_iterator(grouped = True)
+    
     scan_processor = ms_ditp.ScanProcessor(raw_file_read)
 
-    deisotopedscanbunches = []
+    averaged_precursors = []
 
-    prev_scan_time = min_scan_time
-    max_scan_time = min(max_scan_time, raw_file_read.get_scan_by_index(len(raw_file_read)-1).scan_time)
+    for t in tqdm.tqdm(np.arange(min_scan_time, max_scan_time, dt_window/4)):#, max_scan_time, dt)):
+        scan = raw_file_read.get_scan_by_time(t+dt_window)
+        if scan.ms_level != 1:
+            scan = raw_file_read.find_previous_ms1(scan.index)
 
-    with tqdm.tqdm(total = round(max_scan_time-min_scan_time,3)) as pbar:
-        while True:
-            try:
-                scan_bunch = next(raw_file_read)
+        average_scan = scan.average(rt_interval = dt_window)
+        average_scan.pick_peaks()
 
-                if len(scan_bunch.products) < 1:
-                    continue
+        average_scan_indices = average_scan.scan_indices
+        min_average_scan_time = raw_file_read.get_scan_by_index(min(average_scan_indices)).scan_time
+        max_average_scan_time = raw_file_read.get_scan_by_index(max(average_scan_indices)).scan_time
 
-                ms1, ms2prec, ms2s = scan_processor.process_scan_group(scan_bunch.precursor, scan_bunch.products)
-                
-                if ms1.scan_time > max_scan_time:
-                    break
-                dt = ms1.scan_time-prev_scan_time
-                pbar.update(round(dt,3))
-                prev_scan_time = ms1.scan_time
-                
-                ms2prec_final, ms2prec_charge, ms2_final = filter_precursor_charges(ms2prec, ms2s)
+        product_scans = []
+        for scan_idx in average_scan_indices:
+            prod_idx = ms1_to_ms2_idx[scan_idx]
+            for idx in prod_idx:
+                product_scans.append(raw_file_read.get_scan_by_index(idx))
 
-                if len(ms2prec_charge) <1 or  max(ms2prec_charge) < 0: 
-                    continue
-                deisotopedscanbunches += process_and_deisotope_scan_bunch(ms1, ms2prec_final, ms2prec_charge, ms2_final, decon_params)
-                
-                
-            except StopIteration:
-                break
-    
+        new_precursor, priority_peaks, new_products = scan_processor.process_scan_group(average_scan, product_scans)
+        final_priority_peaks, priority_charges, final_products = filter_precursor_charges(priority_peaks, new_products)
+        if len(priority_charges) == 0:
+            print("Time " + str(t) + " skipped because all charges were lower than threshold.")
+            continue
+        
+        df_averaged_precursors, ungrouped_precursors = deconvolute_averaged_precursors(new_precursor, final_priority_peaks, priority_charges, final_products, decon_params)
+        if len(ungrouped_precursors) == 0:
+            continue
+        average_grps = df_averaged_precursors["average_grp"].unique()
 
-    df_deisotoped_scan_bunch = pl.DataFrame(
-            data=np.array(
-                [[sbunch.__dict__[key] for key in COL_TYPES_DEISOTOPED_SCAN_BUNCH.keys()] for sbunch in deisotopedscanbunches]
-            ),
-            schema=COL_TYPES_DEISOTOPED_SCAN_BUNCH,
-        ).with_row_index().sort("precursor_neutral_mass").with_columns(
-                (
-                    abs(pl.col("precursor_neutral_mass").shift(1) - pl.col("precursor_neutral_mass"))
-                    / pl.col("precursor_neutral_mass").shift(1)
-                )
-                .fill_null(0)
-                .fill_nan(0)
-                .gt(PREPROCESS_TOL)
-                .cum_sum()
-                .alias("neutral_mass_grp")).rename({"precursor_neutral_mass": "neutral_mass", "precursor_raw_intensity": "intensity"})
+        for i in average_grps:
+            df_filter = df_averaged_precursors.filter(pl.col("average_grp") == i)
+            
+            precursor_max_idx = df_filter["precursor_neutral_mass"].arg_max()
+            
+            avg_product_idx = df_filter["index"].to_numpy()
+            
+            avg_product_scans = []
+            for idx in avg_product_idx:
+                avg_product_scans.append(ungrouped_precursors[idx].product_scan)
 
-    return df_deisotoped_scan_bunch, deisotopedscanbunches
+            averaged_precursors.append(
+                DeisotopedPrecursorPeak(
+                    min_average_scan_time=min_average_scan_time,
+                    max_average_scan_time=max_average_scan_time,
+                    precursor_neutral_mass=df_filter["precursor_neutral_mass"][precursor_max_idx], 
+                    precursor_intensity= df_filter["precursor_intensity"][precursor_max_idx],
+                    product_scan = avg_product_scans
+                    ))
+        
+    return averaged_precursors
 
-def get_frags_sings(df_grp_filtered, deisotopedscanbunches):
-    #df_filtered = df_deisotoped_scan_bunch.filter(pl.col("neutral_mass_grp") == grp_index).sort("scan_time")
-    indices = df_grp_filtered["index"].to_numpy()
-    fragment_peaks = []
-    singleton_raw_peaks_filtered = []
-
-    for idx in indices:
-        fragment_peaks += deisotopedscanbunches[idx].fragments
-        singleton_raw_peaks_filtered += deisotopedscanbunches[idx].singleton_raw_peaks
-    try: 
-        fragments = aggregate_peaks_into_fragments(fragment_peaks)
-    except ValueError:
-        fragments = pl.DataFrame(schema={"is_precursor_deisotoped":pl.Boolean, "intensity":pl.Float64, "neutral_mass":pl.Float64, "ppm_group":pl.Int32})
-    
-    try:
-        singletons = select_singletons_from_peaks_raw(singleton_raw_peaks_filtered)
-    except pl.exceptions.ComputeError:
-        singletons = pl.DataFrame(schema={"nucleoside":pl.Utf8, "count":pl.Int32, "cluster_score":pl.Float64})
-    return fragments, singletons
+def group_averaged_precursors_over_time(averaged_precursors):
+    df_grouped_precursors = pl.DataFrame(
+                data=np.array(
+                    [[frag.__dict__[key] for key in COL_TYPES_GROUPED_PRECURSORS.keys()] for frag in averaged_precursors]
+                ),
+                schema=COL_TYPES_GROUPED_PRECURSORS,
+            ).with_row_index().sort("precursor_neutral_mass").with_columns(
+                    (
+                        abs(pl.col("precursor_neutral_mass").shift(1) - pl.col("precursor_neutral_mass"))
+                        / pl.col("precursor_neutral_mass").shift(1)
+                    )
+                    .fill_null(0)
+                    .fill_nan(0)
+                    .gt(PREPROCESS_TOL)
+                    .cum_sum()
+                    .alias("neutral_mass_grp")).sort(["neutral_mass_grp", "min_average_scan_time"])
+    return df_grouped_precursors
