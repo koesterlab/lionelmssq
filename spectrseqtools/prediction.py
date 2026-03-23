@@ -6,14 +6,14 @@ from loguru import logger
 
 from spectrseqtools.common import (
     calculate_error_threshold,
-    calculate_explanations,
+    calculate_compositions,
     parse_nucleosides,
 )
-from spectrseqtools.linear_program import LinearProgramInstance
-from spectrseqtools.mass_explanation import is_valid_mass
-from spectrseqtools.mass_table import DynamicProgrammingTable
+from spectrseqtools.composition_inference import is_valid_mass
 from spectrseqtools.masses import PHOSPHATE_LINK_MASS
+from spectrseqtools.sequence_inference import LinearProgramInstance
 from spectrseqtools.skeleton_building import SkeletonBuilder
+from spectrseqtools.traceback_matrix import CompositionInferrer
 
 
 @dataclass
@@ -46,6 +46,7 @@ class Prediction:
                     "predicted_diff": pl.Float64,
                     "predicted_seq": pl.String,
                     "orig_index": pl.UInt32,
+                    "intensity": pl.Float64,
                 }
             ),
         )
@@ -54,11 +55,11 @@ class Prediction:
 class Predictor:
     def __init__(
         self,
-        dp_table: DynamicProgrammingTable,
-        explanation_masses: pl.DataFrame,
+        inferrer: CompositionInferrer,
+        nucleotide_df: pl.DataFrame,
     ):
-        self.explanation_masses = explanation_masses
-        self.dp_table = dp_table
+        self.nucleotide_df = nucleotide_df
+        self.inferrer = inferrer
 
     def predict(
         self,
@@ -78,11 +79,11 @@ class Predictor:
             pl.lit(-1, dtype=pl.Int64).alias("max_end"),
         )
 
-        fragments, explanations = self.filter_by_explanation(fragments)
+        fragments, compositions = self.filter_by_composition(fragments)
 
         skeleton_builder = SkeletonBuilder(
-            explanations=explanations,
-            dp_table=self.dp_table,
+            compositions=compositions,
+            inferrer=self.inferrer,
         )
 
         # Build skeleton sequence from both sides and align them into final sequence
@@ -106,7 +107,7 @@ class Predictor:
         print()
 
         print("Alphabet after skeleton-based reduction:")
-        self.dp_table.print_masses()
+        self.inferrer.print_alphabet()
         print()
 
         # Filter out all internal fragments that do not fit anywhere in skeleton
@@ -114,22 +115,29 @@ class Predictor:
             "Number of internal fragments before filtering: ",
             len(
                 fragments.filter(
-                    ~pl.col("breakage").str.contains("START")
-                    & ~pl.col("breakage").str.contains("END")
+                    ~pl.col("fragmentation").str.contains("START")
+                    & ~pl.col("fragmentation").str.contains("END")
                 )
             ),
         )
-        fragments = self.filter_with_lp(
-            fragments=fragments,
-            skeleton_seq=skeleton_seq,
-            solver_params=solver_params,
-        )
+
+        # TODO: Investigate LP initialization of highly modified sequences
+        #  for being wrong-length predictions (min/max length issue?)
+        try:
+            fragments = self.filter_with_linear_optimization(
+                fragments=fragments,
+                skeleton_seq=skeleton_seq,
+                solver_params=solver_params,
+            )
+        except ValueError:
+            return Prediction.default()
+
         print(
             "Number of internal fragments after filtering: ",
             len(
                 fragments.filter(
-                    ~pl.col("breakage").str.contains("START")
-                    & ~pl.col("breakage").str.contains("END")
+                    ~pl.col("fragmentation").str.contains("START")
+                    & ~pl.col("fragmentation").str.contains("END")
                 )
             ),
         )
@@ -138,12 +146,12 @@ class Predictor:
         print("Number of fragments considered for fitting:", len(fragments))
         print()
 
-        if len(fragments.filter(pl.col("breakage").str.contains("START"))) == 0:
+        if len(fragments.filter(pl.col("fragmentation").str.contains("START"))) == 0:
             logger.warning(
                 "No start fragments provided, this will likely lead to suboptimal results."
             )
 
-        if len(fragments.filter(pl.col("breakage").str.contains("END"))) == 0:
+        if len(fragments.filter(pl.col("fragmentation").str.contains("END"))) == 0:
             logger.warning(
                 "No end fragments provided, this will likely lead to suboptimal results."
             )
@@ -152,7 +160,7 @@ class Predictor:
         try:
             lp_instance = LinearProgramInstance(
                 fragments=fragments,
-                dp_table=self.dp_table,
+                inferrer=self.inferrer,
                 skeleton_seq=skeleton_seq,
             )
 
@@ -160,17 +168,17 @@ class Predictor:
         except Exception:
             return Prediction.default()
 
-    def filter_by_explanation(
+    def filter_by_composition(
         self, fragments: pl.DataFrame
     ) -> Tuple[pl.DataFrame, dict]:
         old_alphabet_size = -1
 
-        explanations = {}
-        while old_alphabet_size != len(self.dp_table.masses):
-            old_alphabet_size = len(self.dp_table.masses)
-            # Roughly explain the mass differences (to reduce the alphabet)
+        compositions = {}
+        while old_alphabet_size != len(self.inferrer.alphabet):
+            old_alphabet_size = len(self.inferrer.alphabet)
+            # Roughly infer compositions for mass differences (to reduce the alphabet)
             # Note there may be faulty mass fragments leading to not truly existent values
-            explanations = self.collect_diff_explanations_for_su(fragments=fragments)
+            compositions = self.collect_diff_compositions(fragments=fragments)
 
             # TODO: Also consider that the observations are not complete and that
             #  we probably don't see all the letters as diffs or singletons.
@@ -181,35 +189,35 @@ class Predictor:
             # Reduce nucleotide alphabet based on fragments
             observed_nucleotides = {
                 nuc
-                for expls in explanations.values()
-                if expls is not None
-                for expl in expls
-                for nuc in expl
+                for comps in compositions.values()
+                if comps is not None
+                for comp in comps
+                for nuc in comp
             }
             fragments = self._reduce_alphabet(observed_nucleotides, fragments)
 
-        print("Alphabet after explanation-based reduction:")
-        self.dp_table.print_masses()
+        print("Alphabet after composition-based reduction:")
+        self.inferrer.print_alphabet()
         print()
 
-        return fragments, explanations
+        return fragments, compositions
 
     def _reduce_alphabet(
         self, nucleotide_list: Set[str], fragments: pl.DataFrame
     ) -> pl.DataFrame:
-        self.dp_table.adapt_individual_modification_rates_by_alphabet_reduction(
+        self.inferrer.adapt_individual_modification_rates_by_alphabet_reduction(
             nucleotide_list
         )
 
-        # Filter out all fragments without any explanations
+        # Filter out all fragments with no valid composition
         return (
             fragments.with_columns(
                 pl.struct("observed_mass", "standard_unit_mass")
                 .map_elements(
                     lambda x: is_valid_mass(
                         mass=x["standard_unit_mass"],
-                        dp_table=self.dp_table,
-                        threshold=self.dp_table.tolerance * x["observed_mass"],
+                        inferrer=self.inferrer,
+                        threshold=self.inferrer.tolerance * x["observed_mass"],
                     ),
                     return_dtype=bool,
                 )
@@ -219,7 +227,7 @@ class Predictor:
             .drop("is_valid")
         )
 
-    def filter_with_lp(
+    def filter_with_linear_optimization(
         self,
         fragments: pl.DataFrame,
         skeleton_seq: list,
@@ -230,35 +238,37 @@ class Predictor:
             # TODO: Add terminal-fragment filter based on LP output of
             #  sequence-length estimation and reuse the below (for speed-up)
             # # Skip terminal (i.e. non-internal) fragments
-            # if ("START" in fragments.item(idx, "breakage")) or (
-            #     "END" in fragments.item(idx, "breakage")
+            # if ("START" in fragments.item(idx, "fragmentation")) or (
+            #     "END" in fragments.item(idx, "fragmentation")
             # ):
             #     continue
 
             # Initialize LP instance for a singular fragment
             filter_instance = LinearProgramInstance(
                 fragments=fragments[idx],
-                dp_table=self.dp_table,
+                inferrer=self.inferrer,
                 skeleton_seq=skeleton_seq,
             )
 
             # Check whether fragment can feasibly be aligned to skeleton
             if filter_instance.minimize_error(
                 solver_params=solver_params
-            ) > self.dp_table.tolerance * fragments.item(idx, "observed_mass"):
+            ) > self.inferrer.tolerance * fragments.item(idx, "observed_mass"):
                 is_invalid.append(fragments.item(idx, "index"))
 
         # Return only valid fragments
         return fragments.filter(~pl.col("index").is_in(is_invalid))
 
-    def collect_diff_explanations_for_su(self, fragments: pl.DataFrame) -> dict:
-        # Collect explanation for all reasonable mass differences for each side
-        explanations = {
-            **self.collect_explanations_per_side(
-                fragments=fragments.filter(pl.col("breakage").str.contains("START")),
+    def collect_diff_compositions(self, fragments: pl.DataFrame) -> dict:
+        # Collect compositions for all reasonable mass differences for each side
+        compositions = {
+            **self.collect_diff_compositions_per_side(
+                fragments=fragments.filter(
+                    pl.col("fragmentation").str.contains("START")
+                ),
             ),
-            **self.collect_explanations_per_side(
-                fragments=fragments.filter(pl.col("breakage").str.contains("END")),
+            **self.collect_diff_compositions_per_side(
+                fragments=fragments.filter(pl.col("fragmentation").str.contains("END")),
             ),
         }
 
@@ -268,17 +278,17 @@ class Predictor:
         idx_observed_mass = fragments.get_column_index("observed_mass")
         idx_su_mass = fragments.get_column_index("standard_unit_mass")
         for singleton in singleton_list.rows():
-            explanations[singleton[idx_su_mass]] = calculate_explanations(
+            compositions[singleton[idx_su_mass]] = calculate_compositions(
                 diff=singleton[idx_su_mass],
-                threshold=self.dp_table.tolerance * singleton[idx_observed_mass],
-                dp_table=self.dp_table,
+                threshold=self.inferrer.tolerance * singleton[idx_observed_mass],
+                inferrer=self.inferrer,
             )
 
-        return explanations
+        return compositions
 
-    def collect_explanations_per_side(self, fragments: pl.DataFrame) -> dict:
+    def collect_diff_compositions_per_side(self, fragments: pl.DataFrame) -> dict:
         max_weight = (
-            max(self.explanation_masses.get_column("monoisotopic_mass").to_list())
+            max(self.nucleotide_df.get_column("nucleoside_mass").to_list())
             + PHOSPHATE_LINK_MASS
         )
         su_masses = fragments.get_column("standard_unit_mass").to_list()
@@ -286,7 +296,7 @@ class Predictor:
         start = 0
         end = 1
 
-        explanations = {}
+        compositions = {}
         while end < len(fragments):
             # Skip singletons
             if (end - start) <= 0:
@@ -305,18 +315,18 @@ class Predictor:
             diff_error = calculate_error_threshold(
                 observed_masses[start],
                 observed_masses[end],
-                self.dp_table.tolerance,
+                self.inferrer.tolerance,
             )
-            expl = calculate_explanations(
+            comp = calculate_compositions(
                 diff=diff,
                 threshold=diff_error,
-                dp_table=self.dp_table,
+                inferrer=self.inferrer,
             )
-            if expl is not None and len(expl) >= 1:
-                explanations[diff] = expl
+            if comp is not None and len(comp) >= 1:
+                compositions[diff] = comp
             if end == len(fragments) - 1:
                 start += 1
             else:
                 end += 1
 
-        return explanations
+        return compositions

@@ -9,16 +9,16 @@ from sklearn.metrics import silhouette_score
 from typing import List
 
 from spectrseqtools.common import initialize_raw_file_iterator
-from spectrseqtools.masses import EXPLANATION_MASSES
+from spectrseqtools.masses import NUCLEOTIDE_DF
 
 rt = get_mono()
 
 PREPROCESS_TOL = 10e-6
 THEORETICAL_BOUNDARY_FACTOR = 2
-MIN_MZ = EXPLANATION_MASSES["theoretical_mz"].min() * (
+MIN_MZ = NUCLEOTIDE_DF["singleton_mz"].min() * (
     1 - THEORETICAL_BOUNDARY_FACTOR * PREPROCESS_TOL
 )
-MAX_MZ = EXPLANATION_MASSES["theoretical_mz"].max() * (
+MAX_MZ = NUCLEOTIDE_DF["singleton_mz"].max() * (
     1 + THEORETICAL_BOUNDARY_FACTOR * PREPROCESS_TOL
 )
 COL_TYPES_RAW = {
@@ -143,35 +143,35 @@ def select_singletons_from_peaks(peak_list: List[RawPeak]) -> pl.DataFrame:
         schema=COL_TYPES_RAW,
     )
 
-    # Match observed m/z to theoretical m/z from the reference table
+    # Match observed m/z to singleton m/z from the reference table
     peak_df = peak_df.sort("mz").join_asof(
-        EXPLANATION_MASSES.sort("theoretical_mz"),
+        NUCLEOTIDE_DF.sort("singleton_mz"),
         left_on="mz",
-        right_on="theoretical_mz",
+        right_on="singleton_mz",
         strategy="nearest",
     )
 
-    # Compute mass error between observed and theoretical m/z
+    # Compute mass error between observed and singleton m/z
     peak_df = (
         peak_df.sort("mz")
         .with_columns(
-            (abs(pl.col("mz") - pl.col("theoretical_mz")) / pl.col("mz"))
+            (abs(pl.col("mz") - pl.col("singleton_mz")) / pl.col("mz"))
             .fill_null(0)
             .fill_nan(0)
             .lt(PREPROCESS_TOL)
             .alias("is_match")
         )
         .filter(pl.col("is_match"))
-        .sort(["nucleoside", "scan_time"])
+        .sort(["representative", "scan_time"])
     )
 
-    # Map representative nucleoside, cluster score, and count to each nucleoside group
-    peak_df = peak_df.group_by("nucleoside_list").map_groups(
+    # Map representative nucleotide, cluster score, and count to each nucleotide group
+    peak_df = peak_df.group_by("id_list").map_groups(
         lambda x: pl.DataFrame(
             {
-                "nucleoside": x["nucleoside_list"][0],
+                "id": x["id_list"][0],
                 "cluster_score": calculate_cluster_score(x["scan_time"]),
-                "count": len(x["nucleoside_list"]),
+                "count": len(x["id_list"]),
             }
         )
     )
@@ -179,7 +179,7 @@ def select_singletons_from_peaks(peak_list: List[RawPeak]) -> pl.DataFrame:
     # Filter candidate singletons by cluster score
     return (
         peak_df.filter(pl.col("cluster_score") >= 0).select(
-            ["nucleoside", "count", "cluster_score"]
+            ["id", "count", "cluster_score"]
         )
     ).sort("count", descending=True)
 

@@ -214,7 +214,7 @@ class DeisotopedPeak:
 
 
 def deconvolute_scan(
-    scan: ms_ditp.data_source.Scan, params: dict,
+    scan: ms_ditp.data_source.Scan, params: DeconvolutionParameters
 ) -> List[DeisotopedPeak]:
     """
     Deconvolute peaks from MS2 scan.
@@ -223,8 +223,8 @@ def deconvolute_scan(
     ----------
     scan : ms_deisotope.data_source.Scan
         ThermoFisher scan.
-    params : dict
-        Dictionary containing deconvolution parameters.
+    params : DeconvolutionParameters
+        Deconvolution parameters.
 
     Returns
     -------

@@ -6,19 +6,19 @@ from tap import Tap
 from typing import List, Literal
 
 from spectrseqtools.fragment_classification import classify_fragments
-from spectrseqtools.mass_table import DynamicProgrammingTable, SequenceInformation
 from spectrseqtools.masses import (
     COMPRESSION_RATE,
     DEFAULT_INTENSITY_CUTOFF,
-    EXPLANATION_MASSES,
-    MATCHING_THRESHOLD,
     NUC_REPS,
+    NUCLEOTIDE_DF,
+    PRECISION,
     TOLERANCE,
     UNMODIFIED_BASES,
-    build_breakage_dict,
+    build_fragmentation_dict,
 )
 from spectrseqtools.prediction import Predictor
 from spectrseqtools.preprocessing import preprocess
+from spectrseqtools.traceback_matrix import CompositionInferrer, SequenceInformation
 
 
 class Settings(Tap):
@@ -109,21 +109,19 @@ def main():
     print("Singletons identified during preprocessing:", singletons)
     print()
 
-    explanation_masses = EXPLANATION_MASSES
+    nucleotide_df = NUCLEOTIDE_DF
 
     # Filter by singletons
     if singletons is not None:
         # Map singletons to their mass representative
         singletons = singletons.with_columns(
-            pl.col("nucleoside").replace_strict(NUC_REPS).alias("nucleoside")
+            pl.col("id").replace_strict(NUC_REPS).alias("id")
         )
 
         # Select only bases found in singletons
-        explanation_masses = explanation_masses.with_columns(
+        nucleotide_df = nucleotide_df.with_columns(
             pl.when(
-                pl.col("nucleoside").is_in(
-                    singletons.get_column("nucleoside").to_list()
-                )
+                pl.col("representative").is_in(singletons.get_column("id").to_list())
             )
             .then(pl.col("modification_rate"))
             .otherwise(pl.lit(0.0))
@@ -131,8 +129,8 @@ def main():
         )
 
     # Ensure modification rates of unmodified bases are set to 1
-    explanation_masses = explanation_masses.with_columns(
-        pl.when(~pl.col("nucleoside").is_in(UNMODIFIED_BASES))
+    nucleotide_df = nucleotide_df.with_columns(
+        pl.when(~pl.col("representative").is_in(UNMODIFIED_BASES))
         .then(pl.col("modification_rate"))
         .otherwise(pl.lit(1.0))
         .alias("modification_rate")
@@ -140,20 +138,21 @@ def main():
 
     # Read additional parameter from meta file
     intensity_cutoff = meta.setdefault("intensity_cutoff", DEFAULT_INTENSITY_CUTOFF)
-    start_tag = meta.setdefault("label_mass_5T", 555.1294)
-    end_tag = meta.setdefault("label_mass_3T", 455.1491)
+    start_tag = meta.setdefault("5_prime_tag", 555.1294)
+    end_tag = meta.setdefault("3_prime_tag", 455.1491)
 
-    # Build breakage dict
-    breakage_dict = build_breakage_dict(mass_5_prime=start_tag, mass_3_prime=end_tag)
+    # Build fragmentation dict
+    fragmentation_dict = build_fragmentation_dict(start_tag=start_tag, end_tag=end_tag)
 
-    # Standardize sequence mass (remove START_END breakage to gain SU mass)
-    seq_mass_obs = meta["sequence_mass"]
+    # Standardize intact sequence mass by removing START_END fragmentation to
+    # gain SU mass
+    seq_mass_obs = meta["intact_mass"]
     seq_mass_su = (
         seq_mass_obs
         - [
-            mass * TOLERANCE
-            for mass in breakage_dict
-            if "START_END" in breakage_dict[mass]
+            mass * PRECISION
+            for mass in fragmentation_dict
+            if "START_END" in fragmentation_dict[mass]
         ][0]
     )
 
@@ -161,11 +160,11 @@ def main():
     seq_info = SequenceInformation(
         max_len=int(
             seq_mass_su
-            / TOLERANCE
+            / PRECISION
             / min(
                 pl.Series(
-                    explanation_masses.filter(pl.col("modification_rate") > 0.0).select(
-                        "tolerated_integer_masses"
+                    nucleotide_df.filter(pl.col("modification_rate") > 0.0).select(
+                        "integer_mass"
                     )
                 ).to_list()
             )
@@ -175,32 +174,32 @@ def main():
         modification_rate=settings.modification_rate,
     )
 
-    # Initialize DynamicProgrammingTable class
-    dp_table = DynamicProgrammingTable(
-        nucleotide_df=explanation_masses,
+    # Initialize CompositionInferrer class
+    inferrer = CompositionInferrer(
+        nucleotide_df=nucleotide_df,
         compression_rate=int(COMPRESSION_RATE),
-        tolerance=MATCHING_THRESHOLD,
-        precision=TOLERANCE,
+        tolerance=TOLERANCE,
+        precision=PRECISION,
         seq=seq_info,
     )
 
     print("Alphabet after singleton reduction:")
-    dp_table.print_masses()
+    inferrer.print_alphabet()
     print()
 
     # Classify preprocessed fragments
     fragments = classify_fragments(
         fragment_masses=fragments,
-        dp_table=dp_table,
-        breakage_dict=breakage_dict,
+        inferrer=inferrer,
+        fragmentation_dict=fragmentation_dict,
         output_file_path=fragment_dir / f"{file_prefix}.standard_unit_fragments.tsv",
         intensity_cutoff=intensity_cutoff,
     )
 
     # Predict sequence
     prediction = Predictor(
-        dp_table=dp_table,
-        explanation_masses=explanation_masses,
+        inferrer=inferrer,
+        nucleotide_df=nucleotide_df,
     ).predict(
         fragments=fragments,
         solver_params=solver_params,
@@ -237,8 +236,8 @@ def format_sequence_to_full_version(seq: List[str]) -> str:
     output = ""
     for nuc in seq:
         alt_nucs = (
-            EXPLANATION_MASSES.filter(pl.col("nucleoside") == nuc)
-            .select("nucleoside_list")
+            NUCLEOTIDE_DF.filter(pl.col("representative") == nuc)
+            .select("id_list")
             .item()
             .to_list()
         )

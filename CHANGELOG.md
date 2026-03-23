@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/spectrseq/spectrseqtools/compare/v0.1.2...v0.1.3) (2026-02-15)
+
+
+### Bug Fixes
+
+* catch exceptions during lp based filtering ([#52](https://github.com/spectrseq/spectrseqtools/issues/52)) ([254e25a](https://github.com/spectrseq/spectrseqtools/commit/254e25a56e24a86a3b0d7e3275413a2a844d4f1b))
+
 ## [0.1.2](https://github.com/spectrseq/spectrseqtools/compare/v0.1.1...v0.1.2) (2026-01-30)
 
 

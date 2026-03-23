@@ -1,5 +1,6 @@
 import numpy as np
 import polars as pl
+from pathlib import Path
 from typing import Tuple
 
 from spectrseqtools.deconvolution import deconvolute
@@ -7,7 +8,7 @@ from spectrseqtools.singleton_identification import identify_singletons
 
 
 def preprocess(
-    file_path: str,
+    file_path: Path,
     deconvolution_params: dict,
     meta_params: dict,
     cutoff_percentile: int = 50,
@@ -16,12 +17,12 @@ def preprocess(
     Deconvolute MS2 scans and identify singletons.
 
     Main pipeline for deconvoluting MS2 scans and generating the metafile
-    required for running LionelMSSQ as well as a list of candidate nucleotides
-    from singletons (if desired).
+    required for a SpectrSeqTools prediction as well as a list of candidate
+    nucleotides from singletons (if desired).
 
     Parameters
     ----------
-    file_path : str
+    file_path : Path
         Path of RAW file from ThermoFisher.
     deconvolution_params : dict
         Dictionary with parameters for deconvolution.
@@ -51,9 +52,7 @@ def preprocess(
 
     # Update meta parameters (if needed)
     meta_params.setdefault("identity", file_path.stem)
-    meta_params.setdefault(
-        "sequence_mass", select_sequence_mass(fragments, meta_params)
-    )
+    meta_params.setdefault("intact_mass", select_intact_mass(fragments, meta_params))
     meta_params.setdefault("true_sequence", None)
 
     # Set intensity cutoff
@@ -66,12 +65,12 @@ def preprocess(
     return fragments, singletons, meta_params
 
 
-def select_sequence_mass(
+def select_intact_mass(
     fragments: pl.DataFrame,
     meta_params: dict,
 ) -> float:
     """
-    Select sequence mass from deconvoluted fragments.
+    Select intact sequence mass from deconvoluted fragments.
 
     Determine the aggregated neutral_mass with (1) a deisotoped precursor and
     (2) the largest aggregated intensity as estimated intact sequence mass.
@@ -100,7 +99,7 @@ def select_sequence_mass(
             (pl.col("is_precursor_deisotoped"))
             & (
                 pl.col("neutral_mass")
-                > (meta_params["label_mass_5T"] + meta_params["label_mass_3T"])
+                > (meta_params["5_prime_tag"] + meta_params["3_prime_tag"])
             )
         )
         .filter((pl.col("intensity") == pl.col("intensity").max()))["neutral_mass"]
