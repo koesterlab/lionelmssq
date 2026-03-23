@@ -5,7 +5,8 @@ import yaml
 import pytest
 from clr_loader import get_mono
 
-from spectrseqtools.cli import format_sequence_to_full_version, select_solver
+from spectrseqtools.cli import SolverType, format_sequence_to_full_version, \
+    select_solver
 from spectrseqtools.common import parse_nucleosides
 from spectrseqtools.fragment_classification import classify_fragments
 from spectrseqtools.masses import (
@@ -48,8 +49,8 @@ def test_testcase(testcase):
     # Set parameters for LP solver
     solver_params = {
         "fixed": {
-            "solver": select_solver(os.environ.get("SOLVER", "cbc")),
-            # "solver": select_solver(os.environ.get("SOLVER", "gurobi")),
+            "solver": select_solver(os.environ.get("SOLVER", SolverType.CBC)),
+            # "solver": select_solver(os.environ.get("SOLVER", SolverType.GUROBI)),
             "threads": 1,
             "msg": False,
         },

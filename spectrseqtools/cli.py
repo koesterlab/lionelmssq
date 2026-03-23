@@ -1,9 +1,11 @@
 import os
 import polars as pl
 import yaml
+import ddargparse
+from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
-from tap import Tap
-from typing import List, Literal
+from typing import List
 
 from spectrseqtools.fragment_classification import classify_fragments
 from spectrseqtools.masses import (
@@ -21,61 +23,96 @@ from spectrseqtools.preprocessing import preprocess
 from spectrseqtools.traceback_matrix import CompositionInferrer, SequenceInformation
 
 
-class Settings(Tap):
-    fragments: Path  # Path to TSV table or RAW data of observed fragments to use for prediction
-    meta: Path  # Path to YAML with meta information to use for prediction
-    fragment_predictions: (
-        Path  # Path to TSV table that shall contain the per fragment predictions
+class SolverType(Enum):
+    CBC = "cbc"
+    GUROBI = "gurobi"
+
+
+@dataclass
+class Options(ddargparse.OptionsBase):
+    fragments: Path = field(
+        metadata={
+            "help": "Path to TSV table or RAW data of observed fragments to use for prediction"
+        },
     )
-    sequence_prediction: (
-        Path  # Path to FASTA file that shall contain the predicted sequence
+    meta: Path = field(
+        metadata={"help": "Path to YAML with meta information to use for prediction"}
     )
-    output_dir: Path = None  # Output directory (default: input directory)
-    sequence_name: str
-    modification_rate: float = 0.5  # Maximum percentage of modification in sequence
-    solver: Literal["gurobi", "cbc"] = (
-        "gurobi"  # Solver to use for the optimization problem
+    fragment_predictions: Path = field(
+        metadata={
+            "help": "Path to TSV table that shall contain the per fragment predictions"
+        }
     )
-    lp_timeout_short: int = 5  # Time-out for shorter solving of LP instances
-    lp_timeout_long: int = 60  # Time-out for longer solving of LP instances
-    cutoff_percentile: int = 75  # Intensity percentile used as cutoff
-    threads: int = 1  # Number of threads to use for the optimization problem
+    sequence_prediction: Path = field(
+        metadata={
+            "help": "Path to FASTA file that shall contain the predicted sequence"
+        }
+    )
+    sequence_name: str = field(metadata={"help": ""})
+    output_dir: Path | None = field(
+        metadata={
+            "help": "Output directory (default: input directory)",
+        }
+    )
+    modification_rate: float = field(
+        default=0.5,
+        metadata={
+            "help": "Maximum percentage of modification in sequence",
+        },
+    )
+    solver: SolverType = field(
+        default=SolverType.GUROBI,
+        metadata={"help": "Solver to use for optimization problem"},
+    )
+    lp_timeout_short: int = field(
+        default=5, metadata={"help": "Time-out for shorter solving of LP instances"}
+    )
+    lp_timeout_long: int = field(
+        default=60, metadata={"help": "Time-out for longer solving of LP instances"}
+    )
+    cutoff_percentile: int = field(
+        default=75, metadata={"help": "Intensity percentile used as cutoff"}
+    )
+    threads: int = field(
+        default=1,
+        metadata={"help": "Number of threads to use for the optimization problem"},
+    )
 
 
 def main():
-    settings = Settings(underscores_to_dashes=True).parse_args()
+    options = Options.parse_args()
 
     # Set parameters for LP solver
     solver_params = {
         "fixed": {
-            "solver": select_solver(settings.solver),
-            "threads": settings.threads,
+            "solver": select_solver(options.solver),
+            "threads": options.threads,
             "msg": False,
         },
-        "timeLimit(short)": settings.lp_timeout_short,
-        "timeLimit(long)": settings.lp_timeout_long,
+        "timeLimit(short)": options.lp_timeout_short,
+        "timeLimit(long)": options.lp_timeout_long,
     }
 
-    settings.fragments = settings.fragments.resolve()
+    options.fragments = options.fragments.resolve()
     fragment_dir = (
-        settings.fragments.parent
-        if settings.output_dir is None
-        else settings.output_dir
+        options.fragments.parent
+        if options.output_dir is None
+        else options.output_dir
     )
-    file_prefix = settings.fragments.stem
-    with open(settings.meta, "r") as f:
+    file_prefix = options.fragments.stem
+    with open(options.meta, "r") as f:
         meta = yaml.safe_load(f)
 
     # Preprocess data if necessary
-    match settings.fragments.suffix:
+    match options.fragments.suffix:
         case ".raw":
             print("RAW file found. Preprocessing raw data...")
             # Preprocess raw data
             fragments, singletons, meta = preprocess(
-                file_path=settings.fragments,
+                file_path=options.fragments,
                 deconvolution_params={},
                 meta_params=meta,
-                cutoff_percentile=settings.cutoff_percentile,
+                cutoff_percentile=options.cutoff_percentile,
             )
             # Save preprocessed fragments
             fragments.write_csv(fragment_dir / f"{file_prefix}.tsv", separator="\t")
@@ -93,7 +130,7 @@ def main():
         case ".tsv":
             print("TSV file found. Proceeding without preprocessing.")
             # Read already preprocessed fragments
-            fragments = pl.read_csv(settings.fragments, separator="\t")
+            fragments = pl.read_csv(options.fragments, separator="\t")
 
             # Read singletons if given
             singletons = None
@@ -171,7 +208,7 @@ def main():
         ),
         su_mass=seq_mass_su,
         obs_mass=seq_mass_obs,
-        modification_rate=settings.modification_rate,
+        modification_rate=options.modification_rate,
     )
 
     # Initialize CompositionInferrer class
@@ -208,13 +245,13 @@ def main():
     print("Predicted sequence =\t", prediction.sequence)
 
     # Save fragment predictions
-    prediction.fragments.write_csv(settings.fragment_predictions, separator="\t")
+    prediction.fragments.write_csv(options.fragment_predictions, separator="\t")
 
     # Save predicted sequence
-    with open(settings.sequence_prediction, "w") as f:
-        print(f">{settings.sequence_name}", file=f)
+    with open(options.sequence_prediction, "w") as f:
+        print(f">{options.sequence_name}", file=f)
         print("".join(prediction.sequence), file=f)
-        print(f">{settings.sequence_name}_full", file=f)
+        print(f">{options.sequence_name}_full", file=f)
         print(format_sequence_to_full_version(seq=prediction.sequence), file=f)
 
 
@@ -248,11 +285,11 @@ def format_sequence_to_full_version(seq: List[str]) -> str:
     return output
 
 
-def select_solver(solver: str):
+def select_solver(solver: SolverType):
     match solver:
-        case "gurobi":
+        case SolverType.GUROBI:
             return "GUROBI_CMD"
-        case "cbc":
+        case SolverType.CBC:
             return "PULP_CBC_CMD"
         case _:
             raise NotImplementedError(f"Support for '{solver}' is currently not given.")
