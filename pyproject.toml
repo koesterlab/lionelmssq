@@ -46,6 +46,10 @@ platforms = ["linux-64", "linux-aarch64", "osx-64"]
 
 [tool.pixi.dependencies]
 mono = ">=6.12.0.199,<7"
+rust = ">=1.85,<2.0"
+
+[tool.pixi.pypi-dependencies]
+spectrseqtools = { path = ".", editable = true }
 
 [tool.pixi.feature.dev.dependencies]
 ruff = "*"
@@ -67,5 +71,9 @@ check-build = { cmd = "python -m twine check dist/*", depends-on = [
 dev = {features = ["dev"]}
 
 [build-system]
-build-backend = "hatchling.build"
-requires = ["hatchling"]
+requires = ["maturin>=1.11,<2.0"]
+build-backend = "maturin"
+
+[tool.maturin]
+module-name = "spectrseqtools.rust_core"
+python-source = "src/python"
