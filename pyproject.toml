@@ -61,6 +61,8 @@ python-build = "*"
 [tool.pixi.feature.dev.tasks]
 format = "ruff format"
 lint = "ruff check"
+format-rust = "cargo fmt"
+lint-rust = "cargo clippy"
 test = "pytest"
 build = { cmd = "python -m build", description = "Build the package into the dist/ directory" }
 check-build = { cmd = "python -m twine check dist/*", depends-on = [
