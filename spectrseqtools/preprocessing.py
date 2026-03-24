@@ -1,7 +1,6 @@
 import numpy as np
 import polars as pl
 import yaml
-from pathlib import Path
 
 from spectrseqtools.common import set_output_path
 from spectrseqtools.deconvolution import deconvolute
@@ -46,8 +45,9 @@ def preprocess(options) -> None:
         params=deconvolution_params,
     )
 
-    output_dir, output_prefix = set_output_path(input_path=options.input,
-                                         output_dir=options.output_dir)
+    output_dir, output_prefix = set_output_path(
+        input_path=options.input, output_dir=options.output_dir
+    )
 
     # Update meta parameters (if needed)
     meta_params = {}
@@ -60,8 +60,7 @@ def preprocess(options) -> None:
     # Set intensity cutoff
     meta_params["intensity_cutoff"] = (
         determine_intensity_percentiles(fragments)
-        .filter(pl.col("statistic") == f"{options.cutoff_percentile}%")[
-            "value"]
+        .filter(pl.col("statistic") == f"{options.cutoff_percentile}%")["value"]
         .to_list()[0]
     )
 
@@ -76,9 +75,7 @@ def preprocess(options) -> None:
     singletons = identify_singletons(file_path=str(options.input))
 
     # Save singletons detected from raw data
-    singletons.write_csv(
-        output_dir / f"{output_prefix}.singletons.tsv", separator="\t"
-    )
+    singletons.write_csv(output_dir / f"{output_prefix}.singletons.tsv", separator="\t")
 
     print("Preprocessing completed!\n")
 

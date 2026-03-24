@@ -1,13 +1,17 @@
 import importlib.resources
 import os
-import polars as pl
 import yaml
 import pytest
 from clr_loader import get_mono
 from pathlib import Path
 
-from spectrseqtools.cli import PredictionOptions, PreprocessingOptions, \
-    SolverType, format_sequence_to_full_version, predict
+from spectrseqtools.cli import (
+    PredictionOptions,
+    PreprocessingOptions,
+    SolverType,
+    format_sequence_to_full_version,
+    predict,
+)
 from spectrseqtools.common import parse_nucleosides
 from spectrseqtools.plotting import plot_prediction
 from spectrseqtools.preprocessing import preprocess
@@ -37,33 +41,40 @@ def test_testcase(testcase):
     # Preprocess raw input data if given
     if os.path.isfile(base_path / "fragments.raw"):
         # Preprocess raw data
-        preprocess(PreprocessingOptions(
-            input=base_path / "fragments.raw",
-            meta=base_path / "fragments.meta.yaml",
-            output_dir=None,
-            cutoff_percentile=75))
+        preprocess(
+            PreprocessingOptions(
+                input=base_path / "fragments.raw",
+                meta=base_path / "fragments.meta.yaml",
+                output_dir=None,
+                cutoff_percentile=75,
+            )
+        )
     else:
         # Copy metadata otherwise
         with open(base_path / "fragments.preprocessed.meta.yaml", "w") as f:
             yaml.safe_dump(meta, f)
 
-    prediction = predict(PredictionOptions(
-        fragments = base_path / "fragments.tsv",
-        meta = base_path / "fragments.preprocessed.meta.yaml",
-        singletons = base_path / "fragments.singletons.tsv",
-        sequence_prediction = base_path / "fragments.prediction.fasta",
-        fragment_predictions = base_path / "fragments.prediction.tsv",
-        sequence_name = f"{testcase}",
-        output_dir=None,
-        solver=SolverType.CBC,
-        # solver=SolverType.GUROBI,
-    ))
+    prediction = predict(
+        PredictionOptions(
+            fragments=base_path / "fragments.tsv",
+            meta=base_path / "fragments.preprocessed.meta.yaml",
+            singletons=base_path / "fragments.singletons.tsv",
+            sequence_prediction=base_path / "fragments.prediction.fasta",
+            fragment_predictions=base_path / "fragments.prediction.tsv",
+            sequence_name=f"{testcase}",
+            output_dir=None,
+            solver=SolverType.CBC,
+            # solver=SolverType.GUROBI,
+        )
+    )
 
     # Read true sequence from meta file
     true_seq = parse_nucleosides(meta["true_sequence"])
 
     print("True sequence =\t\t", true_seq)
-    print("Full sequence =\t\t", format_sequence_to_full_version(seq=prediction.sequence))
+    print(
+        "Full sequence =\t\t", format_sequence_to_full_version(seq=prediction.sequence)
+    )
 
     plots = plot_prediction(prediction=prediction, true_seq=true_seq)
 

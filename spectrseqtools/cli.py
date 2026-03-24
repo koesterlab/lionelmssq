@@ -32,14 +32,11 @@ class SolverType(Enum):
 @dataclass
 class PreprocessingOptions(ddargparse.OptionsBase):
     """Preprocessing of raw data into fragments"""
+
     input: Path = field(
-        metadata={
-            "help": "Path to input file in RAW format"
-        },
+        metadata={"help": "Path to input file in RAW format"},
     )
-    meta: Path = field(
-        metadata={"help": "Path to YAML with meta information"}
-    )
+    meta: Path = field(metadata={"help": "Path to YAML with meta information"})
     output_dir: Path | None = field(
         metadata={
             "help": "Output directory (default: input directory)",
@@ -53,12 +50,11 @@ class PreprocessingOptions(ddargparse.OptionsBase):
 @dataclass
 class PredictionOptions(ddargparse.OptionsBase):
     """Prediction of sequence based on preprocessed fragments"""
+
     fragments: Path = field(
         metadata={"help": "Path to TSV table of observed fragments"},
     )
-    meta: Path = field(
-        metadata={"help": "Path to YAML with meta information"}
-    )
+    meta: Path = field(metadata={"help": "Path to YAML with meta information"})
     singletons: Path = field(
         metadata={"help": "Path to TSV with singleton information"}
     )
@@ -99,6 +95,7 @@ class PredictionOptions(ddargparse.OptionsBase):
         metadata={"help": "Number of threads to use for the optimization problem"},
     )
 
+
 @dataclass
 class Options(ddargparse.OptionsBase):
     """
@@ -111,6 +108,7 @@ class Options(ddargparse.OptionsBase):
     2. Predict sequence individually for each file output by preprocessing.
 
     """
+
     preprocessing: PreprocessingOptions | None
     prediction: PredictionOptions | None
 
@@ -140,7 +138,8 @@ def predict(options):
     }
 
     fragment_dir, file_prefix = set_output_path(
-        input_path=options.fragments, output_dir=options.output_dir)
+        input_path=options.fragments, output_dir=options.output_dir
+    )
 
     with open(options.meta, "r") as f:
         meta = yaml.safe_load(f)

@@ -16,11 +16,7 @@ _NUCLEOSIDE_RE = re.compile(r"\d*[ACGU]")
 
 def set_output_path(input_path: Path, output_dir: str) -> Tuple[str, str]:
     path = input_path.resolve()
-    path_dir = (
-        path.parent
-        if output_dir is None
-        else output_dir
-    )
+    path_dir = path.parent if output_dir is None else output_dir
     path_prefix = path.stem
 
     return path_dir, path_prefix
