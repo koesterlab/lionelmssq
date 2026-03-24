@@ -121,12 +121,13 @@ def main():
     # Preprocess raw data
     if options.preprocessing is not None:
         preprocess(options=options.preprocessing)
-        return
 
     # Predict sequence
     if options.prediction is not None:
-        options = options.prediction
+        _ = predict(options=options.prediction)
 
+
+def predict(options):
     # Set parameters for LP solver
     solver_params = {
         "fixed": {
@@ -140,6 +141,7 @@ def main():
 
     fragment_dir, file_prefix = set_output_path(
         input_path=options.fragments, output_dir=options.output_dir)
+
     with open(options.meta, "r") as f:
         meta = yaml.safe_load(f)
 
@@ -261,6 +263,8 @@ def main():
         print("".join(prediction.sequence), file=f)
         print(f">{options.sequence_name}_full", file=f)
         print(format_sequence_to_full_version(seq=prediction.sequence), file=f)
+
+    return prediction
 
 
 def format_sequence_to_full_version(seq: List[str]) -> str:

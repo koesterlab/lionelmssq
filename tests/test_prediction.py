@@ -4,26 +4,13 @@ import polars as pl
 import yaml
 import pytest
 from clr_loader import get_mono
+from pathlib import Path
 
-from spectrseqtools.cli import PreprocessingOptions, SolverType, \
-    format_sequence_to_full_version, \
-    select_solver
+from spectrseqtools.cli import PredictionOptions, PreprocessingOptions, \
+    SolverType, format_sequence_to_full_version, predict
 from spectrseqtools.common import parse_nucleosides
-from spectrseqtools.fragment_classification import classify_fragments
-from spectrseqtools.masses import (
-    COMPRESSION_RATE,
-    DEFAULT_INTENSITY_CUTOFF,
-    NUC_REPS,
-    NUCLEOTIDE_DF,
-    PRECISION,
-    TOLERANCE,
-    UNMODIFIED_BASES,
-    build_fragmentation_dict,
-)
 from spectrseqtools.plotting import plot_prediction
-from spectrseqtools.prediction import Predictor
 from spectrseqtools.preprocessing import preprocess
-from spectrseqtools.traceback_matrix import CompositionInferrer, SequenceInformation
 
 rt = get_mono()
 
@@ -40,24 +27,12 @@ TESTS = ["test_01", "test_02", "test_03"]
 )
 def test_testcase(testcase):
     # Read additional parameter from meta file
-    base_path = _TESTCASES / testcase
+    base_path = Path(_TESTCASES / f"{testcase}")
     with open(base_path / "fragments.meta.yaml", "r") as f:
         meta = yaml.safe_load(f)
 
     if meta.get("skip"):
         pytest.skip("Testcase is marked as skipped in meta.yaml")
-
-    # Set parameters for LP solver
-    solver_params = {
-        "fixed": {
-            "solver": select_solver(os.environ.get("SOLVER", SolverType.CBC)),
-            # "solver": select_solver(os.environ.get("SOLVER", SolverType.GUROBI)),
-            "threads": 1,
-            "msg": False,
-        },
-        "timeLimit(short)": 5,
-        "timeLimit(long)": 60,
-    }
 
     # Preprocess raw input data if given
     if os.path.isfile(base_path / "fragments.raw"):
@@ -67,140 +42,28 @@ def test_testcase(testcase):
             meta=base_path / "fragments.meta.yaml",
             output_dir=None,
             cutoff_percentile=75))
+    else:
+        # Copy metadata otherwise
+        with open(base_path / "fragments.preprocessed.meta.yaml", "w") as f:
+            yaml.safe_dump(meta, f)
 
-        with open(base_path / "fragments.preprocessed.meta.yaml", "r") as f:
-            meta = yaml.safe_load(f)
-
-    # Read preprocessed fragments
-    fragments = pl.read_csv(base_path / "fragments.tsv", separator="\t")
-
-    # Read singletons if given
-    singletons = None
-    if os.path.isfile(base_path / "fragments.singletons.tsv"):
-        singletons = pl.read_csv(
-            base_path / "fragments.singletons.tsv", separator="\t"
-        )
-
-    print("Singletons identified during preprocessing:", singletons)
-    print()
-
-    intensity_cutoff = (
-        meta["intensity_cutoff"]
-        if ("intensity_cutoff" in meta)
-        else DEFAULT_INTENSITY_CUTOFF
-    )
-    nucleotide_df = NUCLEOTIDE_DF
-    tolerance = TOLERANCE
-
-    # Filter by singletons
-    if singletons is not None:
-        # Map singletons to their mass representative
-        singletons = singletons.with_columns(
-            pl.col("id").replace_strict(NUC_REPS).alias("id")
-        )
-
-        # Select only bases found in singletons
-        nucleotide_df = nucleotide_df.with_columns(
-            pl.when(
-                pl.col("representative").is_in(singletons.get_column("id").to_list())
-            )
-            .then(pl.col("modification_rate"))
-            .otherwise(pl.lit(0.0))
-            .alias("modification_rate")
-        )
-
-    # Ensure modification rates of unmodified bases are set to 1
-    nucleotide_df = nucleotide_df.with_columns(
-        pl.when(~pl.col("representative").is_in(UNMODIFIED_BASES))
-        .then(pl.col("modification_rate"))
-        .otherwise(pl.lit(1.0))
-        .alias("modification_rate")
-    )
-
-    # TODO: Discuss why it doesn't work with the estimated error!
-    # tolerance, _, _ = estimate_MS_error_tolerance(
-    #     fragments, unique_masses=unique_masses, simulation=simulation
-    # )
-    # print(
-    #     "Tolerance (rel error) estimated from singleton masses = ",
-    #     tolerance,
-    # )
-
-    # Build fragmentation dict
-    fragmentation_dict = build_fragmentation_dict(
-        start_tag=meta["5_prime_tag"], end_tag=meta["3_prime_tag"]
-    )
-
-    # Standardize intact sequence mass by removing START_END fragmentation to
-    # gain SU mass
-    seq_mass_obs = meta["intact_mass"]
-    seq_mass_su = (
-        seq_mass_obs
-        - [
-            mass * PRECISION
-            for mass in fragmentation_dict
-            if "START_END" in fragmentation_dict[mass]
-        ][0]
-    )
-
-    # Initialize SequenceInformation class
-    seq_info = SequenceInformation(
-        max_len=int(
-            seq_mass_su
-            / PRECISION
-            / min(
-                pl.Series(
-                    nucleotide_df.filter(pl.col("modification_rate") > 0.0).select(
-                        "integer_mass"
-                    )
-                ).to_list()
-            )
-        ),
-        su_mass=seq_mass_su,
-        obs_mass=seq_mass_obs,
-        modification_rate=0.5,
-    )
-
-    # Initialize CompositionInferrer class
-    inferrer = CompositionInferrer(
-        nucleotide_df=nucleotide_df,
-        compression_rate=COMPRESSION_RATE,
-        tolerance=tolerance,
-        precision=PRECISION,
-        seq=seq_info,
-    )
-
-    print("Alphabet after singleton reduction:")
-    inferrer.print_alphabet()
-    print()
-
-    # Classify preprocessed fragments
-    fragments = classify_fragments(
-        fragment_masses=fragments,
-        inferrer=inferrer,
-        fragmentation_dict=fragmentation_dict,
-        output_file_path=base_path / "fragments.standard_unit_fragments.tsv",
-        intensity_cutoff=intensity_cutoff,
-    )
-
-    # Predict sequence
-    prediction = Predictor(
-        inferrer=inferrer,
-        nucleotide_df=nucleotide_df,
-    ).predict(
-        fragments=fragments,
-        solver_params=solver_params,
-    )
+    prediction = predict(PredictionOptions(
+        fragments = base_path / "fragments.tsv",
+        meta = base_path / "fragments.preprocessed.meta.yaml",
+        singletons = base_path / "fragments.singletons.tsv",
+        sequence_prediction = base_path / "fragments.prediction.fasta",
+        fragment_predictions = base_path / "fragments.prediction.tsv",
+        sequence_name = f"{testcase}",
+        output_dir=None,
+        solver=SolverType.CBC,
+        # solver=SolverType.GUROBI,
+    ))
 
     # Read true sequence from meta file
     true_seq = parse_nucleosides(meta["true_sequence"])
 
-    print("Predicted sequence =\t", prediction.sequence)
     print("True sequence =\t\t", true_seq)
-
-    print(
-        "Full sequence =\t\t", format_sequence_to_full_version(seq=prediction.sequence)
-    )
+    print("Full sequence =\t\t", format_sequence_to_full_version(seq=prediction.sequence))
 
     plots = plot_prediction(prediction=prediction, true_seq=true_seq)
 
@@ -225,4 +88,4 @@ def test_testcase(testcase):
     #         assert abs(
     #             prediction.fragments.item(idx, "standard_unit_mass")
     #             - prediction.fragments.item(idx, "predicted_mass")
-    #         ) <= tolerance * prediction.fragments.item(idx, "observed_mass")
+    #         ) <= TOLERANCE * prediction.fragments.item(idx, "observed_mass")

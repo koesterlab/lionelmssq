@@ -11,6 +11,8 @@ tests/testcases/*/fragments.plot.end.html
 tests/testcases/*/fragments.plot.internal.html
 tests/testcases/*/fragments.plot.start.html
 tests/testcases/*/fragments.preprocessed.meta.yaml
+tests/testcases/*/fragments.prediction.fasta
+tests/testcases/*/fragments.prediction.tsv
 tests/testcases/*/fragments.raw
 tests/testcases/*/fragments.singletons.tsv
 tests/testcases/*/fragments.standard_unit_fragments.tsv
