@@ -7,6 +7,7 @@ from enum import Enum
 from pathlib import Path
 from typing import List
 
+from spectrseqtools.common import set_output_path
 from spectrseqtools.fragment_classification import classify_fragments
 from spectrseqtools.masses import (
     COMPRESSION_RATE,
@@ -29,14 +30,37 @@ class SolverType(Enum):
 
 
 @dataclass
-class Options(ddargparse.OptionsBase):
-    fragments: Path = field(
+class PreprocessingOptions(ddargparse.OptionsBase):
+    """Preprocessing of raw data into fragments"""
+    input: Path = field(
         metadata={
-            "help": "Path to TSV table or RAW data of observed fragments to use for prediction"
+            "help": "Path to input file in RAW format"
         },
     )
     meta: Path = field(
-        metadata={"help": "Path to YAML with meta information to use for prediction"}
+        metadata={"help": "Path to YAML with meta information"}
+    )
+    output_dir: Path | None = field(
+        metadata={
+            "help": "Output directory (default: input directory)",
+        }
+    )
+    cutoff_percentile: int = field(
+        default=75, metadata={"help": "Intensity percentile used as cutoff"}
+    )
+
+
+@dataclass
+class PredictionOptions(ddargparse.OptionsBase):
+    """Prediction of sequence based on preprocessed fragments"""
+    fragments: Path = field(
+        metadata={"help": "Path to TSV table of observed fragments"},
+    )
+    meta: Path = field(
+        metadata={"help": "Path to YAML with meta information"}
+    )
+    singletons: Path = field(
+        metadata={"help": "Path to TSV with singleton information"}
     )
     fragment_predictions: Path = field(
         metadata={
@@ -48,7 +72,7 @@ class Options(ddargparse.OptionsBase):
             "help": "Path to FASTA file that shall contain the predicted sequence"
         }
     )
-    sequence_name: str = field(metadata={"help": ""})
+    sequence_name: str = field(metadata={"help": "Header in FASTA output file"})
     output_dir: Path | None = field(
         metadata={
             "help": "Output directory (default: input directory)",
@@ -70,17 +94,38 @@ class Options(ddargparse.OptionsBase):
     lp_timeout_long: int = field(
         default=60, metadata={"help": "Time-out for longer solving of LP instances"}
     )
-    cutoff_percentile: int = field(
-        default=75, metadata={"help": "Intensity percentile used as cutoff"}
-    )
     threads: int = field(
         default=1,
         metadata={"help": "Number of threads to use for the optimization problem"},
     )
 
+@dataclass
+class Options(ddargparse.OptionsBase):
+    """
+    De novo prediction of RNA sequences
+
+    Usage:
+
+    1. Preprocess raw data to gain fragments for prediction (grouped into
+    files based on sequence).
+    2. Predict sequence individually for each file output by preprocessing.
+
+    """
+    preprocessing: PreprocessingOptions | None
+    prediction: PredictionOptions | None
+
 
 def main():
     options = Options.parse_args()
+
+    # Preprocess raw data
+    if options.preprocessing is not None:
+        preprocess(options=options.preprocessing)
+        return
+
+    # Predict sequence
+    if options.prediction is not None:
+        options = options.prediction
 
     # Set parameters for LP solver
     solver_params = {
@@ -93,55 +138,18 @@ def main():
         "timeLimit(long)": options.lp_timeout_long,
     }
 
-    options.fragments = options.fragments.resolve()
-    fragment_dir = (
-        options.fragments.parent
-        if options.output_dir is None
-        else options.output_dir
-    )
-    file_prefix = options.fragments.stem
+    fragment_dir, file_prefix = set_output_path(
+        input_path=options.fragments, output_dir=options.output_dir)
     with open(options.meta, "r") as f:
         meta = yaml.safe_load(f)
 
-    # Preprocess data if necessary
-    match options.fragments.suffix:
-        case ".raw":
-            print("RAW file found. Preprocessing raw data...")
-            # Preprocess raw data
-            fragments, singletons, meta = preprocess(
-                file_path=options.fragments,
-                deconvolution_params={},
-                meta_params=meta,
-                cutoff_percentile=options.cutoff_percentile,
-            )
-            # Save preprocessed fragments
-            fragments.write_csv(fragment_dir / f"{file_prefix}.tsv", separator="\t")
+    # Read preprocessed fragments
+    fragments = pl.read_csv(options.fragments, separator="\t")
 
-            # Save singletons detected from raw data
-            singletons.write_csv(
-                fragment_dir / f"{file_prefix}.singletons.tsv", separator="\t"
-            )
-
-            # Save updated meta data
-            with open(fragment_dir / f"{file_prefix}.preprocessed.meta.yaml", "w") as f:
-                yaml.dump(meta, f)
-
-            print("Preprocessing completed!\n")
-        case ".tsv":
-            print("TSV file found. Proceeding without preprocessing.")
-            # Read already preprocessed fragments
-            fragments = pl.read_csv(options.fragments, separator="\t")
-
-            # Read singletons if given
-            singletons = None
-            if os.path.isfile(fragment_dir / f"{file_prefix}.singletons.tsv"):
-                singletons = pl.read_csv(
-                    fragment_dir / f"{file_prefix}.singletons.tsv", separator="\t"
-                )
-        case _:
-            raise NotImplementedError(
-                "Support is currently only given for TSV or RAW files."
-            )
+    # Read singletons if given
+    singletons = None
+    if os.path.isfile(options.singletons):
+        singletons = pl.read_csv(options.singletons, separator="\t")
 
     print("Singletons identified during preprocessing:", singletons)
     print()

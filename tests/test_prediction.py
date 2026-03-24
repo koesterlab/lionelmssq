@@ -5,7 +5,8 @@ import yaml
 import pytest
 from clr_loader import get_mono
 
-from spectrseqtools.cli import SolverType, format_sequence_to_full_version, \
+from spectrseqtools.cli import PreprocessingOptions, SolverType, \
+    format_sequence_to_full_version, \
     select_solver
 from spectrseqtools.common import parse_nucleosides
 from spectrseqtools.fragment_classification import classify_fragments
@@ -58,35 +59,27 @@ def test_testcase(testcase):
         "timeLimit(long)": 60,
     }
 
-    # Differentiate between raw and already preprocessed input data
+    # Preprocess raw input data if given
     if os.path.isfile(base_path / "fragments.raw"):
         # Preprocess raw data
-        fragments, singletons, meta = preprocess(
-            file_path=base_path / "fragments.raw",
-            deconvolution_params={},
-            meta_params=meta,
+        preprocess(PreprocessingOptions(
+            input=base_path / "fragments.raw",
+            meta=base_path / "fragments.meta.yaml",
+            output_dir=None,
+            cutoff_percentile=75))
+
+        with open(base_path / "fragments.preprocessed.meta.yaml", "r") as f:
+            meta = yaml.safe_load(f)
+
+    # Read preprocessed fragments
+    fragments = pl.read_csv(base_path / "fragments.tsv", separator="\t")
+
+    # Read singletons if given
+    singletons = None
+    if os.path.isfile(base_path / "fragments.singletons.tsv"):
+        singletons = pl.read_csv(
+            base_path / "fragments.singletons.tsv", separator="\t"
         )
-
-        # Save preprocessed fragments
-        fragments.write_csv(base_path / "fragments.tsv", separator="\t")
-
-        # Save singletons detected from raw data
-        singletons.write_csv(base_path / "fragments.singletons.tsv", separator="\t")
-    else:
-        # Read already preprocessed fragments
-        fragments = pl.read_csv(
-            base_path / "fragments.tsv", separator="\t"
-        ).with_columns(
-            (pl.col("observed_mass").alias("observed_mass")),
-            (pl.col("true_mass_with_backbone").alias("true_mass")),
-        )
-
-        # Read singletons if given
-        singletons = None
-        if os.path.isfile(base_path / "fragments.singletons.tsv"):
-            singletons = pl.read_csv(
-                base_path / "fragments.singletons.tsv", separator="\t"
-            )
 
     print("Singletons identified during preprocessing:", singletons)
     print()
