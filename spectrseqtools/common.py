@@ -2,7 +2,8 @@ import ms_deisotope as ms_ditp
 import re
 
 from clr_loader import get_mono
-from typing import List
+from pathlib import Path
+from typing import List, Tuple
 
 from spectrseqtools.composition_inference import infer_compositions_with_matrix
 from spectrseqtools.traceback_matrix import CompositionInferrer
@@ -11,6 +12,14 @@ rt = get_mono()
 
 ERROR_METHOD = "l1_norm"
 _NUCLEOSIDE_RE = re.compile(r"\d*[ACGU]")
+
+
+def set_output_path(input_path: Path, output_dir: str) -> Tuple[str, str]:
+    path = input_path.resolve()
+    path_dir = path.parent if output_dir is None else output_dir
+    path_prefix = path.stem
+
+    return path_dir, path_prefix
 
 
 def parse_nucleosides(sequence: str):
