@@ -6,14 +6,25 @@ from clr_loader import get_mono
 from dataclasses import dataclass
 from typing import List
 
-from spectrseqtools.masses import NUCLEOTIDE_DF
-from spectrseqtools.deconvolution import select_min_intensity, PREPROCESS_TOL
-from spectrseqtools.singleton_identification import RawPeak, COL_TYPES_RAW, calculate_cluster_score
+from spectrseqtools.preprocessing import determine_intensity_percentiles
+from spectrseqtools.masses import NUCLEOTIDE_DF, _COLS
+from spectrseqtools.common import initialize_raw_file_iterator
+from spectrseqtools.deconvolution import select_min_intensity, PREPROCESS_TOL, DeconvolutionParameters, deconvolute_scan, aggregate_peaks_into_fragments
+from spectrseqtools.singleton_identification import RawPeak, COL_TYPES_RAW, calculate_cluster_score, identify_singletons, process_scan
 from collections import defaultdict
 
+from pyxdameraulevenshtein import normalized_damerau_levenshtein_distance_seqs
+import importlib.resources
+import altair as alt
 rt = get_mono()
 
 MIN_MS1_CHARGE_STATE = 1
+
+masses = pl.read_csv(
+        (importlib.resources.files(__package__) / "assets" / "masses.tsv"),
+        separator="\t",
+    )
+assert masses.columns == _COLS
 
 @dataclass
 class DeisotopedPrecursorPeak:
@@ -286,3 +297,266 @@ def group_averaged_precursors_over_time(averaged_precursors):
                     .cum_sum()
                     .alias("neutral_mass_grp")).sort(["neutral_mass_grp", "min_average_scan_time"])
     return df_grouped_precursors
+
+@dataclass
+class PreprocessedGroup:
+    fragments: pl.DataFrame
+    singletons: pl.DataFrame
+    meta: dict
+
+def average_and_deconvolute_product_scan(df_filter, averaged_precursors, ms2_decon_params):
+    grp_product_idx = df_filter["index"].to_numpy()
+        
+    grp_product_scans = []
+    gidx = set()
+
+    for idx in grp_product_idx:
+        for scan in averaged_precursors[idx].product_scan:
+            if scan.index not in gidx:
+                gidx.add(scan.index)
+                grp_product_scans.append(scan)
+
+    if len(grp_product_scans)>1:
+        average_product_scan = grp_product_scans[0].average_with(grp_product_scans[1:])
+    else:
+        average_product_scan = grp_product_scans[0]
+
+    decon_product_peaks = deconvolute_scan(average_product_scan, params = ms2_decon_params)
+
+    return average_product_scan, decon_product_peaks
+
+def pre_process_multiplexing(file_path, params, min_scan_time = 0, max_scan_time = np.inf, dt_window = 0.2, three_prime_tag = 728.2006, five_prime_tag = 170.9755):
+    sample_name = file_path.stem
+    ms1_decon_params = DeconvolutionParameters(params)
+    ms2_decon_params = DeconvolutionParameters({"min_score": 0})
+    raw_file_read = initialize_raw_file_iterator(str(file_path))
+
+    max_scan_time = min(max_scan_time, raw_file_read.get_scan_by_index(len(raw_file_read)-1).scan_time)
+
+    averaged_precursors = averaged_precursors_products(raw_file_read, ms1_decon_params, min_scan_time, max_scan_time, dt_window)
+    df_grouped_precursors = group_averaged_precursors_over_time(averaged_precursors)
+
+    default_singletons = identify_singletons(str(file_path))
+    
+    grp_indices = df_grouped_precursors["neutral_mass_grp"].unique()
+
+    preprocessed_groups = []
+    for g in tqdm.tqdm(grp_indices):
+        df_filter = df_grouped_precursors.filter(pl.col("neutral_mass_grp") == g)
+        min_window_time = df_filter["min_average_scan_time"].min()
+        max_window_time = df_filter["max_average_scan_time"].max()
+
+        precursor_max_idx = df_filter["precursor_neutral_mass"].arg_max()
+        intact_mass = df_filter["precursor_neutral_mass"][precursor_max_idx]
+        
+        average_product_scan, decon_product_peaks = average_and_deconvolute_product_scan(df_filter, averaged_precursors, ms2_decon_params)
+        if len(decon_product_peaks) == 0:
+            continue
+        fragments = aggregate_peaks_into_fragments(decon_product_peaks)
+        fragments = fragments.rename({"neutral_mass": "observed_mass"}).filter(pl.col("observed_mass")<intact_mass)
+
+        try:
+            singletons = select_singletons_from_peaks_raw(process_scan(average_product_scan))
+            if singletons.height < 4:
+                singletons = default_singletons.clone()
+        except:
+            singletons = default_singletons.clone()
+        
+        intensity_cutoff = determine_intensity_percentiles(fragments).filter(pl.col("statistic") == "70%")["value"].to_list()[0]
+
+        meta = {"identity": sample_name + "_" + str(g),
+                "min_scan_time": min_window_time,
+                "max_scan_time": max_window_time,
+                "group_number": g,
+                "intensity_cutoff": intensity_cutoff,
+                "3_prime_tag": three_prime_tag, #728.2006,
+                "5_prime_tag": five_prime_tag, #170.9755,
+                "intact_mass": intact_mass,}
+        
+        if intact_mass < meta["3_prime_tag"]+meta["5_prime_tag"]:
+            continue
+
+        preprocessed_groups.append(PreprocessedGroup(fragments = fragments,
+                                                     singletons = singletons,
+                                                     meta = meta))
+        
+    return preprocessed_groups
+
+#POST PROCESSING
+def targ_pred_pairing(x):
+    if x[0] in x[1]:
+        return (x[0], x[0])
+    else:
+        return (x[0], x[1][0])
+
+def compare_prediction_to_target(prediction_raw, target_sequence, is_backward = False):
+    if is_backward:
+        prediction_raw = prediction_raw[::-1]
+    prediction_len = len(prediction_raw)
+    prediction_string = "".join(masses.filter(pl.col("id") == n).select("encoding").item() for n in prediction_raw)
+
+    target_strings = []
+
+    for i in range(len(target_sequence)-prediction_len+1):
+        target_sequence_window = target_sequence[i:i+prediction_len]
+        targ_string = ""
+
+        for p in zip(prediction_raw, target_sequence_window):
+            pair = targ_pred_pairing(p)
+            targ_string += masses.filter(pl.col("id") == pair[1])["encoding"].item()
+        target_strings.append(targ_string)
+
+    distances = normalized_damerau_levenshtein_distance_seqs(prediction_string, target_strings)
+    min_distance_idx = np.argmin(distances)
+
+    min_distance = distances[min_distance_idx]
+    start_pos = min_distance_idx
+    end_pos = min_distance_idx + prediction_len
+
+    return (prediction_string, target_strings[min_distance_idx], min_distance, start_pos, end_pos, is_backward)
+
+def align_prediction_results(prediction_vals, target_sequence):
+
+    alignment_vals = []
+
+    for i in prediction_vals:
+
+        prediction_raw = i[2]
+
+        if len(prediction_raw) == 0:
+            continue
+        
+        forward_comparison = compare_prediction_to_target(prediction_raw, target_sequence, is_backward = False)
+        backward_comparison = compare_prediction_to_target(prediction_raw, target_sequence, is_backward = True)
+
+        final_comparison = forward_comparison if forward_comparison[2] <= backward_comparison[2] else backward_comparison
+    
+        alignment_vals.append(final_comparison+(i[0], i[1], i[3],))
+
+    df_alignment = pl.DataFrame(alignment_vals, schema = ["predicted_string", "best_matching_target_string", "normalized_damerau_levenshtein_distance", "target_start_pos", "target_end_pos", "is_backward", "group", "intact_mass", "prediction_runtime"], orient = "row")
+
+    return df_alignment
+
+def interpret_alignment_results(df_alignment, target_sequence):
+
+    match_rows = []
+
+    for r in df_alignment.iter_rows(named = True):
+        pred_string = r["predicted_string"]
+        # if r["is_backward"]:
+        #     pred_string = pred_string[::-1]
+        target_string = r["best_matching_target_string"]
+        start_pos = r["target_start_pos"]
+        intact_mass = r["intact_mass"]
+
+        for i, (p, t) in enumerate(zip(pred_string, target_string)):
+            if p == t:
+                status = "match"
+            else:
+                status = "mismatch"
+            match_rows.append({"group": r["group"], 
+                            "score": r["normalized_damerau_levenshtein_distance"],
+                            "target_position": start_pos+i, 
+                            "predicted_base": p, 
+                            "target_base": t, 
+                            "status": status,
+                            "intact_mass": intact_mass})
+
+    for b in range(len(target_sequence)):
+        targ_base = masses.filter(pl.col("id") == target_sequence[b][0])["encoding"].item()
+        match_rows.append({"group": -1, 
+                            "score": 0,
+                            "target_position": b, 
+                            "predicted_base": targ_base, 
+                            "target_base": targ_base, 
+                            "status": "match"})
+
+    df_expanded_alignment = pl.DataFrame(match_rows)
+
+    df_expanded_alignment = df_expanded_alignment.sort(["group", "target_position"])
+
+    df_expanded_alignment = df_expanded_alignment.with_columns([
+        pl.col("status").shift(-1).over("group").alias("next_status"),
+        pl.col("predicted_base").shift(-1).over("group").alias("next_pred"),
+        pl.col("target_base").shift(-1).over("group").alias("next_target"),
+    ])
+
+    df_expanded_alignment = df_expanded_alignment.with_columns(
+        (
+            (pl.col("status") == "mismatch") &
+            (pl.col("next_status") == "mismatch") &
+            (pl.col("predicted_base") == pl.col("next_target")) &
+            (pl.col("next_pred") == pl.col("target_base"))
+        ).alias("is_swap_start")
+    )
+
+    df_expanded_alignment = df_expanded_alignment.with_columns(
+        (
+            pl.col("is_swap_start") |
+            pl.col("is_swap_start").shift(1).over("group")
+        ).alias("is_swap")
+    )
+
+    df_expanded_alignment = df_expanded_alignment.with_columns(
+        pl.when(pl.col("is_swap"))
+        .then(pl.lit("swap"))
+        .otherwise(pl.col("status"))
+        .alias("status")
+    )
+
+    df_expanded_alignment = df_expanded_alignment.drop([
+        "next_status",
+        "next_pred",
+        "next_target",
+        "is_swap_start",
+        "is_swap"
+    ])
+
+    df_expanded_alignment = df_expanded_alignment.join(
+        masses.select(["encoding", "canonical_name"]),
+        left_on="predicted_base",
+        right_on="encoding",
+        how="left"
+    )
+
+    df_expanded_alignment = df_expanded_alignment.sort(["score", "group", "target_position"])
+    group_to_pos = {group: i for i,group in enumerate(df_expanded_alignment["group"].unique(maintain_order = True).to_list())}
+    df_expanded_alignment = df_expanded_alignment.with_columns(pos = pl.col("group").replace(group_to_pos))
+
+    return df_expanded_alignment
+
+def plot_interpreted_alignment(df_expanded_alignment):
+
+    color_scale = alt.Scale(
+        domain=["match", "mismatch", "swap"],
+        range=["black", "red", "gold"]
+    )
+
+    chart = alt.Chart(df_expanded_alignment).mark_text(
+        fontSize=14,
+        font="monospace"
+    ).encode(
+        x=alt.X("target_position:Q", title="Base position", scale=alt.Scale(
+                domain=[df_expanded_alignment["target_position"].min() - 1, df_expanded_alignment["target_position"].max() + 1],
+                padding=0
+            ),),
+        y=alt.Y("pos:N"),
+        text="predicted_base:N",
+        color=alt.Color("status:N", scale=color_scale),
+        tooltip=["group", "target_position", "score", "predicted_base", "target_base", "status", "canonical_name", "intact_mass"]
+    ).properties(
+        width=850,
+        height=400
+    )
+
+    return chart
+
+def post_processing_alignment(prediction_vals, sample_name, target_sequence, save_file = False):
+
+    df_alignment = align_prediction_results(prediction_vals, target_sequence)
+    df_expanded_alignment = interpret_alignment_results(df_alignment, target_sequence)
+
+    chart = plot_interpreted_alignment(df_expanded_alignment)
+    chart.show()
+    if save_file:
+        chart.save(sample_name + '_output.html')
