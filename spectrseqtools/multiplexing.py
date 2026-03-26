@@ -108,35 +108,38 @@ def select_singletons_from_peaks_raw(peak_list: List[RawPeak]) -> pl.DataFrame:
         schema=COL_TYPES_RAW,
     )
 
-    # Match observed m/z to theoretical m/z from the reference table
+    # Match observed m/z to singleton m/z from the reference table
     peak_df = peak_df.sort("mz").join_asof(
-        NUCLEOTIDE_DF.sort("theoretical_mz"),
+        NUCLEOTIDE_DF.sort("singleton_mz"),
         left_on="mz",
-        right_on="theoretical_mz",
+        right_on="singleton_mz",
         strategy="nearest",
     )
 
-    # Compute mass error between observed and theoretical m/z
+    # Compute mass error between observed and singleton m/z
     peak_df = (
         peak_df.sort("mz")
         .with_columns(
-            (abs(pl.col("mz") - pl.col("theoretical_mz")) / pl.col("mz"))
+            (abs(pl.col("mz") - pl.col("singleton_mz")) / pl.col("mz"))
             .fill_null(0)
             .fill_nan(0)
             .lt(PREPROCESS_TOL)
             .alias("is_match")
         )
         .filter(pl.col("is_match"))
-        .sort(["nucleoside", "scan_time"])
+        .sort(["representative", "scan_time"])
     )
 
-    # Map representative nucleoside, cluster score, and count to each nucleoside group
-    peak_df = peak_df.group_by("nucleoside_list").map_groups(
+    if peak_df.height == 0:
+        return pl.DataFrame(schema = {"id": str, "cluster_score": float, "count": int})
+
+    # Map representative nucleotide, cluster score, and count to each nucleotide group
+    peak_df = peak_df.group_by("id_list").map_groups(
         lambda x: pl.DataFrame(
             {
-                "nucleoside": x["nucleoside_list"][0],
+                "id": x["id_list"][0],
                 "cluster_score": calculate_cluster_score(x["scan_time"]),
-                "count": len(x["nucleoside_list"]),
+                "count": len(x["id_list"]),
             }
         )
     )
@@ -150,7 +153,7 @@ def ms1_to_ms2_dict(raw_file_read):
     
     ms2_to_ms1_idx = {}
 
-    for _ in tqdm.tqdm(range(len(raw_file_read) - 1)):
+    for _ in range(len(raw_file_read) - 1):
         # Select next scan
         scan = next(raw_file_read)
 
@@ -229,7 +232,7 @@ def averaged_precursors_products(raw_file_read, decon_params, min_scan_time, max
 
     averaged_precursors = []
 
-    for t in tqdm.tqdm(np.arange(min_scan_time, max_scan_time, dt_window/4)):#, max_scan_time, dt)):
+    for t in tqdm.tqdm(np.arange(min_scan_time, max_scan_time, dt_window/4), desc="Deisotoping average precursors and collecting products"):#, max_scan_time, dt)):
         scan = raw_file_read.get_scan_by_time(t+dt_window)
         if scan.ms_level != 1:
             scan = raw_file_read.find_previous_ms1(scan.index)
@@ -250,7 +253,7 @@ def averaged_precursors_products(raw_file_read, decon_params, min_scan_time, max
         new_precursor, priority_peaks, new_products = scan_processor.process_scan_group(average_scan, product_scans)
         final_priority_peaks, priority_charges, final_products = filter_precursor_charges(priority_peaks, new_products)
         if len(priority_charges) == 0:
-            print("Time " + str(t) + " skipped because all charges were lower than threshold.")
+            #print("Time " + str(t) + " skipped because all charges were lower than threshold.")
             continue
         
         df_averaged_precursors, ungrouped_precursors = deconvolute_averaged_precursors(new_precursor, final_priority_peaks, priority_charges, final_products, decon_params)
@@ -341,7 +344,7 @@ def pre_process_multiplexing(file_path, params, min_scan_time = 0, max_scan_time
     grp_indices = df_grouped_precursors["neutral_mass_grp"].unique()
 
     preprocessed_groups = []
-    for g in tqdm.tqdm(grp_indices):
+    for g in tqdm.tqdm(grp_indices, desc="Deisotoping average product scans"):
         df_filter = df_grouped_precursors.filter(pl.col("neutral_mass_grp") == g)
         min_window_time = df_filter["min_average_scan_time"].min()
         max_window_time = df_filter["max_average_scan_time"].max()
@@ -355,13 +358,10 @@ def pre_process_multiplexing(file_path, params, min_scan_time = 0, max_scan_time
         fragments = aggregate_peaks_into_fragments(decon_product_peaks)
         fragments = fragments.rename({"neutral_mass": "observed_mass"}).filter(pl.col("observed_mass")<intact_mass)
 
-        try:
-            singletons = select_singletons_from_peaks_raw(process_scan(average_product_scan))
-            if singletons.height < 4:
-                singletons = default_singletons.clone()
-        except:
+        singletons = select_singletons_from_peaks_raw(process_scan(average_product_scan))
+        if singletons.height < 4:
             singletons = default_singletons.clone()
-        
+    
         intensity_cutoff = determine_intensity_percentiles(fragments).filter(pl.col("statistic") == "70%")["value"].to_list()[0]
 
         meta = {"identity": sample_name + "_" + str(g),
