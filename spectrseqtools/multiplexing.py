@@ -415,11 +415,11 @@ def compare_prediction_to_target(prediction_raw, target_sequence, is_backward = 
 
     return (prediction_string, target_strings[min_distance_idx], min_distance, start_pos, end_pos, is_backward)
 
-def align_prediction_results(prediction_vals, target_sequence):
+def align_prediction_results(prediction_vals, target_sequence, alignment_score_threshold = 0):
 
     alignment_vals = []
 
-    for i in prediction_vals:
+    for i in tqdm.tqdm(prediction_vals, desc = "Calculating alignment scores"):
 
         prediction_raw = i[2]
 
@@ -430,6 +430,9 @@ def align_prediction_results(prediction_vals, target_sequence):
         backward_comparison = compare_prediction_to_target(prediction_raw, target_sequence, is_backward = True)
 
         final_comparison = forward_comparison if forward_comparison[2] <= backward_comparison[2] else backward_comparison
+
+        if final_comparison[2] > alignment_score_threshold:
+            continue
     
         alignment_vals.append(final_comparison+(i[0], i[1], i[3],))
 
@@ -551,9 +554,9 @@ def plot_interpreted_alignment(df_expanded_alignment):
 
     return chart
 
-def post_processing_alignment(prediction_vals, sample_name, target_sequence, save_file = False):
+def post_processing_alignment(prediction_vals, sample_name, target_sequence, alignment_score_threshold = 0, save_file = False):
 
-    df_alignment = align_prediction_results(prediction_vals, target_sequence)
+    df_alignment = align_prediction_results(prediction_vals, target_sequence, alignment_score_threshold)
     df_expanded_alignment = interpret_alignment_results(df_alignment, target_sequence)
 
     chart = plot_interpreted_alignment(df_expanded_alignment)
