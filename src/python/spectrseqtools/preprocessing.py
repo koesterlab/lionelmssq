@@ -1,18 +1,13 @@
 import numpy as np
 import polars as pl
-from pathlib import Path
-from typing import Tuple
+import yaml
 
+from spectrseqtools.common import set_output_path
 from spectrseqtools.deconvolution import deconvolute
 from spectrseqtools.singleton_identification import identify_singletons
 
 
-def preprocess(
-    file_path: Path,
-    deconvolution_params: dict,
-    meta_params: dict,
-    cutoff_percentile: int = 50,
-) -> Tuple[pl.DataFrame, pl.DataFrame, dict]:
+def preprocess(options) -> None:
     """
     Deconvolute MS2 scans and identify singletons.
 
@@ -41,28 +36,48 @@ def preprocess(
         Dictionary with updated meta parameters.
 
     """
+    print("RAW file found. Preprocessing raw data...")
+
     # Deconvolute raw data from file
+    deconvolution_params = {}
     fragments = deconvolute(
-        file_path=str(file_path),
+        file_path=str(options.input),
         params=deconvolution_params,
     )
 
-    # Identify singletons
-    singletons = identify_singletons(file_path=str(file_path))
+    output_dir, output_prefix = set_output_path(
+        input_path=options.input, output_dir=options.output_dir
+    )
 
     # Update meta parameters (if needed)
-    meta_params.setdefault("identity", file_path.stem)
+    meta_params = {}
+    with open(options.meta, "r") as f:
+        meta_params = yaml.safe_load(f)
+    meta_params.setdefault("identity", output_prefix)
     meta_params.setdefault("intact_mass", select_intact_mass(fragments, meta_params))
     meta_params.setdefault("true_sequence", None)
 
     # Set intensity cutoff
     meta_params["intensity_cutoff"] = (
         determine_intensity_percentiles(fragments)
-        .filter(pl.col("statistic") == f"{cutoff_percentile}%")["value"]
+        .filter(pl.col("statistic") == f"{options.cutoff_percentile}%")["value"]
         .to_list()[0]
     )
 
-    return fragments, singletons, meta_params
+    # Save updated meta data
+    with open(output_dir / f"{output_prefix}.preprocessed.meta.yaml", "w") as f:
+        yaml.dump(meta_params, f)
+
+    # Save preprocessed fragments
+    fragments.write_csv(output_dir / f"{output_prefix}.tsv", separator="\t")
+
+    # Identify singletons
+    singletons = identify_singletons(file_path=str(options.input))
+
+    # Save singletons detected from raw data
+    singletons.write_csv(output_dir / f"{output_prefix}.singletons.tsv", separator="\t")
+
+    print("Preprocessing completed!\n")
 
 
 def select_intact_mass(
