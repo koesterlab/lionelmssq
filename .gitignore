@@ -18,3 +18,10 @@ tests/testcases/*/fragments.singletons.tsv
 tests/testcases/*/fragments.standard_unit_fragments.tsv
 tests/testcases/*/fragments.testing.meta.yaml
 tests/scratch_*
+/target
+/.pixi
+/dist
+# maturin-generated dynamic libraries
+*.so
+/pixi.lock
+/Cargo.lock
