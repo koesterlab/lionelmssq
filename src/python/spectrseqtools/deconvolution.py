@@ -31,6 +31,7 @@ COL_TYPES_DEISOTOPED = {
 @dataclass
 class DeisotopedPeak:
     """Class for deisotoped peaks."""
+
     scan_id: int
     scan_time: float
     peak_idx: int
@@ -56,54 +57,126 @@ class DeconvolutionParameters:
         self.charge_range = params.pop("charge_range", None)
         self.minimum_intensity = params.pop("minimum_intensity", None)
 
-        # Set scan-independent parameters
-        self.scan_independent_params = set_scan_independent_params(params=params)
+        # TODO: Take care of "min_score", there should be way to estimate it
+        # Select minimum accepted score between theoretical and experimental spectra
+        min_score = params.pop("min_score", 150.0)
 
+        # Select error tolerance between theoretical and experimental m/z;
+        # perhaps this should be < 1./max(charge) for a reasonable value
+        mass_error_tol = params.pop("mass_error_tol", 0.02)
 
-def set_scan_independent_params(params: dict) -> dict:
-    """
-    Set full dict for deconvolution parameters independent of the peak scan.
+        # Calculate goodness-of-fit criterion for envelope scoring
+        self.scorer = params.pop(
+            "scorer", ms_ditp.MSDeconVFitter(min_score, mass_error_tol)
+        )
 
-    Parameters
-    ----------
-    params : dict
-        Dictionary containing some, not necessary all deconvolution parameters.
+        # Select backbone for averagine
+        backbone = params.pop("averagine_backbone", "phosphate")
 
-    Returns
-    -------
-    params : dict
-        Dictionary containing all scan-independent deconvolution parameters.
+        # Set average composition of considered bases
+        self.averagine = params.pop(
+            "averagine", ms_ditp.Averagine(set_averagine(backbone=backbone))
+        )
 
-    """
-    # TODO: Take care of "min_score", there should be way to estimate it
-    # Select minimum accepted score between theoretical and experimental spectra
-    min_score = params.pop("min_score", 150.0)
+        # Set maximum number of tolerated missed peaks (keep small, i.e. 0 or 1)
+        self.max_missed_peaks = params.pop("max_missed_peaks", 0)
 
-    # Select error tolerance between theoretical and experimental m/z;
-    # perhaps this should be < 1./max(charge) for a reasonable value
-    mass_error_tol = params.pop("mass_error_tol", 0.02)
+        # Set name of method to scale intensity values
+        self.scale_method = params.pop("scale_method", "sum")
 
-    # Calculate goodness-of-fit criterion for envelope scoring
-    params.setdefault("scorer", ms_ditp.MSDeconVFitter(min_score, mass_error_tol))
+        # Set error tolerance for matching experimental and theoretical peaks
+        self.error_tol = params.pop("error_tol", 2e-5)
 
-    # Set average composition of considered bases
-    params.setdefault(
-        "averagine", ms_ditp.Averagine(set_averagine(backbone="phosphate"))
-    )
+        # Set percentage of included isotopic pattern (very sensitive,
+        # cf. discussion in ms_deisotope docs)
+        self.truncate_after = params.pop("truncate_after", 0.9)
 
-    # Set maximum number of tolerated missed peaks (keep small, i.e. 0 or 1)
-    params.setdefault("max_missed_peaks", 0)
+    def to_scan_dependent_dict(self, scan: ms_ditp.data_source.Scan) -> dict:
+        """Return dictionary of deconvolution parameters for the given scan.
 
-    # Set name of method to scale intensity value
-    params.setdefault("scale_method", "sum")
+        Parameters
+        ----------
+        scan : ms_deisotope.data_source.Scan
+            ThermoFisher scan.
 
-    # Set error tolerance for matching experimental and theoretical peaks
-    params.setdefault("error_tol", 2e-5)
+        Returns
+        -------
+        dict
+            Dictionary containing deconvolution parameters.
 
-    # Set percentage of included isotopic pattern (very sensitive, see discussion in ms_deisotope docs)
-    params.setdefault("truncate_after", 0.9)
+        """
+        # Retrieve parameters from class
+        output_dict = self.__dict__.copy()
 
-    return params
+        # Set scan-dependent parameters
+        output_dict["peaklist"] = scan
+        output_dict["charge_range"] = self.select_charge_range(scan=scan)
+        output_dict["minimum_intensity"] = self.select_min_intensity(scan=scan)
+
+        return output_dict
+
+    def select_charge_range(self, scan: ms_ditp.data_source.Scan) -> Tuple[int, int]:
+        """
+        Select range for accepted charge values.
+
+        Parameters
+        ----------
+        scan : ms_deisotope.data_source.Scan
+            ThermoFisher scan.
+
+        Returns
+        -------
+        min_charge : int
+            Minimum accepted charge value.
+        max_charge : int
+            Maximum accepted charge value.
+
+        Notes
+        -----
+        This function is inspired by https://github.com/koesterlab/oliglow,
+        originally implemented by Moshir Harsh (btemoshir@gmail.com).
+
+        """
+        # Return user-defined charge range (if given)
+        if self.charge_range is not None:
+            return self.charge_range
+
+        # Select charge (or use default if not given)
+        charge = scan.precursor_information.charge
+        if not isinstance(charge, int):
+            charge = DEFAULT_CHARGE_VALUE
+
+        # Return charge with consideration to polarity
+        return scan.polarity, charge * scan.polarity
+
+    def select_min_intensity(self, scan: ms_ditp.data_source.Scan) -> float:
+        """
+        Select minimum intensity value below which peaks are ignored.
+
+        Parameters
+        ----------
+        scan : ms_deisotope.data_source.Scan
+            ThermoFisher scan.
+
+        Returns
+        -------
+        float
+            Minimum intensity value.
+
+        Notes
+        -----
+        This function is inspired by https://github.com/koesterlab/oliglow,
+        originally implemented by Moshir Harsh (btemoshir@gmail.com).
+
+        """
+        # If the user defined no minimum intensity, set it to -infinity
+        if self.minimum_intensity is None:
+            min_intensity = -np.inf
+        else:
+            min_intensity = self.minimum_intensity
+
+        # Return maximum of intensity set by user and found in scan peak set
+        return max(min_intensity, min(peak.intensity for peak in scan.peak_set))
 
 
 def set_averagine(backbone: str) -> dict:
@@ -168,7 +241,7 @@ def set_averagine(backbone: str) -> dict:
     return average_composition
 
 
-class Deconvoluter():
+class Deconvoluter:
     """Class to deconvolute raw mass spectrometry data."""
 
     def __init__(self, params: dict) -> None:
@@ -239,10 +312,7 @@ class Deconvoluter():
 
         # Deconvolute/deisotope with ms_deisotope
         peak_set = ms_ditp.deconvolute_peaks(
-            peaklist=scan,
-            charge_range=self.select_charge_range(scan=scan),
-            minimum_intensity=self.select_min_intensity(scan=scan),
-            **self.params.scan_independent_params,
+            **self.params.to_scan_dependent_dict(scan)
         ).peak_set
 
         # Return None if scan does not contain any deisotoped peaks
@@ -283,69 +353,6 @@ class Deconvoluter():
                 mz=mz,
             )
         return peak_list
-
-    def select_charge_range(self, scan: ms_ditp.data_source.Scan) -> Tuple[int, int]:
-        """
-        Select range for accepted charge values.
-
-        Parameters
-        ----------
-        scan : ms_deisotope.data_source.Scan
-            ThermoFisher scan.
-
-        Returns
-        -------
-        min_charge : int
-            Minimum accepted charge value.
-        max_charge : int
-            Maximum accepted charge value.
-
-        Notes
-        -----
-        This function is inspired by https://github.com/koesterlab/oliglow,
-        originally implemented by Moshir Harsh (btemoshir@gmail.com).
-
-        """
-        # Return user-defined charge range (if given)
-        if self.params.charge_range is not None:
-            return self.params.charge_range
-
-        # Select charge (or use default if not given)
-        charge = scan.precursor_information.charge
-        if not isinstance(charge, int):
-            charge = DEFAULT_CHARGE_VALUE
-
-        # Return charge with consideration to polarity
-        return scan.polarity, charge * scan.polarity
-
-    def select_min_intensity(self, scan: ms_ditp.data_source.Scan) -> float:
-        """
-        Select minimum intensity value below which peaks are ignored.
-
-        Parameters
-        ----------
-        scan : ms_deisotope.data_source.Scan
-            ThermoFisher scan.
-
-        Returns
-        -------
-        float
-            Minimum intensity value.
-
-        Notes
-        -----
-        This function is inspired by https://github.com/koesterlab/oliglow,
-        originally implemented by Moshir Harsh (btemoshir@gmail.com).
-
-        """
-        # If the user defined no minimum intensity, set it to -infinity
-        if self.params.minimum_intensity is None:
-            min_intensity = -np.inf
-        else:
-            min_intensity = self.params.minimum_intensity
-
-        # Return maximum of intensity set by user and found in scan peak set
-        return max(min_intensity, min(peak.intensity for peak in scan.peak_set))
 
     def aggregate_peaks_into_fragments(self, peak_list: List[DeisotopedPeak]) -> pl.DataFrame:
         """
