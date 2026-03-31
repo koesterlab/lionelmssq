@@ -14,7 +14,7 @@ from spectrseqtools.cli import (
 )
 from spectrseqtools.common import parse_nucleosides
 from spectrseqtools.plotting import plot_prediction
-from spectrseqtools.preprocessing import preprocess
+from spectrseqtools.preprocessing import Preprocessor
 
 rt = get_mono()
 
@@ -41,14 +41,14 @@ def test_testcase(testcase):
     # Preprocess raw input data if given
     if os.path.isfile(base_path / "fragments.raw"):
         # Preprocess raw data
-        preprocess(
-            PreprocessingOptions(
+        Preprocessor(
+            options=PreprocessingOptions(
                 input=base_path / "fragments.raw",
                 meta=base_path / "fragments.meta.yaml",
                 output_dir=None,
                 cutoff_percentile=75,
             )
-        )
+        ).preprocess()
     else:
         # Copy metadata otherwise
         with open(base_path / "fragments.preprocessed.meta.yaml", "w") as f:
