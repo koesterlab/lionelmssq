@@ -13,6 +13,7 @@ license = "GPL-3.0-only"
 requires-python=">=3.12,<3.14"
 classifiers = [
     "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
     "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
     "Operating System :: OS Independent",
 ]
@@ -73,10 +74,13 @@ check-build = { cmd = "python -m twine check dist/*", depends-on = [
 [tool.pixi.environments]
 dev = {features = ["dev"]}
 
+[tool.pytest.ini_options]
+pythonpath = ["src/python"]
+
 [build-system]
 requires = ["maturin>=1.11,<2.0"]
 build-backend = "maturin"
 
 [tool.maturin]
-module-name = "spectrseqtools.rust_core"
+module-name = "spectrseqtools.assets.rust_core"
 python-source = "src/python"
