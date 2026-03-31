@@ -74,6 +74,9 @@ check-build = { cmd = "python -m twine check dist/*", depends-on = [
 [tool.pixi.environments]
 dev = {features = ["dev"]}
 
+[tool.pytest.ini_options]
+pythonpath = ["src/python"]
+
 [build-system]
 requires = ["maturin>=1.11,<2.0"]
 build-backend = "maturin"
