@@ -28,6 +28,18 @@ COL_TYPES_DEISOTOPED = {
 }
 
 
+@dataclass
+class DeisotopedPeak:
+    """Class for deisotoped peaks."""
+    scan_id: int
+    scan_time: float
+    peak_idx: int
+    intensity: float
+    neutral_mass: float
+    is_precursor_deisotoped: bool
+    mz: float
+
+
 # METHOD: To deconvolute/deisotope (which we use interchangeable because both
 # happen at the same time) a MS2 scan, we determine all its peaks with
 # the ms_deisotope package. We then identify the precursor peak (if it exists)
@@ -156,256 +168,240 @@ def set_averagine(backbone: str) -> dict:
     return average_composition
 
 
-def deconvolute(file_path: str, params: dict) -> pl.DataFrame:
-    """
-    Deconvolute/deisotope peaks in MS2 scans from ThermoFisher RAW file.
+class Deconvoluter():
+    """Class to deconvolute raw mass spectrometry data."""
 
-    Parameters
-    ----------
-    file_path : str
-        Path of RAW file from ThermoFisher.
-    params : dict
-        Dictionary containing deconvolution parameters.
+    def __init__(self, params: dict) -> None:
+        # Load deconvolution parameter based on parameter dict
+        self.params = DeconvolutionParameters(params)
 
-    Returns
-    -------
-    polars.DataFrame
-        Dataframe containing fragment monoisotopic masses and intensities.
+    def deconvolute(self, file_path: str) -> pl.DataFrame:
+        """
+        Deconvolute/deisotope peaks in MS2 scans from ThermoFisher RAW file.
 
-    """
-    # Load deconvolution parameter based on parameter dict
-    params = DeconvolutionParameters(params)
+        Parameters
+        ----------
+        file_path : str
+            Path of RAW file from ThermoFisher.
 
-    # Initialize iterator for RAW file
-    raw_file_read = initialize_raw_file_iterator(file_path=file_path)
+        Returns
+        -------
+        polars.DataFrame
+            Dataframe containing fragment monoisotopic masses and intensities.
 
-    peak_list = []
-    for _ in tqdm.tqdm(range(len(raw_file_read) - 1), desc="Deisotoping MS2 scans"):
-        # Select next scan
-        scan = next(raw_file_read)
+        """
+        # Initialize iterator for RAW file
+        raw_file_read = initialize_raw_file_iterator(file_path=file_path)
 
-        # Skip scan if it is no MS2 scan
-        if scan.ms_level != 2:
-            continue
-        # If it is an MS2 scan, skip it if the precursor charge is lower than MIN_MS1_CHARGE_STATE
-        if (
-            not isinstance(scan.precursor_information.charge, int)
-            or scan.precursor_information.charge < MIN_MS1_CHARGE_STATE
-        ):
-            continue
+        peak_list = []
+        for _ in tqdm.tqdm(range(len(raw_file_read) - 1), desc="Deisotoping MS2 scans"):
+            # Select next scan
+            scan = next(raw_file_read)
 
-        # Deconvolute scan to get list of deisotoped peaks
-        peak_list += deconvolute_scan(scan=scan, params=params)
+            # Skip scan if it is no MS2 scan
+            if scan.ms_level != 2:
+                continue
 
-    return aggregate_peaks_into_fragments(peak_list)
+            # Skip scan if the precursor charge is lower than MIN_MS1_CHARGE_STATE
+            if (
+                not isinstance(scan.precursor_information.charge, int)
+                or scan.precursor_information.charge < MIN_MS1_CHARGE_STATE
+            ):
+                continue
 
+            # Deconvolute scan to get list of deisotoped peaks
+            peak_list += self.deconvolute_scan(scan=scan)
 
-@dataclass
-class DeisotopedPeak:
-    scan_id: int
-    scan_time: float
-    peak_idx: int
-    intensity: float
-    neutral_mass: float
-    is_precursor_deisotoped: bool
-    mz: float
+        return self.aggregate_peaks_into_fragments(peak_list)
 
+    def deconvolute_scan(self, scan: ms_ditp.data_source.Scan) -> List[DeisotopedPeak]:
+        """
+        Deconvolute peaks from MS2 scan.
 
-def deconvolute_scan(
-    scan: ms_ditp.data_source.Scan, params: DeconvolutionParameters
-) -> List[DeisotopedPeak]:
-    """
-    Deconvolute peaks from MS2 scan.
+        Parameters
+        ----------
+        scan : ms_deisotope.data_source.Scan
+            ThermoFisher scan.
 
-    Parameters
-    ----------
-    scan : ms_deisotope.data_source.Scan
-        ThermoFisher scan.
-    params : DeconvolutionParameters
-        Deconvolution parameters.
+        Returns
+        -------
+        peak_list : List[DeisotopedPeak]
+            List containing deconvoluted peak data.
 
-    Returns
-    -------
-    peak_list : List[DeisotopedPeak]
-        List containing deconvoluted peak data.
+        Notes
+        -----
+        This function is inspired by https://github.com/koesterlab/oliglow,
+        originally implemented by Moshir Harsh (btemoshir@gmail.com).
 
-    Notes
-    -----
-    This function is inspired by https://github.com/koesterlab/oliglow,
-    originally implemented by Moshir Harsh (btemoshir@gmail.com).
+        """
+        # Convert scan to centroid data
+        scan.pick_peaks()
 
-    """
-    # Convert scan to centroid data
-    scan.pick_peaks()
+        # Deconvolute/deisotope with ms_deisotope
+        peak_set = ms_ditp.deconvolute_peaks(
+            peaklist=scan,
+            charge_range=self.select_charge_range(scan=scan),
+            minimum_intensity=self.select_min_intensity(scan=scan),
+            **self.params.scan_independent_params,
+        ).peak_set
 
-    # Deconvolute/deisotope with ms_deisotope
-    peak_set = ms_ditp.deconvolute_peaks(
-        peaklist=scan,
-        charge_range=params.charge_range
-        if params.charge_range is not None
-        else select_charge_range(scan=scan),
-        minimum_intensity=select_min_intensity(
-            scan=scan, min_intensity=params.minimum_intensity
-        ),
-        **params.scan_independent_params,
-    ).peak_set
+        # Return None if scan does not contain any deisotoped peaks
+        if len(peak_set) <= 0:
+            return []
 
-    # Return None if scan does not contain any deisotoped peaks
-    if len(peak_set) <= 0:
-        return []
+        # Obtain scan time and scan ID
+        scan_time = scan.scan_time
+        scan_id = int(scan.scan_id.split("scan=")[-1])
 
-    # Obtain scan time and scan ID
-    scan_time = scan.scan_time
-    scan_id = int(scan.scan_id.split("scan=")[-1])
+        # Calculate m/z of precursor and accepted m/z range
+        precursor_mz = scan.precursor_information.mz
+        min_mz = scan.isolation_window.target - (1 * scan.isolation_window.lower)
+        max_mz = scan.isolation_window.target + (1 * scan.isolation_window.upper)
 
-    # Calculate m/z of precursor and accepted m/z range
-    precursor_mz = scan.precursor_information.mz
-    min_mz = scan.isolation_window.target - (1 * scan.isolation_window.lower)
-    max_mz = scan.isolation_window.target + (1 * scan.isolation_window.upper)
+        # Iterate through the deisotoped scan
+        peak_list = [0] * len(peak_set)
+        for idx in range(len(peak_set)):
+            mz = peak_set.peaks[idx].mz
+            is_precursor = min_mz <= mz <= max_mz
+            peak_list[idx] = DeisotopedPeak(
+                scan_id=scan_id,
+                scan_time=scan_time,
+                peak_idx=idx,
+                intensity=peak_set.peaks[idx].intensity,
+                neutral_mass=peak_set.peaks[idx].neutral_mass,
+                is_precursor_deisotoped=(
+                    False
+                    if not is_precursor
+                    else precursor_mz
+                    - abs(
+                        ISOTOPIC_SHIFT_FACTOR
+                        * ms_ditp.averagine.isotopic_shift(peak_set.peaks[idx].charge)
+                    )
+                    <= mz
+                    <= precursor_mz
+                ),
+                mz=mz,
+            )
+        return peak_list
 
-    # Iterate through the deisotoped scan
-    peak_list = [0] * len(peak_set)
-    for idx in range(len(peak_set)):
-        mz = peak_set.peaks[idx].mz
-        is_precursor = min_mz <= mz <= max_mz
-        peak_list[idx] = DeisotopedPeak(
-            scan_id=scan_id,
-            scan_time=scan_time,
-            peak_idx=idx,
-            intensity=peak_set.peaks[idx].intensity,
-            neutral_mass=peak_set.peaks[idx].neutral_mass,
-            is_precursor_deisotoped=(
-                False
-                if not is_precursor
-                else precursor_mz
-                - abs(
-                    ISOTOPIC_SHIFT_FACTOR
-                    * ms_ditp.averagine.isotopic_shift(peak_set.peaks[idx].charge)
-                )
-                <= mz
-                <= precursor_mz
+    def select_charge_range(self, scan: ms_ditp.data_source.Scan) -> Tuple[int, int]:
+        """
+        Select range for accepted charge values.
+
+        Parameters
+        ----------
+        scan : ms_deisotope.data_source.Scan
+            ThermoFisher scan.
+
+        Returns
+        -------
+        min_charge : int
+            Minimum accepted charge value.
+        max_charge : int
+            Maximum accepted charge value.
+
+        Notes
+        -----
+        This function is inspired by https://github.com/koesterlab/oliglow,
+        originally implemented by Moshir Harsh (btemoshir@gmail.com).
+
+        """
+        # Return user-defined charge range (if given)
+        if self.params.charge_range is not None:
+            return self.params.charge_range
+
+        # Select charge (or use default if not given)
+        charge = scan.precursor_information.charge
+        if not isinstance(charge, int):
+            charge = DEFAULT_CHARGE_VALUE
+
+        # Return charge with consideration to polarity
+        return scan.polarity, charge * scan.polarity
+
+    def select_min_intensity(self, scan: ms_ditp.data_source.Scan) -> float:
+        """
+        Select minimum intensity value below which peaks are ignored.
+
+        Parameters
+        ----------
+        scan : ms_deisotope.data_source.Scan
+            ThermoFisher scan.
+
+        Returns
+        -------
+        float
+            Minimum intensity value.
+
+        Notes
+        -----
+        This function is inspired by https://github.com/koesterlab/oliglow,
+        originally implemented by Moshir Harsh (btemoshir@gmail.com).
+
+        """
+        # If the user defined no minimum intensity, set it to -infinity
+        if self.params.minimum_intensity is None:
+            min_intensity = -np.inf
+        else:
+            min_intensity = self.params.minimum_intensity
+
+        # Return maximum of intensity set by user and found in scan peak set
+        return max(min_intensity, min(peak.intensity for peak in scan.peak_set))
+
+    def aggregate_peaks_into_fragments(self, peak_list: List[DeisotopedPeak]) -> pl.DataFrame:
+        """
+        Aggregate deisotoped peaks into fragments by grouping based on similar mass.
+
+        Build dataframe of deisotoped peaks, group the peaks by their mass
+        (within PPM tolerance), and aggregate them by selecting the maximum
+        observed mass and total observed intensity in each group as a fragment.
+
+        Parameters
+        ----------
+        peak_list : List[DeisotopedPeak]
+            List containing deconvoluted peak data.
+
+        Returns
+        -------
+        peak_df : polars.DataFrame
+            Dataframe containing fragment monoisotopic masses and intensities.
+
+        Notes
+        -----
+        This function is inspired by https://github.com/koesterlab/oliglow,
+        originally implemented by Moshir Harsh (btemoshir@gmail.com).
+
+        """
+        # Build dataframe from peak list
+        peak_df = pl.DataFrame(
+            data=np.array(
+                [
+                    [peak.__dict__[key] for key in COL_TYPES_DEISOTOPED.keys()]
+                    for peak in peak_list
+                ]
             ),
-            mz=mz,
+            schema=COL_TYPES_DEISOTOPED,
         )
-    return peak_list
 
-
-def select_charge_range(scan: ms_ditp.data_source.Scan) -> Tuple[int, int]:
-    """
-    Select range for accepted charge values.
-
-    Parameters
-    ----------
-    scan : ms_deisotope.data_source.Scan
-        ThermoFisher scan.
-
-    Returns
-    -------
-    min_charge : int
-        Minimum accepted charge value.
-    max_charge : int
-        Maximum accepted charge value.
-
-    Notes
-    -----
-    This function is inspired by https://github.com/koesterlab/oliglow,
-    originally implemented by Moshir Harsh (btemoshir@gmail.com).
-
-    """
-    # Select charge (or use default if not given)
-    charge = scan.precursor_information.charge
-    if not isinstance(charge, int):
-        charge = DEFAULT_CHARGE_VALUE
-
-    # Return charge with consideration to polarity
-    return scan.polarity, charge * scan.polarity
-
-
-def select_min_intensity(scan: ms_ditp.data_source.Scan, min_intensity: float) -> float:
-    """
-    Select minimum intensity value below which peaks are ignored.
-
-    Parameters
-    ----------
-    scan : ms_deisotope.data_source.Scan
-        ThermoFisher scan.
-    min_intensity : float
-        Minimum intensity value set by user.
-
-    Returns
-    -------
-    float
-        Minimum intensity value.
-
-    Notes
-    -----
-    This function is inspired by https://github.com/koesterlab/oliglow,
-    originally implemented by Moshir Harsh (btemoshir@gmail.com).
-
-    """
-    # If the user defined no minimum intensity, set it to -infinity
-    if min_intensity is None:
-        min_intensity = -np.inf
-
-    # Return maximum of intensity set by user and found in scan peak set
-    return max(min_intensity, min(peak.intensity for peak in scan.peak_set))
-
-
-def aggregate_peaks_into_fragments(peak_list: List[DeisotopedPeak]) -> pl.DataFrame:
-    """
-    Aggregate deisotoped peaks into fragments by grouping based on similar mass.
-
-    Build dataframe of deisotoped peaks, group the peaks by their mass
-    (within PPM tolerance), and aggregate them by selecting the maximum
-    observed mass and total observed intensity in each group as a fragment.
-
-    Parameters
-    ----------
-    peak_list : List[DeisotopedPeak]
-        List containing deconvoluted peak data.
-
-    Returns
-    -------
-    peak_df : polars.DataFrame
-        Dataframe containing fragment monoisotopic masses and intensities.
-
-    Notes
-    -----
-    This function is inspired by https://github.com/koesterlab/oliglow,
-    originally implemented by Moshir Harsh (btemoshir@gmail.com).
-
-    """
-    # Build dataframe from peak list
-    peak_df = pl.DataFrame(
-        data=np.array(
-            [
-                [peak.__dict__[key] for key in COL_TYPES_DEISOTOPED.keys()]
-                for peak in peak_list
-            ]
-        ),
-        schema=COL_TYPES_DEISOTOPED,
-    )
-
-    # Cluster peaks together when mass is within PPM tolerance of each other
-    peak_df = peak_df.sort("neutral_mass").with_columns(
-        (
-            abs(pl.col("neutral_mass").shift(1) - pl.col("neutral_mass"))
-            / pl.col("neutral_mass").shift(1)
+        # Cluster peaks together when mass is within PPM tolerance of each other
+        peak_df = peak_df.sort("neutral_mass").with_columns(
+            (
+                abs(pl.col("neutral_mass").shift(1) - pl.col("neutral_mass"))
+                / pl.col("neutral_mass").shift(1)
+            )
+            .fill_null(0)
+            .fill_nan(0)
+            .gt(PREPROCESS_TOL)
+            .cum_sum()
+            .alias("ppm_group")
         )
-        .fill_null(0)
-        .fill_nan(0)
-        .gt(PREPROCESS_TOL)
-        .cum_sum()
-        .alias("ppm_group")
-    )
 
-    # Aggregate by PPM group (assign maximum neutral mass and total intensity to each group)
-    return (
-        peak_df.group_by("ppm_group")
-        .agg(
-            neutral_mass=pl.col("neutral_mass").max(),
-            intensity=pl.col("intensity").sum(),
-            is_precursor_deisotoped=pl.col("is_precursor_deisotoped").max(),
+        # Aggregate by PPM group (assign maximum neutral mass and total intensity to each group)
+        return (
+            peak_df.group_by("ppm_group")
+            .agg(
+                neutral_mass=pl.col("neutral_mass").max(),
+                intensity=pl.col("intensity").sum(),
+                is_precursor_deisotoped=pl.col("is_precursor_deisotoped").max(),
+            )
+            .sort("neutral_mass")
         )
-        .sort("neutral_mass")
-    )

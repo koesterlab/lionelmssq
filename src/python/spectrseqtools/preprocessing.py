@@ -1,9 +1,12 @@
+# -*- coding: utf-8 -*-
+"""Preprocessing of raw mass spectrometry data."""
+
 import numpy as np
 import polars as pl
 import yaml
 
 from spectrseqtools.common import set_output_path
-from spectrseqtools.deconvolution import deconvolute
+from spectrseqtools.deconvolution import Deconvoluter
 from spectrseqtools.singleton_identification import identify_singletons
 
 
@@ -33,9 +36,8 @@ class Preprocessor:
         print("RAW file found. Preprocessing raw data...")
 
         # Deconvolute raw data from file
-        fragments = deconvolute(
+        fragments = Deconvoluter(params=self.deconvolution_params).deconvolute(
             file_path=str(self.input_path),
-            params=self.deconvolution_params,
         )
 
         # Update meta parameters (if needed)
