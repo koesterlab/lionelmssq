@@ -82,5 +82,5 @@ requires = ["maturin>=1.11,<2.0"]
 build-backend = "maturin"
 
 [tool.maturin]
-module-name = "spectrseqtools.rust_core"
+module-name = "spectrseqtools.assets.rust_core"
 python-source = "src/python"
