@@ -2,17 +2,14 @@ import importlib.resources
 import ms_deisotope as ms_ditp
 import numpy as np
 import polars as pl
-import tqdm as tqdm
+
 from clr_loader import get_mono
 from dataclasses import dataclass
 from typing import List, Self, Tuple
 
-from spectrseqtools.common import initialize_raw_file_iterator
-
 rt = get_mono()
 
 PREPROCESS_TOL = 10e-6
-MIN_MS1_CHARGE_STATE = 3
 # TODO: Estimate the default value from sequence length (IMP: Should be
 #  large enough to cover the charge states of the precursors!
 DEFAULT_CHARGE_VALUE = 30
@@ -394,50 +391,3 @@ class DeisotopedPeakList:
             )
             .sort("neutral_mass")
         )
-
-
-class Deconvoluter:
-    """Class to deconvolute raw mass spectrometry data."""
-
-    def __init__(self, params: dict) -> None:
-        # Load deconvolution parameter based on parameter dict
-        self.params = DeconvolutionParameters(params)
-
-    def deconvolute(self, file_path: str) -> pl.DataFrame:
-        """
-        Deconvolute/deisotope peaks in MS2 scans from ThermoFisher RAW file.
-
-        Parameters
-        ----------
-        file_path : str
-            Path of RAW file from ThermoFisher.
-
-        Returns
-        -------
-        polars.DataFrame
-            Dataframe containing fragment monoisotopic masses and intensities.
-
-        """
-        # Initialize iterator for RAW file
-        raw_file_read = initialize_raw_file_iterator(file_path=file_path)
-
-        peak_list = DeisotopedPeakList.default()
-        for _ in tqdm.tqdm(range(len(raw_file_read) - 1), desc="Deisotoping MS2 scans"):
-            # Select next scan
-            scan = next(raw_file_read)
-
-            # Skip scan if it is no MS2 scan
-            if scan.ms_level != 2:
-                continue
-
-            # Skip scan if the precursor charge is lower than MIN_MS1_CHARGE_STATE
-            if (
-                not isinstance(scan.precursor_information.charge, int)
-                or scan.precursor_information.charge < MIN_MS1_CHARGE_STATE
-            ):
-                continue
-
-            # Deconvolute scan to get list of deisotoped peaks
-            peak_list += DeisotopedPeakList.from_scan(scan=scan, params=self.params)
-
-        return peak_list.to_fragments()
