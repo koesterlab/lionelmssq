@@ -5,7 +5,7 @@ import yaml
 
 from spectrseqtools.common import set_output_path, initialize_raw_file_iterator
 from spectrseqtools.deconvolution import DeconvolutionParameters, DeisotopedPeakList
-from spectrseqtools.singleton_identification import identify_singletons
+from spectrseqtools.singleton_identification import RawPeakList
 
 
 MIN_MS1_CHARGE_STATE = 3
@@ -37,7 +37,7 @@ class Preprocessor:
         print("RAW file found. Preprocessing raw data...")
 
         # Deconvolute raw data from file
-        fragments = self.deconvolute(file_path=str(self.input_path))
+        fragments = self.deconvolute()
 
         # Update meta parameters (if needed)
         meta_params = self.meta_params
@@ -62,21 +62,16 @@ class Preprocessor:
         fragments.write_csv(f"{self.output_prefix}.tsv", separator="\t")
 
         # Identify singletons
-        singletons = identify_singletons(file_path=str(self.input_path))
+        singletons = self.identify_singletons()
 
         # Save singletons detected from raw data
         singletons.write_csv(f"{self.output_prefix}.singletons.tsv", separator="\t")
 
         print("Preprocessing completed!\n")
 
-    def deconvolute(self, file_path: str) -> pl.DataFrame:
+    def deconvolute(self) -> pl.DataFrame:
         """
         Deconvolute/deisotope peaks in MS2 scans from ThermoFisher RAW file.
-
-        Parameters
-        ----------
-        file_path : str
-            Path of RAW file from ThermoFisher.
 
         Returns
         -------
@@ -88,7 +83,7 @@ class Preprocessor:
         params = DeconvolutionParameters(self.deconvolution_params)
 
         # Initialize iterator for RAW file
-        raw_file_read = initialize_raw_file_iterator(file_path=file_path)
+        raw_file_read = initialize_raw_file_iterator(file_path=str(self.input_path))
 
         peak_list = DeisotopedPeakList.default()
         for _ in tqdm.tqdm(range(len(raw_file_read) - 1), desc="Deisotoping MS2 scans"):
@@ -110,6 +105,34 @@ class Preprocessor:
             peak_list += DeisotopedPeakList.from_scan(scan=scan, params=params)
 
         return peak_list.to_fragments()
+
+    def identify_singletons(self) -> pl.DataFrame:
+        """
+        Determine singleton candidates from MS2 scans in ThermoFisher RAW file.
+
+        Returns
+        -------
+        polars.DataFrame
+            Dataframe containing singleton candidates obtained by matching m/z data.
+        """
+        # Initialize iterator for RAW file
+        raw_file_read = initialize_raw_file_iterator(file_path=str(self.input_path))
+
+        peak_list = RawPeakList.default()
+        for _ in tqdm.tqdm(
+            range(len(raw_file_read) - 1), desc="Extract m/z data from MS2 scans"
+        ):
+            # Select next scan
+            scan = next(raw_file_read)
+
+            # Skip scan if it is no MS2 scan
+            if scan.ms_level != 2:
+                continue
+
+            # Extract raw peaks from scan (without deisotoping)
+            peak_list += RawPeakList.from_scan(scan)
+
+        return peak_list.to_singletons()
 
     def select_intact_mass(self, fragments: pl.DataFrame) -> float:
         """

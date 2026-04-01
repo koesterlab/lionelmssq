@@ -1,14 +1,12 @@
 import ms_deisotope as ms_ditp
 import numpy as np
 import polars as pl
-import tqdm as tqdm
 from clr_loader import get_mono
 from dataclasses import dataclass
 from dbscan1d.core import DBSCAN1D
 from sklearn.metrics import silhouette_score
 from typing import List, Self
 
-from spectrseqtools.common import initialize_raw_file_iterator
 from spectrseqtools.masses import NUCLEOTIDE_DF
 
 rt = get_mono()
@@ -30,40 +28,6 @@ COL_TYPES_RAW = {
 }
 
 
-def identify_singletons(file_path: str) -> pl.DataFrame:
-    """
-    Determine singleton candidates from MS2 scans in ThermoFisher RAW file.
-
-    Parameters
-    ----------
-    file_path : str
-        Path of RAW file from ThermoFisher.
-
-    Returns
-    -------
-    polars.DataFrame
-        Dataframe containing singleton candidates obtained by matching m/z data.
-    """
-    # Initialize iterator for RAW file
-    raw_file_read = initialize_raw_file_iterator(file_path=file_path)
-
-    peak_list = RawPeakList.default()
-    for _ in tqdm.tqdm(
-        range(len(raw_file_read) - 1), desc="Extract m/z data from MS2 scans"
-    ):
-        # Select next scan
-        scan = next(raw_file_read)
-
-        # Skip scan if it is no MS2 scan
-        if scan.ms_level != 2:
-            continue
-
-        # Extract raw peaks from scan (without deisotoping)
-        peak_list += RawPeakList.from_scan(scan)
-
-    return peak_list.to_singletons()
-
-
 @dataclass
 class RawPeak:
     """Class for raw peaks."""
@@ -79,7 +43,7 @@ class RawPeak:
 class RawPeakList:
     """Class for list of raw peaks from MS spectra."""
 
-    peaks : List[RawPeak]
+    peaks: List[RawPeak]
 
     def __add__(self, other) -> Self:
         """Add another peak list."""
