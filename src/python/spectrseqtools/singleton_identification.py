@@ -6,7 +6,7 @@ from clr_loader import get_mono
 from dataclasses import dataclass
 from dbscan1d.core import DBSCAN1D
 from sklearn.metrics import silhouette_score
-from typing import List
+from typing import List, Self
 
 from spectrseqtools.common import initialize_raw_file_iterator
 from spectrseqtools.masses import NUCLEOTIDE_DF
@@ -47,7 +47,7 @@ def identify_singletons(file_path: str) -> pl.DataFrame:
     # Initialize iterator for RAW file
     raw_file_read = initialize_raw_file_iterator(file_path=file_path)
 
-    peak_list = []
+    peak_list = RawPeakList.default()
     for _ in tqdm.tqdm(
         range(len(raw_file_read) - 1), desc="Extract m/z data from MS2 scans"
     ):
@@ -59,13 +59,15 @@ def identify_singletons(file_path: str) -> pl.DataFrame:
             continue
 
         # Extract raw peaks from scan (without deisotoping)
-        peak_list += process_scan(scan)
+        peak_list += RawPeakList.from_scan(scan)
 
-    return select_singletons_from_peaks(peak_list=peak_list)
+    return peak_list.to_singletons()
 
 
 @dataclass
 class RawPeak:
+    """Class for raw peaks."""
+
     scan_id: int
     scan_time: float
     peak_idx: int
@@ -73,115 +75,125 @@ class RawPeak:
     mz: float
 
 
-def process_scan(scan: ms_ditp.data_source.Scan) -> List[RawPeak]:
-    """
-    Extract raw peaks from MS2 scan.
+@dataclass
+class RawPeakList:
+    """Class for list of raw peaks from MS spectra."""
 
-    Parameters
-    ----------
-    scan : ms_deisotope.data_source.Scan
-        ThermoFisher scan.
+    peaks : List[RawPeak]
 
-    Returns
-    -------
-    peak_list : List[RawPeak]
-        List containing raw peak data.
+    def __add__(self, other) -> Self:
+        """Add another peak list."""
+        return RawPeakList(self.peaks + other.peaks)
 
-    """
-    # Convert scan to centroid data
-    scan.pick_peaks()
+    @classmethod
+    def default(cls) -> Self:
+        """Return empty peak list"""
+        return RawPeakList(peaks=[])
 
-    # Return None if scan does not contain any peaks
-    if len(scan.peaks) <= 0:
-        return []
+    @classmethod
+    def from_scan(cls, scan: ms_ditp.data_source.Scan) -> Self:
+        """
+        Extract raw peaks from MS2 scan.
 
-    # Obtain scan time and scan ID
-    scan_time = scan.scan_time
-    scan_id = int(scan.scan_id.split("scan=")[-1])
+        Parameters
+        ----------
+        scan : ms_deisotope.data_source.Scan
+            ThermoFisher scan.
 
-    peak_list = []
-    for idx in range(len(scan.peaks)):
-        mz = scan.peaks[idx].mz
+        Returns
+        -------
+        peak_list : List[RawPeak]
+            List containing raw peak data.
 
-        # Only consider peaks with mass within theoretical bounds
-        if MIN_MZ <= mz <= MAX_MZ:
-            peak_list.append(
-                RawPeak(
-                    scan_id=scan_id,
-                    scan_time=scan_time,
-                    peak_idx=idx,
-                    intensity=scan.peaks[idx].intensity,
-                    mz=mz,
+        """
+        # Convert scan to centroid data
+        scan.pick_peaks()
+
+        # Return None if scan does not contain any peaks
+        if len(scan.peaks) <= 0:
+            return RawPeakList.default()
+
+        # Obtain scan time and scan ID
+        scan_time = scan.scan_time
+        scan_id = int(scan.scan_id.split("scan=")[-1])
+
+        peak_list = []
+        for idx, _ in enumerate(scan.peaks):
+            mz = scan.peaks[idx].mz
+
+            # Only consider peaks with mass within theoretical bounds
+            if MIN_MZ <= mz <= MAX_MZ:
+                peak_list.append(
+                    RawPeak(
+                        scan_id=scan_id,
+                        scan_time=scan_time,
+                        peak_idx=idx,
+                        intensity=scan.peaks[idx].intensity,
+                        mz=mz,
+                    )
                 )
+        return RawPeakList(peaks=peak_list)
+
+    def to_singletons(self) -> pl.DataFrame:
+        """
+        Select candidate singletons based on raw peaks.
+
+        Build dataframe of raw peaks, match theoretical and observed mz,
+        cluster them, and filter the candidates based on their cluster score.
+
+        Returns
+        -------
+        peak_df : polars.DataFrame
+            Dataframe containing singleton candidates (name, score, and count).
+
+        """
+        # Build dataframe from peak list
+        peak_df = pl.DataFrame(
+            data=np.array(
+                [[peak.__dict__[key] for key in COL_TYPES_RAW] for peak in self.peaks]
+            ),
+            schema=COL_TYPES_RAW,
+        )
+
+        # Match observed m/z to singleton m/z from the reference table
+        peak_df = peak_df.sort("mz").join_asof(
+            NUCLEOTIDE_DF.sort("singleton_mz"),
+            left_on="mz",
+            right_on="singleton_mz",
+            strategy="nearest",
+        )
+
+        # Compute mass error between observed and singleton m/z
+        peak_df = (
+            peak_df.sort("mz")
+            .with_columns(
+                (abs(pl.col("mz") - pl.col("singleton_mz")) / pl.col("mz"))
+                .fill_null(0)
+                .fill_nan(0)
+                .lt(PREPROCESS_TOL)
+                .alias("is_match")
             )
-    return peak_list
-
-
-def select_singletons_from_peaks(peak_list: List[RawPeak]) -> pl.DataFrame:
-    """
-    Select candidate singletons based on raw peaks.
-
-    Build dataframe of raw peaks, match theoretical and observed mz,
-    cluster them, and filter the candidates based on their cluster score.
-
-    Parameters
-    ----------
-    peak_list : List[RawPeak]
-        List containing raw peak data.
-
-    Returns
-    -------
-    peak_df : polars.DataFrame
-        Dataframe containing singleton candidates (name, score, and count).
-
-    """
-    # Build dataframe from peak list
-    peak_df = pl.DataFrame(
-        data=np.array(
-            [[peak.__dict__[key] for key in COL_TYPES_RAW.keys()] for peak in peak_list]
-        ),
-        schema=COL_TYPES_RAW,
-    )
-
-    # Match observed m/z to singleton m/z from the reference table
-    peak_df = peak_df.sort("mz").join_asof(
-        NUCLEOTIDE_DF.sort("singleton_mz"),
-        left_on="mz",
-        right_on="singleton_mz",
-        strategy="nearest",
-    )
-
-    # Compute mass error between observed and singleton m/z
-    peak_df = (
-        peak_df.sort("mz")
-        .with_columns(
-            (abs(pl.col("mz") - pl.col("singleton_mz")) / pl.col("mz"))
-            .fill_null(0)
-            .fill_nan(0)
-            .lt(PREPROCESS_TOL)
-            .alias("is_match")
+            .filter(pl.col("is_match"))
+            .sort(["representative", "scan_time"])
         )
-        .filter(pl.col("is_match"))
-        .sort(["representative", "scan_time"])
-    )
 
-    # Map representative nucleotide, cluster score, and count to each nucleotide group
-    peak_df = peak_df.group_by("id_list").map_groups(
-        lambda x: pl.DataFrame(
-            {
-                "id": x["id_list"][0],
-                "cluster_score": calculate_cluster_score(x["scan_time"]),
-                "count": len(x["id_list"]),
-            }
+        # Map representative nucleotide, cluster score, and count to each nucleotide group
+        peak_df = peak_df.group_by("id_list").map_groups(
+            lambda x: pl.DataFrame(
+                {
+                    "id": x["id_list"][0],
+                    "cluster_score": calculate_cluster_score(x["scan_time"]),
+                    "count": len(x["id_list"]),
+                }
+            )
         )
-    )
 
-    # Filter candidate singletons by cluster score
-    return (
-        peak_df.filter(pl.col("cluster_score") >= 0).select(
-            ["id", "count", "cluster_score"]
-        )
-    ).sort("count", descending=True)
+        # Filter candidate singletons by cluster score
+        return (
+            peak_df.filter(pl.col("cluster_score") >= 0).select(
+                ["id", "count", "cluster_score"]
+            )
+        ).sort("count", descending=True)
 
 
 def calculate_cluster_score(scan_times: pl.Series) -> float:
