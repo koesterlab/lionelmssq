@@ -20,7 +20,7 @@ from spectrseqtools.masses import (
     build_fragmentation_dict,
 )
 from spectrseqtools.prediction import Predictor
-from spectrseqtools.preprocessing import Preprocessor
+from spectrseqtools.preprocessing.preprocessing import Preprocessor
 from spectrseqtools.traceback_matrix import CompositionInferrer, SequenceInformation
 
 

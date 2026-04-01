@@ -185,7 +185,8 @@ def set_averagine(backbone: str) -> dict:
     """
     # Build dict with elemental compositions from file
     bases = pl.read_csv(
-        importlib.resources.files(__package__) / "assets" / "elemental_composition.tsv",
+        importlib.resources.files(__package__) / "../assets" /
+        "elemental_composition.tsv",
         separator="\t",
     )
     base_compositions = [

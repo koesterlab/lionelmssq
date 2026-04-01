@@ -14,7 +14,7 @@ from spectrseqtools.cli import (
 )
 from spectrseqtools.common import parse_nucleosides
 from spectrseqtools.plotting import plot_prediction
-from spectrseqtools.preprocessing import Preprocessor
+from spectrseqtools.preprocessing.preprocessing import Preprocessor
 
 rt = get_mono()
 
