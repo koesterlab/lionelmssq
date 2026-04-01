@@ -328,6 +328,60 @@ class DeisotopedPeakList:
             )
         return DeisotopedPeakList(peaks=peak_list)
 
+    def to_fragments(self) -> pl.DataFrame:
+        """
+        Aggregate deisotoped peaks into fragments by grouping based on similar mass.
+
+        Build dataframe of deisotoped peaks, group the peaks by their mass
+        (within PPM tolerance), and aggregate them by selecting the maximum
+        observed mass and total observed intensity in each group as a fragment.
+
+        Returns
+        -------
+        peak_df : polars.DataFrame
+            Dataframe containing fragment monoisotopic masses and intensities.
+
+        Notes
+        -----
+        This function is inspired by https://github.com/koesterlab/oliglow,
+        originally implemented by Moshir Harsh (btemoshir@gmail.com).
+
+        """
+        # Build dataframe from peak list
+        peak_df = pl.DataFrame(
+            data=np.array(
+                [
+                    [peak.__dict__[key] for key in COL_TYPES_DEISOTOPED]
+                    for peak in self.peaks
+                ]
+            ),
+            schema=COL_TYPES_DEISOTOPED,
+        )
+
+        # Cluster peaks together when mass is within PPM tolerance of each other
+        peak_df = peak_df.sort("neutral_mass").with_columns(
+            (
+                abs(pl.col("neutral_mass").shift(1) - pl.col("neutral_mass"))
+                / pl.col("neutral_mass").shift(1)
+            )
+            .fill_null(0)
+            .fill_nan(0)
+            .gt(PREPROCESS_TOL)
+            .cum_sum()
+            .alias("ppm_group")
+        )
+
+        # Aggregate by PPM group (assign maximum neutral mass and total intensity to each group)
+        return (
+            peak_df.group_by("ppm_group")
+            .agg(
+                neutral_mass=pl.col("neutral_mass").max(),
+                intensity=pl.col("intensity").sum(),
+                is_precursor_deisotoped=pl.col("is_precursor_deisotoped").max(),
+            )
+            .sort("neutral_mass")
+        )
+
 
 class Deconvoluter:
     """Class to deconvolute raw mass spectrometry data."""
@@ -373,65 +427,4 @@ class Deconvoluter:
             # Deconvolute scan to get list of deisotoped peaks
             peak_list += DeisotopedPeakList.from_scan(scan=scan, params=self.params)
 
-        return self.aggregate_peaks_into_fragments(peak_list.peaks)
-
-    def aggregate_peaks_into_fragments(
-        self, peak_list: List[DeisotopedPeak]
-    ) -> pl.DataFrame:
-        """
-        Aggregate deisotoped peaks into fragments by grouping based on similar mass.
-
-        Build dataframe of deisotoped peaks, group the peaks by their mass
-        (within PPM tolerance), and aggregate them by selecting the maximum
-        observed mass and total observed intensity in each group as a fragment.
-
-        Parameters
-        ----------
-        peak_list : List[DeisotopedPeak]
-            List containing deconvoluted peak data.
-
-        Returns
-        -------
-        peak_df : polars.DataFrame
-            Dataframe containing fragment monoisotopic masses and intensities.
-
-        Notes
-        -----
-        This function is inspired by https://github.com/koesterlab/oliglow,
-        originally implemented by Moshir Harsh (btemoshir@gmail.com).
-
-        """
-        # Build dataframe from peak list
-        peak_df = pl.DataFrame(
-            data=np.array(
-                [
-                    [peak.__dict__[key] for key in COL_TYPES_DEISOTOPED.keys()]
-                    for peak in peak_list
-                ]
-            ),
-            schema=COL_TYPES_DEISOTOPED,
-        )
-
-        # Cluster peaks together when mass is within PPM tolerance of each other
-        peak_df = peak_df.sort("neutral_mass").with_columns(
-            (
-                abs(pl.col("neutral_mass").shift(1) - pl.col("neutral_mass"))
-                / pl.col("neutral_mass").shift(1)
-            )
-            .fill_null(0)
-            .fill_nan(0)
-            .gt(PREPROCESS_TOL)
-            .cum_sum()
-            .alias("ppm_group")
-        )
-
-        # Aggregate by PPM group (assign maximum neutral mass and total intensity to each group)
-        return (
-            peak_df.group_by("ppm_group")
-            .agg(
-                neutral_mass=pl.col("neutral_mass").max(),
-                intensity=pl.col("intensity").sum(),
-                is_precursor_deisotoped=pl.col("is_precursor_deisotoped").max(),
-            )
-            .sort("neutral_mass")
-        )
+        return peak_list.to_fragments()
