@@ -1,6 +1,3 @@
-# -*- coding: utf-8 -*-
-"""Preprocessing of raw mass spectrometry data."""
-
 import numpy as np
 import polars as pl
 import yaml
