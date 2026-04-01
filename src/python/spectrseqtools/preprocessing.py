@@ -1,12 +1,16 @@
+import ms_deisotope as ms_ditp
 import numpy as np
 import polars as pl
 import tqdm
 import yaml
 
-from spectrseqtools.common import set_output_path, initialize_raw_file_iterator
+from clr_loader import get_mono
+
+from spectrseqtools.common import set_output_path
 from spectrseqtools.deconvolution import DeconvolutionParameters, DeisotopedPeakList
 from spectrseqtools.singleton_identification import RawPeakList
 
+rt = get_mono()
 
 MIN_MS1_CHARGE_STATE = 3
 
@@ -172,6 +176,34 @@ class Preprocessor:
             .filter((pl.col("intensity") == pl.col("intensity").max()))["neutral_mass"]
             .to_list()[0]
         )
+
+
+def initialize_raw_file_iterator(
+    file_path: str,
+) -> ms_ditp.data_source.thermo_raw_net.ThermoRawLoader:
+    """
+    Initialize iterator over scans in ThermoFisher RAW file format.
+
+    Parameters
+    ----------
+    file_path : str
+        Path of RAW file from ThermoFisher.
+
+    Returns
+    -------
+    raw_file : ms_deisotope.data_source.thermo_raw_net.ThermoRawLoader
+        Iterator over scans from RAW file.
+
+    """
+    # Read data from file
+    raw_file = ms_ditp.data_source.thermo_raw_net.ThermoRawLoader(
+        file_path, _load_metadata=True
+    )
+
+    # Initialize an iterator while ungrouping MS1 from MS2 scans
+    raw_file.make_iterator(grouped=False)
+
+    return raw_file
 
 
 def determine_intensity_percentiles(
