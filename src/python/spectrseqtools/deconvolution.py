@@ -28,19 +28,6 @@ COL_TYPES_DEISOTOPED = {
 }
 
 
-@dataclass
-class DeisotopedPeak:
-    """Class for deisotoped peaks."""
-
-    scan_id: int
-    scan_time: float
-    peak_idx: int
-    intensity: float
-    neutral_mass: float
-    is_precursor_deisotoped: bool
-    mz: float
-
-
 # METHOD: To deconvolute/deisotope (which we use interchangeable because both
 # happen at the same time) a MS2 scan, we determine all its peaks with
 # the ms_deisotope package. We then identify the precursor peak (if it exists)
@@ -242,6 +229,32 @@ def set_averagine(backbone: str) -> dict:
 
 
 @dataclass
+class DeisotopedPeak:
+    """Class for deisotoped peaks."""
+
+    scan_id: int
+    scan_time: float
+    peak_idx: int
+    intensity: float
+    neutral_mass: float
+    is_precursor_deisotoped: bool
+    mz: float
+
+    @classmethod
+    def default(cls) -> Self:
+        """Return default peak."""
+        return DeisotopedPeak(
+            scan_id=-1,
+            scan_time=0.0,
+            peak_idx=-1,
+            intensity=0.0,
+            neutral_mass=0.0,
+            is_precursor_deisotoped=False,
+            mz=0.0,
+        )
+
+
+@dataclass
 class DeisotopedPeakList:
     """Class for list of deisotoped peaks from MS spectra."""
 
@@ -303,7 +316,7 @@ class DeisotopedPeakList:
         max_mz = scan.isolation_window.target + (1 * scan.isolation_window.upper)
 
         # Iterate through the deisotoped scan
-        peak_list = [0] * len(peak_set)
+        peak_list = [DeisotopedPeak.default()] * len(peak_set)
         for idx in range(len(peak_set)):
             mz = peak_set.peaks[idx].mz
             is_precursor = min_mz <= mz <= max_mz
