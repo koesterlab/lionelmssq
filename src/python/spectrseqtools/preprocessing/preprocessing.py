@@ -3,11 +3,13 @@ import numpy as np
 import polars as pl
 import tqdm
 import yaml
-
 from clr_loader import get_mono
 
 from spectrseqtools.common import set_output_path
-from spectrseqtools.preprocessing.deconvolution import DeconvolutionParameters, DeisotopedPeakList
+from spectrseqtools.preprocessing.deconvolution import (
+    DeconvolutionParameters,
+    DeisotopedPeakList,
+)
 from spectrseqtools.preprocessing.singleton_identification import RawPeakList
 
 rt = get_mono()

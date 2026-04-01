@@ -1,11 +1,11 @@
 import importlib.resources
+from dataclasses import dataclass
+from typing import List, Self, Tuple
+
 import ms_deisotope as ms_ditp
 import numpy as np
 import polars as pl
-
 from clr_loader import get_mono
-from dataclasses import dataclass
-from typing import List, Self, Tuple
 
 rt = get_mono()
 

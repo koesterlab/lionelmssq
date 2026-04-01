@@ -1,11 +1,12 @@
+from dataclasses import dataclass
+from typing import List, Self
+
 import ms_deisotope as ms_ditp
 import numpy as np
 import polars as pl
 from clr_loader import get_mono
-from dataclasses import dataclass
 from dbscan1d.core import DBSCAN1D
 from sklearn.metrics import silhouette_score
-from typing import List, Self
 
 from spectrseqtools.masses import NUCLEOTIDE_DF
 
