@@ -1,3 +1,6 @@
+# -*- coding: utf-8 -*-
+"""Deconvolution of raw mass spectrometry data."""
+
 import importlib.resources
 from dataclasses import dataclass
 from typing import List, Self, Tuple
@@ -36,7 +39,9 @@ COL_TYPES_DEISOTOPED = {
 
 
 class DeconvolutionParameters:
-    def __init__(self, params: dict):
+    """Class for deconvolution parameters used by ms_deisotope."""
+
+    def __init__(self, params: dict) -> None:
         # Set possibly scan-dependent parameters (if given)
         self.charge_range = params.pop("charge_range", None)
         self.minimum_intensity = params.pop("minimum_intensity", None)
@@ -174,7 +179,7 @@ def set_averagine(backbone: str) -> dict:
 
     Returns
     -------
-    averagine_composition : dict
+    average_composition : dict
         Dictionary containing average elemental composition.
 
     Notes
@@ -202,7 +207,7 @@ def set_averagine(backbone: str) -> dict:
     average_composition = {}
     for element in base_compositions[0].keys():
         average_composition[element] = sum(
-            [float(base[element]) for base in base_compositions]
+            float(base[element]) for base in base_compositions
         ) / len(base_compositions)
 
     # Add backbone elements (if needed)
@@ -258,7 +263,7 @@ class DeisotopedPeakList:
 
     peaks: List[DeisotopedPeak]
 
-    def __add__(self, other):
+    def __add__(self, other) -> Self:
         """Add another peak list."""
         return DeisotopedPeakList(self.peaks + other.peaks)
 
@@ -283,8 +288,8 @@ class DeisotopedPeakList:
 
         Returns
         -------
-        peak_list : List[DeisotopedPeak]
-            List containing deconvoluted peak data.
+        DeisotopedPeakList
+            Object containing deconvoluted peak data.
 
         Notes
         -----
@@ -350,7 +355,7 @@ class DeisotopedPeakList:
         Returns
         -------
         peak_df : polars.DataFrame
-            Dataframe containing fragment monoisotopic masses and intensities.
+            Dataframe containing fragment information.
 
         Notes
         -----

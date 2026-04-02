@@ -1,3 +1,6 @@
+# -*- coding: utf-8 -*-
+"""Preprocessing of raw mass spectrometry data."""
+
 import ms_deisotope as ms_ditp
 import numpy as np
 import polars as pl
@@ -33,11 +36,11 @@ class Preprocessor:
 
     def preprocess(self) -> None:
         """
-        Deconvolute MS2 scans and identify singletons.
+        Deconvolute MS2 scans, identify singletons, and update metadata.
 
         Main pipeline for deconvoluting MS2 scans and generating the metafile
         required for a SpectrSeqTools prediction as well as a list of candidate
-        nucleotides from singletons (if desired).
+        nucleotides from singletons.
 
         """
         print("RAW file found. Preprocessing raw data...")
@@ -82,7 +85,7 @@ class Preprocessor:
         Returns
         -------
         polars.DataFrame
-            Dataframe containing fragment monoisotopic masses and intensities.
+            Dataframe containing fragment information.
 
         """
         # Load deconvolution parameter based on parameter dict
@@ -119,7 +122,7 @@ class Preprocessor:
         Returns
         -------
         polars.DataFrame
-            Dataframe containing singleton candidates obtained by matching m/z data.
+            Dataframe containing singleton candidates.
         """
         # Initialize iterator for RAW file
         raw_file_read = initialize_raw_file_iterator(file_path=str(self.input_path))
@@ -208,9 +211,7 @@ def initialize_raw_file_iterator(
     return raw_file
 
 
-def determine_intensity_percentiles(
-    fragments: pl.DataFrame,
-) -> pl.DataFrame:
+def determine_intensity_percentiles(fragments: pl.DataFrame) -> pl.DataFrame:
     """
     Determine percentile values for intensities in given dataframe.
 

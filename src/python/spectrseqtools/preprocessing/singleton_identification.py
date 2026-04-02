@@ -1,3 +1,6 @@
+# -*- coding: utf-8 -*-
+"""Singleton selection from raw mass spectrometry data."""
+
 from dataclasses import dataclass
 from typing import List, Self
 
@@ -67,8 +70,8 @@ class RawPeakList:
 
         Returns
         -------
-        peak_list : List[RawPeak]
-            List containing raw peak data.
+        RawPeakList
+            Object containing raw peak data.
 
         """
         # Convert scan to centroid data
@@ -109,7 +112,7 @@ class RawPeakList:
         Returns
         -------
         peak_df : polars.DataFrame
-            Dataframe containing singleton candidates (name, score, and count).
+            Dataframe containing singleton candidates.
 
         """
         # Build dataframe from peak list
