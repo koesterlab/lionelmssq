@@ -1,14 +1,11 @@
-import ms_deisotope as ms_ditp
 import re
 
-from clr_loader import get_mono
 from pathlib import Path
 from typing import List, Tuple
 
 from spectrseqtools.composition_inference import infer_compositions_with_matrix
 from spectrseqtools.traceback_matrix import CompositionInferrer
 
-rt = get_mono()
 
 ERROR_METHOD = "l1_norm"
 _NUCLEOSIDE_RE = re.compile(r"\d*[ACGU]")
@@ -72,31 +69,3 @@ def calculate_compositions(
     # Return all found compositions
     composition_list = list(composition_list)
     return [Composition(*composition_list[i]) for i in range(len(composition_list))]
-
-
-def initialize_raw_file_iterator(
-    file_path: str,
-) -> ms_ditp.data_source.thermo_raw_net.ThermoRawLoader:
-    """
-    Initialize iterator over scans in ThermoFisher RAW file format.
-
-    Parameters
-    ----------
-    file_path : str
-        Path of RAW file from ThermoFisher.
-
-    Returns
-    -------
-    raw_file : ms_deisotope.data_source.thermo_raw_net.ThermoRawLoader
-        Iterator over scans from RAW file.
-
-    """
-    # Read data from file
-    raw_file = ms_ditp.data_source.thermo_raw_net.ThermoRawLoader(
-        file_path, _load_metadata=True
-    )
-
-    # Initialize an iterator while ungrouping MS1 from MS2 scans
-    raw_file.make_iterator(grouped=False)
-
-    return raw_file

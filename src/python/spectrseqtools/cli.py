@@ -20,7 +20,7 @@ from spectrseqtools.masses import (
     build_fragmentation_dict,
 )
 from spectrseqtools.prediction import Predictor
-from spectrseqtools.preprocessing import preprocess
+from spectrseqtools.preprocessing.preprocessing import Preprocessor
 from spectrseqtools.traceback_matrix import CompositionInferrer, SequenceInformation
 
 
@@ -118,7 +118,7 @@ def main():
 
     # Preprocess raw data
     if options.preprocessing is not None:
-        preprocess(options=options.preprocessing)
+        Preprocessor(options=options.preprocessing).preprocess()
 
     # Predict sequence
     if options.prediction is not None:
