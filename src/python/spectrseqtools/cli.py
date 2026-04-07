@@ -20,7 +20,7 @@ from spectrseqtools.masses import (
     build_fragmentation_dict,
 )
 from spectrseqtools.prediction import Predictor
-from spectrseqtools.preprocessing.preprocessing import Preprocessor
+from spectrseqtools.preprocessing.preprocessing import AveragineBackbone, Preprocessor
 from spectrseqtools.traceback_matrix import CompositionInferrer, SequenceInformation
 
 
@@ -64,8 +64,8 @@ class PreprocessingOptions(ddargparse.OptionsBase):
             "help": "Error tolerance for envelopes during fitting (ms_deisotope package)."
         },
     )
-    averagine_backbone: str = field(
-        default="phosphate",
+    averagine_backbone: AveragineBackbone = field(
+        default=AveragineBackbone.PHOSPHATE,
         metadata={
             "help": "Backbone considered in Averagine model (ms_deisotope package)."
         },

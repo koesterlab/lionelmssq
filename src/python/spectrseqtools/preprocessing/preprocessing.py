@@ -2,6 +2,7 @@
 """Preprocessing of raw mass spectrometry data."""
 
 import importlib.resources
+from enum import Enum
 
 import ms_deisotope as ms_ditp
 import numpy as np
@@ -227,13 +228,21 @@ def initialize_raw_file_iterator(
     return raw_file
 
 
-def set_averagine(backbone: str) -> dict:
+class AveragineBackbone(Enum):
+    """Enum of backbone types for Averagine model used in deisotoping."""
+
+    NONE = "no_backbone"
+    PHOSPHATE = "phosphate"
+    THIOPHOSPHATE = "thiophosphate"
+
+
+def set_averagine(backbone: AveragineBackbone) -> dict:
     """
     Calculate the average elemental composition of RNA.
 
     Parameters
     ----------
-    backbone : ["no_backbone", "phosphate", "thiophosphate"]
+    backbone : AveragineBackbone
         Backbone considered for the composition.
 
     Returns
@@ -272,13 +281,13 @@ def set_averagine(backbone: str) -> dict:
 
     # Add backbone elements (if needed)
     match backbone:
-        case "no_backbone":
+        case AveragineBackbone.NONE:
             pass
-        case "phosphate":
+        case AveragineBackbone.PHOSPHATE:
             # Add 1 phosphorus and 2 oxygen for the phosphate group
             average_composition["O"] += 2
             average_composition["P"] += 1
-        case "thiophosphate":
+        case AveragineBackbone.THIOPHOSPHATE:
             # Add 1 phosphorus, 1 sulfur, and 1 oxygen for the phosphate group
             average_composition["O"] += 1
             average_composition["S"] += 1
