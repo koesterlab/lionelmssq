@@ -12,6 +12,7 @@ from spectrseqtools.common import set_output_path
 from spectrseqtools.preprocessing.deconvolution import (
     DeconvolutionParameters,
     DeisotopedPeakList,
+    set_averagine,
 )
 from spectrseqtools.preprocessing.singleton_identification import RawPeakList
 
@@ -24,7 +25,6 @@ class Preprocessor:
     """Class for preprocessing of raw MS data."""
 
     def __init__(self, options) -> None:
-        self.deconvolution_params = {}
         self.input_path = options.input
         self.output_dir, self.output_id = set_output_path(
             input_path=options.input, output_dir=options.output_dir
@@ -33,6 +33,22 @@ class Preprocessor:
         with open(options.meta, "r", encoding="utf-8") as f:
             self.meta_params = yaml.safe_load(f)
         self.cutoff_percentile = options.cutoff_percentile
+
+        self.deconvolution_params = DeconvolutionParameters(
+            charge_range=options.charge_range,
+            minimum_intensity=options.min_intensity,
+            scorer=ms_ditp.MSDeconVFitter(
+                minimum_score=options.envelope_min_score,
+                mass_error_tolerance=options.envelope_error_tol,
+            ),
+            averagine=ms_ditp.Averagine(
+                base_composition=set_averagine(backbone=options.averagine_backbone)
+            ),
+            max_missed_peaks=options.max_missed_peaks,
+            scale_method=options.scale_method,
+            error_tol=options.peak_error_tol,
+            truncate_after=options.truncate_after,
+        )
 
     def preprocess(self) -> None:
         """
@@ -88,9 +104,6 @@ class Preprocessor:
             Dataframe containing fragment information.
 
         """
-        # Load deconvolution parameter based on parameter dict
-        params = DeconvolutionParameters(self.deconvolution_params)
-
         # Initialize iterator for RAW file
         raw_file_read = initialize_raw_file_iterator(file_path=str(self.input_path))
 
@@ -111,7 +124,9 @@ class Preprocessor:
                 continue
 
             # Deconvolute scan to get list of deisotoped peaks
-            peak_list += DeisotopedPeakList.from_scan(scan=scan, params=params)
+            peak_list += DeisotopedPeakList.from_scan(
+                scan=scan, params=self.deconvolution_params
+            )
 
         return peak_list.to_fragments()
 

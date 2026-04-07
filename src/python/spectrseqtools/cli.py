@@ -5,7 +5,7 @@ import ddargparse
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import List
+from typing import List, Tuple
 
 from spectrseqtools.common import set_output_path
 from spectrseqtools.fragment_classification import classify_fragments
@@ -41,6 +41,57 @@ class PreprocessingOptions(ddargparse.OptionsBase):
         metadata={
             "help": "Output directory (default: input directory)",
         }
+    )
+    charge_range: Tuple[int, int] | None = field(
+        metadata={
+            "help": "Charge range considered for deconvolution (ms_deisotope package)."
+        }
+    )
+    min_intensity: float | None = field(
+        metadata={
+            "help": "Minimum intensity required for peak consideration (ms_deisotope package)."
+        }
+    )
+    envelope_min_score: float = field(
+        default=150.0,
+        metadata={
+            "help": "Minimum accepted score during envelope fitting (ms_deisotope package)."
+        },
+    )
+    envelope_error_tol: float = field(
+        default=0.02,
+        metadata={
+            "help": "Error tolerance for envelopes during fitting (ms_deisotope package)."
+        },
+    )
+    averagine_backbone: str = field(
+        default="phosphate",
+        metadata={
+            "help": "Backbone considered in Averagine model (ms_deisotope package)."
+        },
+    )
+    # TODO: Change max_missed_peaks to 1 (to match default of ms_deisotope)
+    max_missed_peaks: int = field(
+        default=0,
+        metadata={
+            "help": "Maximum number of missed peaks tolerated in envelope fitting (ms_deisotope package)."
+        },
+    )
+    scale_method: str = field(
+        default="sum",
+        metadata={"help": "Scale method for intensity values (ms_deisotope package)."},
+    )
+    peak_error_tol: float = field(
+        default=2e-5,
+        metadata={
+            "help": "Error tolerance for each individual peak (ms_deisotope package)."
+        },
+    )
+    truncate_after: float = field(
+        default=0.9,
+        metadata={
+            "help": "Percentage of included isotopic patterns (ms_deisotope package)."
+        },
     )
     cutoff_percentile: int = field(
         default=75, metadata={"help": "Intensity percentile used as cutoff"}

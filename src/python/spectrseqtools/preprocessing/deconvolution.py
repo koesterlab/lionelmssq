@@ -38,47 +38,18 @@ COL_TYPES_DEISOTOPED = {
 # (2) greater than its isotopic shift times a given factor (here: 10).
 
 
+@dataclass
 class DeconvolutionParameters:
     """Class for deconvolution parameters used by ms_deisotope."""
 
-    def __init__(self, params: dict) -> None:
-        # Set possibly scan-dependent parameters (if given)
-        self.charge_range = params.pop("charge_range", None)
-        self.minimum_intensity = params.pop("minimum_intensity", None)
-
-        # TODO: Take care of "min_score", there should be way to estimate it
-        # Select minimum accepted score between theoretical and experimental spectra
-        min_score = params.pop("min_score", 150.0)
-
-        # Select error tolerance between theoretical and experimental m/z;
-        # perhaps this should be < 1./max(charge) for a reasonable value
-        mass_error_tol = params.pop("mass_error_tol", 0.02)
-
-        # Calculate goodness-of-fit criterion for envelope scoring
-        self.scorer = params.pop(
-            "scorer", ms_ditp.MSDeconVFitter(min_score, mass_error_tol)
-        )
-
-        # Select backbone for averagine
-        backbone = params.pop("averagine_backbone", "phosphate")
-
-        # Set average composition of considered bases
-        self.averagine = params.pop(
-            "averagine", ms_ditp.Averagine(set_averagine(backbone=backbone))
-        )
-
-        # Set maximum number of tolerated missed peaks (keep small, i.e. 0 or 1)
-        self.max_missed_peaks = params.pop("max_missed_peaks", 0)
-
-        # Set name of method to scale intensity values
-        self.scale_method = params.pop("scale_method", "sum")
-
-        # Set error tolerance for matching experimental and theoretical peaks
-        self.error_tol = params.pop("error_tol", 2e-5)
-
-        # Set percentage of included isotopic pattern (very sensitive,
-        # cf. discussion in ms_deisotope docs)
-        self.truncate_after = params.pop("truncate_after", 0.9)
+    charge_range: Tuple[int, int]
+    minimum_intensity: float
+    scorer: ms_ditp.MSDeconVFitter
+    averagine: ms_ditp.Averagine
+    max_missed_peaks: int
+    scale_method: str
+    error_tol: float
+    truncate_after: float
 
     def to_scan_dependent_dict(self, scan: ms_ditp.data_source.Scan) -> dict:
         """Return dictionary of deconvolution parameters for the given scan.
