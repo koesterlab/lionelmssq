@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """Preprocessing of raw mass spectrometry data."""
 
+import importlib.resources
+
 import ms_deisotope as ms_ditp
 import numpy as np
 import polars as pl
@@ -12,7 +14,6 @@ from spectrseqtools.common import set_output_path
 from spectrseqtools.preprocessing.deconvolution import (
     DeconvolutionParameters,
     DeisotopedPeakList,
-    set_averagine,
 )
 from spectrseqtools.preprocessing.singleton_identification import RawPeakList
 
@@ -224,6 +225,70 @@ def initialize_raw_file_iterator(
     raw_file.make_iterator(grouped=False)
 
     return raw_file
+
+
+def set_averagine(backbone: str) -> dict:
+    """
+    Calculate the average elemental composition of RNA.
+
+    Parameters
+    ----------
+    backbone : ["no_backbone", "phosphate", "thiophosphate"]
+        Backbone considered for the composition.
+
+    Returns
+    -------
+    average_composition : dict
+        Dictionary containing average elemental composition.
+
+    Notes
+    -----
+    This function is inspired by https://github.com/koesterlab/oliglow,
+    originally implemented by Moshir Harsh (btemoshir@gmail.com).
+
+    """
+    # Build dict with elemental compositions from file
+    bases = pl.read_csv(
+        importlib.resources.files(__package__)
+        / "../assets"
+        / "elemental_composition.tsv",
+        separator="\t",
+    )
+    base_compositions = [
+        {
+            col: row[bases.get_column_index(col)]
+            for col in bases.columns
+            if col != "base"
+        }
+        for row in bases.iter_rows()
+    ]
+
+    # Calculate average elemental composition
+    average_composition = {}
+    for element in base_compositions[0].keys():
+        average_composition[element] = sum(
+            float(base[element]) for base in base_compositions
+        ) / len(base_compositions)
+
+    # Add backbone elements (if needed)
+    match backbone:
+        case "no_backbone":
+            pass
+        case "phosphate":
+            # Add 1 phosphorus and 2 oxygen for the phosphate group
+            average_composition["O"] += 2
+            average_composition["P"] += 1
+        case "thiophosphate":
+            # Add 1 phosphorus, 1 sulfur, and 1 oxygen for the phosphate group
+            average_composition["O"] += 1
+            average_composition["S"] += 1
+            average_composition["P"] += 1
+        case _:
+            raise NotImplementedError(
+                f"Support for '{backbone}' is currently not given."
+            )
+
+    return average_composition
 
 
 def determine_intensity_percentiles(fragments: pl.DataFrame) -> pl.DataFrame:

@@ -1,7 +1,7 @@
 import pytest
 from clr_loader import get_mono
 
-from spectrseqtools.preprocessing.deconvolution import set_averagine
+from spectrseqtools.preprocessing.preprocessing import set_averagine
 
 rt = get_mono()
 
