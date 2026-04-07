@@ -9,7 +9,7 @@ from typing import List
 from spectrseqtools.preprocessing import determine_intensity_percentiles
 from spectrseqtools.masses import NUCLEOTIDE_DF, _COLS
 from spectrseqtools.common import initialize_raw_file_iterator
-from spectrseqtools.deconvolution import select_min_intensity, PREPROCESS_TOL, DeconvolutionParameters, deconvolute_scan, aggregate_peaks_into_fragments
+from spectrseqtools.deconvolution import select_min_intensity, PREPROCESS_TOL, DeconvolutionParameters, aggregate_peaks_into_fragments, deconvolute_scan
 from spectrseqtools.singleton_identification import RawPeak, COL_TYPES_RAW, calculate_cluster_score, identify_singletons, process_scan
 from collections import defaultdict
 
@@ -33,6 +33,7 @@ class DeisotopedPrecursorPeak:
     precursor_neutral_mass: float
     precursor_intensity: float
     product_scan: ms_ditp.data_source.scan.scan.Scan
+    max_charge_state: int
 
 COL_TYPES_AVERAGED_PRECURSORS = {
     "precursor_neutral_mass": pl.Float64,
@@ -200,7 +201,8 @@ def deconvolute_averaged_precursors(new_precursor, final_priority_peaks, priorit
                 max_average_scan_time=np.nan,
                 precursor_neutral_mass=precursor_neutral_mass, 
                 precursor_intensity= precursor_intensity,
-                product_scan = final_products[i]
+                product_scan = final_products[i],
+                max_charge_state = 0
                 ))
     if len(ungrouped_precursors)>0:
         df_averaged_precursors = pl.DataFrame(
@@ -278,7 +280,8 @@ def averaged_precursors_products(raw_file_read, decon_params, min_scan_time, max
                     max_average_scan_time=max_average_scan_time,
                     precursor_neutral_mass=df_filter["precursor_neutral_mass"][precursor_max_idx], 
                     precursor_intensity= df_filter["precursor_intensity"][precursor_max_idx],
-                    product_scan = avg_product_scans
+                    product_scan = avg_product_scans,
+                    max_charge_state = max(priority_charges)
                     ))
         
     return averaged_precursors
@@ -312,18 +315,21 @@ def average_and_deconvolute_product_scan(df_filter, averaged_precursors, ms2_dec
         
     grp_product_scans = []
     gidx = set()
+    grp_charge_states = []
 
     for idx in grp_product_idx:
         for scan in averaged_precursors[idx].product_scan:
             if scan.index not in gidx:
                 gidx.add(scan.index)
                 grp_product_scans.append(scan)
+                grp_charge_states.append(averaged_precursors[idx].max_charge_state)
 
     if len(grp_product_scans)>1:
         average_product_scan = grp_product_scans[0].average_with(grp_product_scans[1:])
     else:
         average_product_scan = grp_product_scans[0]
 
+    ms2_decon_params.charge_range = (-1, -max(grp_charge_states))
     decon_product_peaks = deconvolute_scan(average_product_scan, params = ms2_decon_params)
 
     return average_product_scan, decon_product_peaks
@@ -472,7 +478,8 @@ def interpret_alignment_results(df_alignment, target_sequence):
                             "target_position": b, 
                             "predicted_base": targ_base, 
                             "target_base": targ_base, 
-                            "status": "match"})
+                            "status": "match",
+                            "intact_mass": np.nan})
 
     df_expanded_alignment = pl.DataFrame(match_rows)
 
@@ -558,7 +565,6 @@ def post_processing_alignment(prediction_vals, sample_name, target_sequence, ali
 
     df_alignment = align_prediction_results(prediction_vals, target_sequence, alignment_score_threshold)
     df_expanded_alignment = interpret_alignment_results(df_alignment, target_sequence)
-
     chart = plot_interpreted_alignment(df_expanded_alignment)
     chart.show()
     if save_file:
