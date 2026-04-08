@@ -3,11 +3,11 @@ import polars as pl
 import yaml
 import ddargparse
 from dataclasses import dataclass, field
-from enum import Enum
 from pathlib import Path
 from typing import List, Tuple
 
 from spectrseqtools.common import set_output_path
+from spectrseqtools.enums import AveragineBackbone, SolverType
 from spectrseqtools.masses import (
     COMPRESSION_RATE,
     DEFAULT_INTENSITY_CUTOFF,
@@ -24,12 +24,7 @@ from spectrseqtools.prediction.traceback_matrix import (
     CompositionInferrer,
     SequenceInformation,
 )
-from spectrseqtools.preprocessing.preprocessing import AveragineBackbone, Preprocessor
-
-
-class SolverType(Enum):
-    CBC = "cbc"
-    GUROBI = "gurobi"
+from spectrseqtools.preprocessing.preprocessing import Preprocessor
 
 
 @dataclass

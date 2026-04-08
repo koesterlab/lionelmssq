@@ -2,7 +2,6 @@
 """Preprocessing of raw mass spectrometry data."""
 
 import importlib.resources
-from enum import Enum
 
 import ms_deisotope as ms_ditp
 import numpy as np
@@ -12,6 +11,7 @@ import yaml
 from clr_loader import get_mono
 
 from spectrseqtools.common import set_output_path
+from spectrseqtools.enums import AveragineBackbone
 from spectrseqtools.masses import initialize_nucleotide_df
 from spectrseqtools.preprocessing.deconvolution import (
     DeconvolutionParameters,
@@ -232,14 +232,6 @@ def initialize_raw_file_iterator(
     raw_file.make_iterator(grouped=False)
 
     return raw_file
-
-
-class AveragineBackbone(Enum):
-    """Enum of backbone types for Averagine model used in deisotoping."""
-
-    NONE = "no_backbone"
-    PHOSPHATE = "phosphate"
-    THIOPHOSPHATE = "thiophosphate"
 
 
 def set_averagine(backbone: AveragineBackbone) -> dict:
