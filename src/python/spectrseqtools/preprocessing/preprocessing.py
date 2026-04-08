@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 """Preprocessing of raw mass spectrometry data."""
 
+import importlib.resources
+from enum import Enum
+
 import ms_deisotope as ms_ditp
 import numpy as np
 import polars as pl
@@ -9,22 +12,30 @@ import yaml
 from clr_loader import get_mono
 
 from spectrseqtools.common import set_output_path
+from spectrseqtools.masses import initialize_nucleotide_df
 from spectrseqtools.preprocessing.deconvolution import (
     DeconvolutionParameters,
     DeisotopedPeakList,
 )
-from spectrseqtools.preprocessing.singleton_identification import RawPeakList
+from spectrseqtools.preprocessing.singleton_identification import (
+    RawPeakList,
+    SingletonBoundaries,
+)
 
 rt = get_mono()
-
-MIN_MS1_CHARGE_STATE = 3
 
 
 class Preprocessor:
     """Class for preprocessing of raw MS data."""
 
     def __init__(self, options) -> None:
-        self.deconvolution_params = {}
+        self.alphabet = initialize_nucleotide_df(input_path=options.alphabet)
+        self.tolerance = options.tolerance
+        self.singleton_boundaries = SingletonBoundaries.from_alphabet(
+            alphabet=self.alphabet,
+            boundary_factor=options.boundary_factor,
+            tolerance=self.tolerance,
+        )
         self.input_path = options.input
         self.output_dir, self.output_id = set_output_path(
             input_path=options.input, output_dir=options.output_dir
@@ -33,6 +44,24 @@ class Preprocessor:
         with open(options.meta, "r", encoding="utf-8") as f:
             self.meta_params = yaml.safe_load(f)
         self.cutoff_percentile = options.cutoff_percentile
+
+        self.deconvolution_params = DeconvolutionParameters(
+            min_precursor_charge=options.min_precursor_charge,
+            isotopic_shift_factor=options.isotopic_shift_factor,
+            charge_range=options.charge_range,
+            minimum_intensity=options.min_intensity,
+            scorer=ms_ditp.MSDeconVFitter(
+                minimum_score=options.envelope_min_score,
+                mass_error_tolerance=options.envelope_error_tol,
+            ),
+            averagine=ms_ditp.Averagine(
+                base_composition=set_averagine(backbone=options.averagine_backbone)
+            ),
+            max_missed_peaks=options.max_missed_peaks,
+            scale_method=options.scale_method,
+            error_tol=options.peak_error_tol,
+            truncate_after=options.truncate_after,
+        )
 
     def preprocess(self) -> None:
         """
@@ -88,9 +117,6 @@ class Preprocessor:
             Dataframe containing fragment information.
 
         """
-        # Load deconvolution parameter based on parameter dict
-        params = DeconvolutionParameters(self.deconvolution_params)
-
         # Initialize iterator for RAW file
         raw_file_read = initialize_raw_file_iterator(file_path=str(self.input_path))
 
@@ -103,17 +129,12 @@ class Preprocessor:
             if scan.ms_level != 2:
                 continue
 
-            # Skip scan if the precursor charge is lower than MIN_MS1_CHARGE_STATE
-            if (
-                not isinstance(scan.precursor_information.charge, int)
-                or scan.precursor_information.charge < MIN_MS1_CHARGE_STATE
-            ):
-                continue
-
             # Deconvolute scan to get list of deisotoped peaks
-            peak_list += DeisotopedPeakList.from_scan(scan=scan, params=params)
+            peak_list += DeisotopedPeakList.from_scan(
+                scan=scan, params=self.deconvolution_params
+            )
 
-        return peak_list.to_fragments()
+        return peak_list.to_fragments(tolerance=self.tolerance)
 
     def identify_singletons(self) -> pl.DataFrame:
         """
@@ -139,9 +160,11 @@ class Preprocessor:
                 continue
 
             # Extract raw peaks from scan (without deisotoping)
-            peak_list += RawPeakList.from_scan(scan)
+            peak_list += RawPeakList.from_scan(
+                scan=scan, boundaries=self.singleton_boundaries
+            )
 
-        return peak_list.to_singletons()
+        return peak_list.to_singletons(tolerance=self.tolerance, alphabet=self.alphabet)
 
     def select_intact_mass(self, fragments: pl.DataFrame) -> float:
         """
@@ -209,6 +232,78 @@ def initialize_raw_file_iterator(
     raw_file.make_iterator(grouped=False)
 
     return raw_file
+
+
+class AveragineBackbone(Enum):
+    """Enum of backbone types for Averagine model used in deisotoping."""
+
+    NONE = "no_backbone"
+    PHOSPHATE = "phosphate"
+    THIOPHOSPHATE = "thiophosphate"
+
+
+def set_averagine(backbone: AveragineBackbone) -> dict:
+    """
+    Calculate the average elemental composition of RNA.
+
+    Parameters
+    ----------
+    backbone : AveragineBackbone
+        Backbone considered for the composition.
+
+    Returns
+    -------
+    average_composition : dict
+        Dictionary containing average elemental composition.
+
+    Notes
+    -----
+    This function is inspired by https://github.com/koesterlab/oliglow,
+    originally implemented by Moshir Harsh (btemoshir@gmail.com).
+
+    """
+    # Build dict with elemental compositions from file
+    bases = pl.read_csv(
+        importlib.resources.files(__package__)
+        / "../assets"
+        / "elemental_composition.tsv",
+        separator="\t",
+    )
+    base_compositions = [
+        {
+            col: row[bases.get_column_index(col)]
+            for col in bases.columns
+            if col != "base"
+        }
+        for row in bases.iter_rows()
+    ]
+
+    # Calculate average elemental composition
+    average_composition = {}
+    for element in base_compositions[0].keys():
+        average_composition[element] = sum(
+            float(base[element]) for base in base_compositions
+        ) / len(base_compositions)
+
+    # Add backbone elements (if needed)
+    match backbone:
+        case AveragineBackbone.NONE:
+            pass
+        case AveragineBackbone.PHOSPHATE:
+            # Add 1 phosphorus and 2 oxygen for the phosphate group
+            average_composition["O"] += 2
+            average_composition["P"] += 1
+        case AveragineBackbone.THIOPHOSPHATE:
+            # Add 1 phosphorus, 1 sulfur, and 1 oxygen for the phosphate group
+            average_composition["O"] += 1
+            average_composition["S"] += 1
+            average_composition["P"] += 1
+        case _:
+            raise NotImplementedError(
+                f"Support for '{backbone}' is currently not given."
+            )
+
+    return average_composition
 
 
 def determine_intensity_percentiles(fragments: pl.DataFrame) -> pl.DataFrame:

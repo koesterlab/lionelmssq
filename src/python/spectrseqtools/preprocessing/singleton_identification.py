@@ -11,18 +11,9 @@ from clr_loader import get_mono
 from dbscan1d.core import DBSCAN1D
 from sklearn.metrics import silhouette_score
 
-from spectrseqtools.masses import NUCLEOTIDE_DF
-
 rt = get_mono()
 
-PREPROCESS_TOL = 10e-6
-THEORETICAL_BOUNDARY_FACTOR = 2
-MIN_MZ = NUCLEOTIDE_DF["singleton_mz"].min() * (
-    1 - THEORETICAL_BOUNDARY_FACTOR * PREPROCESS_TOL
-)
-MAX_MZ = NUCLEOTIDE_DF["singleton_mz"].max() * (
-    1 + THEORETICAL_BOUNDARY_FACTOR * PREPROCESS_TOL
-)
+
 COL_TYPES_RAW = {
     "scan_id": pl.Int32,
     "scan_time": pl.Float64,
@@ -30,6 +21,24 @@ COL_TYPES_RAW = {
     "intensity": pl.Float64,
     "mz": pl.Float64,
 }
+
+
+@dataclass
+class SingletonBoundaries:
+    """Class for theoretical m/z boundaries for singleton identification."""
+
+    min_mz: float
+    max_mz: float
+
+    @classmethod
+    def from_alphabet(
+        cls, alphabet: pl.DataFrame, tolerance: float, boundary_factor: float
+    ) -> Self:
+        """Set singleton boundaries based on nucleotide alphabet."""
+        return SingletonBoundaries(
+            min_mz=alphabet["singleton_mz"].min() * (1 - boundary_factor * tolerance),
+            max_mz=alphabet["singleton_mz"].max() * (1 + boundary_factor * tolerance),
+        )
 
 
 @dataclass
@@ -59,7 +68,9 @@ class RawPeakList:
         return RawPeakList(peaks=[])
 
     @classmethod
-    def from_scan(cls, scan: ms_ditp.data_source.Scan) -> Self:
+    def from_scan(
+        cls, scan: ms_ditp.data_source.Scan, boundaries: SingletonBoundaries
+    ) -> Self:
         """
         Extract raw peaks from MS2 scan.
 
@@ -67,6 +78,8 @@ class RawPeakList:
         ----------
         scan : ms_deisotope.data_source.Scan
             ThermoFisher scan.
+        boundaries : SingletonBoundaries
+            Theoretical boundaries on singleton m/z imposed by alphabet.
 
         Returns
         -------
@@ -90,7 +103,7 @@ class RawPeakList:
             mz = scan.peaks[idx].mz
 
             # Only consider peaks with mass within theoretical bounds
-            if MIN_MZ <= mz <= MAX_MZ:
+            if boundaries.min_mz <= mz <= boundaries.max_mz:
                 peak_list.append(
                     RawPeak(
                         scan_id=scan_id,
@@ -102,12 +115,19 @@ class RawPeakList:
                 )
         return RawPeakList(peaks=peak_list)
 
-    def to_singletons(self) -> pl.DataFrame:
+    def to_singletons(self, alphabet: pl.DataFrame, tolerance: float) -> pl.DataFrame:
         """
         Select candidate singletons based on raw peaks.
 
         Build dataframe of raw peaks, match theoretical and observed mz,
         cluster them, and filter the candidates based on their cluster score.
+
+        Parameters
+        ----------
+        alphabet : pl.DataFrame
+            Nucleotide alphabet.
+        tolerance : float
+            Error tolerance for individual masses.
 
         Returns
         -------
@@ -125,7 +145,7 @@ class RawPeakList:
 
         # Match observed m/z to singleton m/z from the reference table
         peak_df = peak_df.sort("mz").join_asof(
-            NUCLEOTIDE_DF.sort("singleton_mz"),
+            alphabet.sort("singleton_mz"),
             left_on="mz",
             right_on="singleton_mz",
             strategy="nearest",
@@ -138,7 +158,7 @@ class RawPeakList:
                 (abs(pl.col("mz") - pl.col("singleton_mz")) / pl.col("mz"))
                 .fill_null(0)
                 .fill_nan(0)
-                .lt(PREPROCESS_TOL)
+                .lt(tolerance)
                 .alias("is_match")
             )
             .filter(pl.col("is_match"))

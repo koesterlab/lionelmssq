@@ -5,7 +5,7 @@ import ddargparse
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import List
+from typing import List, Tuple
 
 from spectrseqtools.common import set_output_path
 from spectrseqtools.fragment_classification import classify_fragments
@@ -20,7 +20,7 @@ from spectrseqtools.masses import (
     build_fragmentation_dict,
 )
 from spectrseqtools.prediction import Predictor
-from spectrseqtools.preprocessing.preprocessing import Preprocessor
+from spectrseqtools.preprocessing.preprocessing import AveragineBackbone, Preprocessor
 from spectrseqtools.traceback_matrix import CompositionInferrer, SequenceInformation
 
 
@@ -37,10 +37,89 @@ class PreprocessingOptions(ddargparse.OptionsBase):
         metadata={"help": "Path to input file in RAW format"},
     )
     meta: Path = field(metadata={"help": "Path to YAML with meta information"})
+    alphabet: Path | None = field(
+        metadata={"help": "Path to file containing nucleotide alphabet."}
+    )
     output_dir: Path | None = field(
         metadata={
             "help": "Output directory (default: input directory)",
         }
+    )
+    charge_range: Tuple[int, int] | None = field(
+        metadata={
+            "help": "Charge range considered for deconvolution "
+            "(used in ms_deisotope package)."
+        }
+    )
+    min_intensity: float | None = field(
+        metadata={
+            "help": "Minimum intensity required for peak consideration "
+            "(used in ms_deisotope package as 'minimum_intensity')."
+        }
+    )
+    tolerance: float = field(
+        default=10e-6,
+        metadata={"help": "Error tolerance to consider masses identical."},
+    )
+    boundary_factor: int = field(
+        default=2,
+        metadata={"help": "Factor for scaling theoretical singleton boundaries."},
+    )
+    min_precursor_charge: int = field(
+        default=3,
+        metadata={"help": "Minimum MS1 charge to consider associated MS2 scans."},
+    )
+    isotopic_shift_factor: int = field(
+        default=10,
+        metadata={"help": "Factor for scaling isotopic shift for precursors."},
+    )
+    envelope_min_score: float = field(
+        default=150.0,
+        metadata={
+            "help": "Minimum accepted score during envelope fitting "
+            "(used in ms_deisotope package as 'minimum_score')."
+        },
+    )
+    envelope_error_tol: float = field(
+        default=0.02,
+        metadata={
+            "help": "Error tolerance for envelopes during fitting "
+            "(used in ms_deisotope package as 'mass_error_tolerance')."
+        },
+    )
+    averagine_backbone: AveragineBackbone = field(
+        default=AveragineBackbone.PHOSPHATE,
+        metadata={
+            "help": "Backbone considered in Averagine model "
+            "(used in ms_deisotope package)."
+        },
+    )
+    max_missed_peaks: int = field(
+        default=1,
+        metadata={
+            "help": "Maximum number of missed peaks tolerated in envelope fitting "
+            "(used in ms_deisotope package)."
+        },
+    )
+    scale_method: str = field(
+        default="sum",
+        metadata={
+            "help": "Scale method for intensity values (used in ms_deisotope package)."
+        },
+    )
+    peak_error_tol: float = field(
+        default=2e-5,
+        metadata={
+            "help": "Error tolerance for each individual peak "
+            "(used in ms_deisotope package as 'error_tol')."
+        },
+    )
+    truncate_after: float = field(
+        default=0.9,
+        metadata={
+            "help": "Percentage of included isotopic patterns "
+            "(used in ms_deisotope package)."
+        },
     )
     cutoff_percentile: int = field(
         default=75, metadata={"help": "Intensity percentile used as cutoff"}
