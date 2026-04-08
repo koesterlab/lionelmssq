@@ -1,16 +1,19 @@
 import pytest
 import polars as pl
 
-from spectrseqtools.composition_inference import (
-    infer_compositions_with_recursion,
-    infer_compositions_with_matrix,
-)
 from spectrseqtools.masses import (
     NUCLEOTIDE_DF,
     PHOSPHATE_LINK_MASS,
     PRECISION,
 )
-from spectrseqtools.traceback_matrix import CompositionInferrer, SequenceInformation
+from spectrseqtools.prediction.composition_inference import (
+    infer_compositions_with_recursion,
+    infer_compositions_with_matrix,
+)
+from spectrseqtools.prediction.traceback_matrix import (
+    CompositionInferrer,
+    SequenceInformation,
+)
 
 
 def get_seq_weight(seq: tuple) -> float:

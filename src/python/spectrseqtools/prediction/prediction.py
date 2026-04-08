@@ -9,11 +9,11 @@ from spectrseqtools.common import (
     calculate_compositions,
     parse_nucleosides,
 )
-from spectrseqtools.composition_inference import is_valid_mass
 from spectrseqtools.masses import PHOSPHATE_LINK_MASS
-from spectrseqtools.sequence_inference import LinearProgramInstance
-from spectrseqtools.skeleton_building import SkeletonBuilder
-from spectrseqtools.traceback_matrix import CompositionInferrer
+from spectrseqtools.prediction.composition_inference import is_valid_mass
+from spectrseqtools.prediction.sequence_inference import LinearProgramInstance
+from spectrseqtools.prediction.skeleton_building import SkeletonBuilder
+from spectrseqtools.prediction.traceback_matrix import CompositionInferrer
 
 
 @dataclass

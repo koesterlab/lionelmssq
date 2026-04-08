@@ -1,8 +1,8 @@
 import polars as pl
 import numpy as np
 
-from spectrseqtools.composition_inference import is_valid_mass
-from spectrseqtools.traceback_matrix import CompositionInferrer
+from spectrseqtools.prediction.composition_inference import is_valid_mass
+from spectrseqtools.prediction.traceback_matrix import CompositionInferrer
 
 
 MAX_VARIANCE = 1

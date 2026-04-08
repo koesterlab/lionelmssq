@@ -4,7 +4,7 @@ import altair as alt
 import importlib.resources
 
 from spectrseqtools.common import parse_nucleosides
-from spectrseqtools.prediction import Prediction
+from spectrseqtools.prediction.prediction import Prediction
 
 MASSES = pl.read_csv(
     (importlib.resources.files(__package__) / "assets" / "masses.tsv"),

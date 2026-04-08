@@ -13,7 +13,7 @@ import polars as pl
 import numpy as np
 
 from spectrseqtools.masses import UNMODIFIED_BASES
-from spectrseqtools.traceback_matrix import CompositionInferrer
+from spectrseqtools.prediction.traceback_matrix import CompositionInferrer
 
 
 MILP_QUASI_ONE_THRESHOLD = 0.9

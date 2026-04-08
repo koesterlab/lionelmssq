@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import List, Tuple
 
 from spectrseqtools.common import set_output_path
-from spectrseqtools.fragment_classification import classify_fragments
 from spectrseqtools.masses import (
     COMPRESSION_RATE,
     DEFAULT_INTENSITY_CUTOFF,
@@ -19,9 +18,13 @@ from spectrseqtools.masses import (
     UNMODIFIED_BASES,
     build_fragmentation_dict,
 )
-from spectrseqtools.prediction import Predictor
+from spectrseqtools.prediction.fragment_classification import classify_fragments
+from spectrseqtools.prediction.prediction import Predictor
+from spectrseqtools.prediction.traceback_matrix import (
+    CompositionInferrer,
+    SequenceInformation,
+)
 from spectrseqtools.preprocessing.preprocessing import AveragineBackbone, Preprocessor
-from spectrseqtools.traceback_matrix import CompositionInferrer, SequenceInformation
 
 
 class SolverType(Enum):

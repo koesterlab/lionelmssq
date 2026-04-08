@@ -3,8 +3,10 @@ import re
 from pathlib import Path
 from typing import List, Tuple
 
-from spectrseqtools.composition_inference import infer_compositions_with_matrix
-from spectrseqtools.traceback_matrix import CompositionInferrer
+from spectrseqtools.prediction.composition_inference import (
+    infer_compositions_with_matrix,
+)
+from spectrseqtools.prediction.traceback_matrix import CompositionInferrer
 
 
 ERROR_METHOD = "l1_norm"
