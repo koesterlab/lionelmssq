@@ -11,11 +11,10 @@ from clr_loader import get_mono
 
 rt = get_mono()
 
-PREPROCESS_TOL = 10e-6
+
 # TODO: Estimate the default value from sequence length (IMP: Should be
 #  large enough to cover the charge states of the precursors!
 DEFAULT_CHARGE_VALUE = 30
-ISOTOPIC_SHIFT_FACTOR = 10
 COL_TYPES_DEISOTOPED = {
     "scan_id": pl.Int32,
     "scan_time": pl.Float64,
@@ -41,6 +40,8 @@ COL_TYPES_DEISOTOPED = {
 class DeconvolutionParameters:
     """Class for deconvolution parameters used by ms_deisotope."""
 
+    min_precursor_charge: int
+    isotopic_shift_factor: int
     charge_range: Tuple[int, int]
     minimum_intensity: float
     scorer: ms_ditp.MSDeconVFitter
@@ -61,7 +62,7 @@ class DeconvolutionParameters:
         Returns
         -------
         dict
-            Dictionary containing deconvolution parameters.
+            Dictionary containing deconvolution parameters for ms_deisotope call.
 
         """
         # Retrieve parameters from class
@@ -71,6 +72,10 @@ class DeconvolutionParameters:
         output_dict["peaklist"] = scan
         output_dict["charge_range"] = self.select_charge_range(scan=scan)
         output_dict["minimum_intensity"] = self.select_min_intensity(scan=scan)
+
+        # Pop parameters not used by ms_deisotope
+        output_dict.pop("min_precursor_charge")
+        output_dict.pop("isotopic_shift_factor")
 
         return output_dict
 
@@ -191,7 +196,7 @@ class DeisotopedPeakList:
         scan : ms_deisotope.data_source.Scan
             ThermoFisher scan.
         params : DeconvolutionParameters
-            Deconvolution parameters used by ms_deisotope.
+            Deconvolution parameters (mainly used by ms_deisotope).
 
         Returns
         -------
@@ -204,6 +209,13 @@ class DeisotopedPeakList:
         originally implemented by Moshir Harsh (btemoshir@gmail.com).
 
         """
+        # Return default if precursor charge is too low for consideration
+        if (
+            not isinstance(scan.precursor_information.charge, int)
+            or scan.precursor_information.charge < params.min_precursor_charge
+        ):
+            return DeisotopedPeakList.default()
+
         # Convert scan to centroid data
         scan.pick_peaks()
 
@@ -241,7 +253,7 @@ class DeisotopedPeakList:
                     if not is_precursor
                     else precursor_mz
                     - abs(
-                        ISOTOPIC_SHIFT_FACTOR
+                        params.isotopic_shift_factor
                         * ms_ditp.averagine.isotopic_shift(peak_set.peaks[idx].charge)
                     )
                     <= mz
@@ -251,13 +263,18 @@ class DeisotopedPeakList:
             )
         return DeisotopedPeakList(peaks=peak_list)
 
-    def to_fragments(self) -> pl.DataFrame:
+    def to_fragments(self, tolerance: float) -> pl.DataFrame:
         """
         Aggregate deisotoped peaks into fragments by grouping based on similar mass.
 
         Build dataframe of deisotoped peaks, group the peaks by their mass
         (within PPM tolerance), and aggregate them by selecting the maximum
         observed mass and total observed intensity in each group as a fragment.
+
+        Parameters
+        ----------
+        tolerance : float
+            Error tolerance for individual masses.
 
         Returns
         -------
@@ -289,7 +306,7 @@ class DeisotopedPeakList:
             )
             .fill_null(0)
             .fill_nan(0)
-            .gt(PREPROCESS_TOL)
+            .gt(tolerance)
             .cum_sum()
             .alias("ppm_group")
         )

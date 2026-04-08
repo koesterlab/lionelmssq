@@ -63,6 +63,14 @@ class PreprocessingOptions(ddargparse.OptionsBase):
         default=2,
         metadata={"help": "Factor for scaling theoretical singleton boundaries."},
     )
+    min_precursor_charge: int = field(
+        default=3,
+        metadata={"help": "Minimum MS1 charge to consider associated MS2 scans."},
+    )
+    isotopic_shift_factor: int = field(
+        default=10,
+        metadata={"help": "Factor for scaling isotopic shift for precursors."},
+    )
     envelope_min_score: float = field(
         default=150.0,
         metadata={

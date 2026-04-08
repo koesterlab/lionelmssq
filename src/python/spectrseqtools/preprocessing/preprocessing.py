@@ -24,8 +24,6 @@ from spectrseqtools.preprocessing.singleton_identification import (
 
 rt = get_mono()
 
-MIN_MS1_CHARGE_STATE = 3
-
 
 class Preprocessor:
     """Class for preprocessing of raw MS data."""
@@ -48,6 +46,8 @@ class Preprocessor:
         self.cutoff_percentile = options.cutoff_percentile
 
         self.deconvolution_params = DeconvolutionParameters(
+            min_precursor_charge=options.min_precursor_charge,
+            isotopic_shift_factor=options.isotopic_shift_factor,
             charge_range=options.charge_range,
             minimum_intensity=options.min_intensity,
             scorer=ms_ditp.MSDeconVFitter(
@@ -129,19 +129,12 @@ class Preprocessor:
             if scan.ms_level != 2:
                 continue
 
-            # Skip scan if the precursor charge is lower than MIN_MS1_CHARGE_STATE
-            if (
-                not isinstance(scan.precursor_information.charge, int)
-                or scan.precursor_information.charge < MIN_MS1_CHARGE_STATE
-            ):
-                continue
-
             # Deconvolute scan to get list of deisotoped peaks
             peak_list += DeisotopedPeakList.from_scan(
                 scan=scan, params=self.deconvolution_params
             )
 
-        return peak_list.to_fragments()
+        return peak_list.to_fragments(tolerance=self.tolerance)
 
     def identify_singletons(self) -> pl.DataFrame:
         """
