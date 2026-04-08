@@ -89,9 +89,8 @@ class PreprocessingOptions(ddargparse.OptionsBase):
             "help": "Backbone considered in Averagine model (ms_deisotope package)."
         },
     )
-    # TODO: Change max_missed_peaks to 1 (to match default of ms_deisotope)
     max_missed_peaks: int = field(
-        default=0,
+        default=1,
         metadata={
             "help": "Maximum number of missed peaks tolerated in envelope fitting (ms_deisotope package)."
         },
