@@ -17,12 +17,33 @@ rt = get_mono()
 
 PREPROCESS_TOL = 10e-6
 THEORETICAL_BOUNDARY_FACTOR = 2
-MIN_MZ = NUCLEOTIDE_DF["singleton_mz"].min() * (
-    1 - THEORETICAL_BOUNDARY_FACTOR * PREPROCESS_TOL
+
+
+@dataclass
+class SingletonBoundaries:
+    """Class for theoretical m/z boundaries for singleton identification."""
+
+    min_mz: float
+    max_mz: float
+
+    @classmethod
+    def from_alphabet(
+        cls, alphabet: pl.DataFrame, tolerance: float, boundary_factor: float
+    ) -> Self:
+        """Set singleton boundaries based on nucleotide alphabet."""
+        return SingletonBoundaries(
+            min_mz=alphabet["singleton_mz"].min() * (1 - boundary_factor * tolerance),
+            max_mz=alphabet["singleton_mz"].max() * (1 + boundary_factor * tolerance),
+        )
+
+
+INTERVAL = SingletonBoundaries.from_alphabet(
+    alphabet=NUCLEOTIDE_DF,
+    boundary_factor=THEORETICAL_BOUNDARY_FACTOR,
+    tolerance=PREPROCESS_TOL,
 )
-MAX_MZ = NUCLEOTIDE_DF["singleton_mz"].max() * (
-    1 + THEORETICAL_BOUNDARY_FACTOR * PREPROCESS_TOL
-)
+
+
 COL_TYPES_RAW = {
     "scan_id": pl.Int32,
     "scan_time": pl.Float64,
@@ -90,7 +111,7 @@ class RawPeakList:
             mz = scan.peaks[idx].mz
 
             # Only consider peaks with mass within theoretical bounds
-            if MIN_MZ <= mz <= MAX_MZ:
+            if INTERVAL.min_mz <= mz <= INTERVAL.max_mz:
                 peak_list.append(
                     RawPeak(
                         scan_id=scan_id,
