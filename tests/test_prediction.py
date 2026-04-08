@@ -46,6 +46,7 @@ def test_testcase(testcase):
                 input=base_path / "fragments.raw",
                 meta=base_path / "fragments.meta.yaml",
                 output_dir=None,
+                alphabet=None,
                 charge_range=None,
                 min_intensity=None,
                 cutoff_percentile=75,

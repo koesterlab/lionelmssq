@@ -1,6 +1,7 @@
 import importlib.resources
 import polars as pl
 from itertools import product
+from pathlib import Path
 
 _COLS = [
     "id",
@@ -56,10 +57,28 @@ PHOSPHATE_LINK_MASS = (
 )
 
 
-def initialize_nucleotide_df() -> pl.DataFrame:
+def initialize_nucleotide_df(input_path: Path = None) -> pl.DataFrame:
+    """
+    Initialize dataframe over nucleotide alphabet from file.
+
+    Parameters
+    ----------
+    input_path : Path
+        Path to file with nucleoside information.
+
+    Returns
+    -------
+    pl.DataFrame
+        Polars dataframe containing nucleotide alphabet.
+
+    """
+    # If input path is None, set default
+    if input_path is None:
+        input_path = importlib.resources.files(__package__) / "assets" / "masses.tsv"
+
     # Read nucleoside masses from file
     masses = pl.read_csv(
-        (importlib.resources.files(__package__) / "assets" / "masses.tsv"),
+        input_path,
         separator="\t",
     )
     assert masses.columns == _COLS

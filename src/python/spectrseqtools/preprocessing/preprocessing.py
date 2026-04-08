@@ -12,11 +12,15 @@ import yaml
 from clr_loader import get_mono
 
 from spectrseqtools.common import set_output_path
+from spectrseqtools.masses import initialize_nucleotide_df
 from spectrseqtools.preprocessing.deconvolution import (
     DeconvolutionParameters,
     DeisotopedPeakList,
 )
-from spectrseqtools.preprocessing.singleton_identification import RawPeakList
+from spectrseqtools.preprocessing.singleton_identification import (
+    RawPeakList,
+    SingletonBoundaries,
+)
 
 rt = get_mono()
 
@@ -27,6 +31,13 @@ class Preprocessor:
     """Class for preprocessing of raw MS data."""
 
     def __init__(self, options) -> None:
+        self.alphabet = initialize_nucleotide_df(input_path=options.alphabet)
+        self.tolerance = options.tolerance
+        self.singleton_boundaries = SingletonBoundaries.from_alphabet(
+            alphabet=self.alphabet,
+            boundary_factor=options.boundary_factor,
+            tolerance=self.tolerance,
+        )
         self.input_path = options.input
         self.output_dir, self.output_id = set_output_path(
             input_path=options.input, output_dir=options.output_dir
@@ -156,9 +167,11 @@ class Preprocessor:
                 continue
 
             # Extract raw peaks from scan (without deisotoping)
-            peak_list += RawPeakList.from_scan(scan)
+            peak_list += RawPeakList.from_scan(
+                scan=scan, boundaries=self.singleton_boundaries
+            )
 
-        return peak_list.to_singletons()
+        return peak_list.to_singletons(tolerance=self.tolerance, alphabet=self.alphabet)
 
     def select_intact_mass(self, fragments: pl.DataFrame) -> float:
         """

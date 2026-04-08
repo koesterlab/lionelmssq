@@ -37,6 +37,9 @@ class PreprocessingOptions(ddargparse.OptionsBase):
         metadata={"help": "Path to input file in RAW format"},
     )
     meta: Path = field(metadata={"help": "Path to YAML with meta information"})
+    alphabet: Path | None = field(
+        metadata={"help": "Path to file containing nucleotide alphabet."}
+    )
     output_dir: Path | None = field(
         metadata={
             "help": "Output directory (default: input directory)",
@@ -51,6 +54,14 @@ class PreprocessingOptions(ddargparse.OptionsBase):
         metadata={
             "help": "Minimum intensity required for peak consideration (ms_deisotope package)."
         }
+    )
+    tolerance: float = field(
+        default=10e-6,
+        metadata={"help": "Error tolerance to consider masses identical."},
+    )
+    boundary_factor: int = field(
+        default=2,
+        metadata={"help": "Factor for scaling theoretical singleton boundaries."},
     )
     envelope_min_score: float = field(
         default=150.0,
