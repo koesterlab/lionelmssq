@@ -47,12 +47,14 @@ class PreprocessingOptions(ddargparse.OptionsBase):
     )
     charge_range: Tuple[int, int] | None = field(
         metadata={
-            "help": "Charge range considered for deconvolution (ms_deisotope package)."
+            "help": "Charge range considered for deconvolution "
+            "(used in ms_deisotope package)."
         }
     )
     min_intensity: float | None = field(
         metadata={
-            "help": "Minimum intensity required for peak consideration (ms_deisotope package)."
+            "help": "Minimum intensity required for peak consideration "
+            "(used in ms_deisotope package as 'minimum_intensity')."
         }
     )
     tolerance: float = field(
@@ -74,41 +76,49 @@ class PreprocessingOptions(ddargparse.OptionsBase):
     envelope_min_score: float = field(
         default=150.0,
         metadata={
-            "help": "Minimum accepted score during envelope fitting (ms_deisotope package)."
+            "help": "Minimum accepted score during envelope fitting "
+            "(used in ms_deisotope package as 'minimum_score')."
         },
     )
     envelope_error_tol: float = field(
         default=0.02,
         metadata={
-            "help": "Error tolerance for envelopes during fitting (ms_deisotope package)."
+            "help": "Error tolerance for envelopes during fitting "
+            "(used in ms_deisotope package as 'mass_error_tolerance')."
         },
     )
     averagine_backbone: AveragineBackbone = field(
         default=AveragineBackbone.PHOSPHATE,
         metadata={
-            "help": "Backbone considered in Averagine model (ms_deisotope package)."
+            "help": "Backbone considered in Averagine model "
+            "(used in ms_deisotope package)."
         },
     )
     max_missed_peaks: int = field(
         default=1,
         metadata={
-            "help": "Maximum number of missed peaks tolerated in envelope fitting (ms_deisotope package)."
+            "help": "Maximum number of missed peaks tolerated in envelope fitting "
+            "(used in ms_deisotope package)."
         },
     )
     scale_method: str = field(
         default="sum",
-        metadata={"help": "Scale method for intensity values (ms_deisotope package)."},
+        metadata={
+            "help": "Scale method for intensity values (used in ms_deisotope package)."
+        },
     )
     peak_error_tol: float = field(
         default=2e-5,
         metadata={
-            "help": "Error tolerance for each individual peak (ms_deisotope package)."
+            "help": "Error tolerance for each individual peak "
+            "(used in ms_deisotope package as 'error_tol')."
         },
     )
     truncate_after: float = field(
         default=0.9,
         metadata={
-            "help": "Percentage of included isotopic patterns (ms_deisotope package)."
+            "help": "Percentage of included isotopic patterns "
+            "(used in ms_deisotope package)."
         },
     )
     cutoff_percentile: int = field(
