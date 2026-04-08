@@ -11,10 +11,9 @@ from clr_loader import get_mono
 
 rt = get_mono()
 
-
-# TODO: Estimate the default value from sequence length (IMP: Should be
-#  large enough to cover the charge states of the precursors!
-DEFAULT_CHARGE_VALUE = 30
+# METHOD: If no precursor charge is given, we set it to 1 because it is
+# unlikely not yield any valid masses
+DEFAULT_CHARGE_VALUE = 1
 COL_TYPES_DEISOTOPED = {
     "scan_id": pl.Int32,
     "scan_time": pl.Float64,
