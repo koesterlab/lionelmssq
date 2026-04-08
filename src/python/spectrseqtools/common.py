@@ -13,7 +13,7 @@ ERROR_METHOD = "l1_norm"
 _NUCLEOSIDE_RE = re.compile(r"\d*[ACGU]")
 
 
-def set_output_path(input_path: Path, output_dir: str) -> Tuple[str, str]:
+def set_output_path(input_path: Path, output_dir: Path) -> Tuple[Path, str]:
     path = input_path.resolve()
     path_dir = path.parent if output_dir is None else output_dir
     path_prefix = path.stem
