@@ -10,6 +10,7 @@ from spectrseqtools.common import (
     calculate_error_threshold,
     calculate_compositions,
 )
+from spectrseqtools.dataclasses import SolverParameters
 from spectrseqtools.prediction.fragment_classification import MAX_VARIANCE
 from spectrseqtools.prediction.sequence_inference import LinearProgramInstance
 from spectrseqtools.prediction.traceback_matrix import (
@@ -24,7 +25,7 @@ class SkeletonBuilder:
     inferrer: CompositionInferrer
 
     def build_skeleton(
-        self, fragments: pl.DataFrame, solver_params: dict
+        self, fragments: pl.DataFrame, solver_params: SolverParameters
     ) -> Tuple[List[Set[str]], pl.DataFrame]:
         # Build skeleton sequence from 5'-end
         start_skeleton, start_fragments = self._predict_skeleton(
@@ -202,7 +203,7 @@ class SkeletonBuilder:
         end_skeleton: List[Set[str]],
         start_fragments: pl.DataFrame,
         end_fragments: pl.DataFrame,
-        solver_params: dict,
+        solver_params: SolverParameters,
     ) -> int:
         # Reduce nucleotide alphabet based on skeleton parts
         nucleotides = {
@@ -257,7 +258,7 @@ class SkeletonBuilder:
         start_fragments: pl.DataFrame,
         end_fragments: pl.DataFrame,
         skeleton_seq: list,
-        solver_params: dict,
+        solver_params: SolverParameters,
     ) -> pl.DataFrame:
         # Ensure fragments only occur once
         end_fragments = end_fragments.filter(

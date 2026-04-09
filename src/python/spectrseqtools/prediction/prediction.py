@@ -9,6 +9,7 @@ from spectrseqtools.common import (
     calculate_compositions,
     parse_nucleosides,
 )
+from spectrseqtools.dataclasses import SolverParameters
 from spectrseqtools.masses import PHOSPHATE_LINK_MASS
 from spectrseqtools.prediction.composition_inference import is_valid_mass
 from spectrseqtools.prediction.sequence_inference import LinearProgramInstance
@@ -64,7 +65,7 @@ class Predictor:
     def predict(
         self,
         fragments: pl.DataFrame,
-        solver_params: dict,
+        solver_params: SolverParameters,
     ) -> Prediction:
         fragments = (
             fragments.with_row_index(name="orig_index")
@@ -164,7 +165,7 @@ class Predictor:
                 skeleton_seq=skeleton_seq,
             )
 
-            return Prediction(*lp_instance.evaluate(solver_params))
+            return Prediction(*lp_instance.evaluate(solver_params=solver_params))
         except Exception:
             return Prediction.default()
 
@@ -231,7 +232,7 @@ class Predictor:
         self,
         fragments: pl.DataFrame,
         skeleton_seq: list,
-        solver_params: dict,
+        solver_params: SolverParameters,
     ) -> pl.DataFrame:
         is_invalid = []
         for idx in range(len(fragments)):

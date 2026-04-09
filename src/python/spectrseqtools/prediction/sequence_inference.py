@@ -12,6 +12,7 @@ from itertools import combinations
 import polars as pl
 import numpy as np
 
+from spectrseqtools.dataclasses import SolverParameters
 from spectrseqtools.masses import UNMODIFIED_BASES
 from spectrseqtools.prediction.traceback_matrix import CompositionInferrer
 
@@ -225,23 +226,17 @@ class LinearProgramInstance:
 
         return problem
 
-    def minimize_error(self, solver_params: dict) -> float:
-        # Set correct timeout
-        solver_params["fixed"]["timeLimit"] = solver_params["timeLimit(short)"]
-
+    def minimize_error(self, solver_params: SolverParameters) -> float:
         # Initialize solver
-        solver = getSolver(**solver_params["fixed"])
+        solver = getSolver(**solver_params.to_dict(filter_only=True))
 
         _ = self.problem.solve(solver)
         score = self.problem.objective.value()
         return np.inf if score is None else score
 
-    def evaluate(self, solver_params):
-        # Set correct timeout
-        solver_params["fixed"]["timeLimit"] = solver_params["timeLimit(long)"]
-
+    def evaluate(self, solver_params: SolverParameters):
         # Initialize solver
-        solver = getSolver(**solver_params["fixed"])
+        solver = getSolver(**solver_params.to_dict(filter_only=False))
 
         # TODO: Make returned value resemble prediction accuracy
         _ = self.problem.solve(solver)

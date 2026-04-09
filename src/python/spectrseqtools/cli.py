@@ -4,6 +4,7 @@ import yaml
 from typing import List
 
 from spectrseqtools.common import set_output_path
+from spectrseqtools.dataclasses import SolverParameters
 from spectrseqtools.enums import SolverType
 from spectrseqtools.masses import (
     COMPRESSION_RATE,
@@ -38,15 +39,14 @@ def main():
 
 
 def predict(options: PredictionOptions):
-    solver_params = {
-        "fixed": {
-            "solver": select_solver(options.solver),
-            "threads": options.threads,
-            "msg": False,
-        },
-        "timeLimit(short)": options.lp_timeout_short,
-        "timeLimit(long)": options.lp_timeout_long,
-    }
+    # Set parameters for LP solver
+    solver_params = SolverParameters(
+        solver=select_solver(options.solver),
+        threads=options.threads,
+        msg=False,
+        time_limit_short=options.lp_timeout_short,
+        time_limit_long=options.lp_timeout_long,
+    )
 
     fragment_dir, file_prefix = set_output_path(
         input_path=options.fragments, output_dir=options.output_dir
