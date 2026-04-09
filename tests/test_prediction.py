@@ -5,14 +5,10 @@ import pytest
 from clr_loader import get_mono
 from pathlib import Path
 
-from spectrseqtools.cli import (
-    PredictionOptions,
-    PreprocessingOptions,
-    SolverType,
-    format_sequence_to_full_version,
-    predict,
-)
+from spectrseqtools.cli import format_sequence_to_full_version, predict
 from spectrseqtools.common import parse_nucleosides
+from spectrseqtools.enums import SolverType
+from spectrseqtools.parsers import PredictionOptions, PreprocessingOptions
 from spectrseqtools.plotting import plot_prediction
 from spectrseqtools.preprocessing.preprocessing import Preprocessor
 
