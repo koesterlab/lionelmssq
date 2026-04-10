@@ -51,11 +51,6 @@ ELEMENT_MASSES = {
     for row in elements.iter_rows()
 }
 
-# Set mass for phosphate link between bases
-PHOSPHATE_LINK_MASS = (
-    ELEMENT_MASSES["P"] + 2 * ELEMENT_MASSES["O"] - ELEMENT_MASSES["H+"]
-)
-
 
 def initialize_nucleotide_df(input_path: Path = None) -> pl.DataFrame:
     """
@@ -77,10 +72,7 @@ def initialize_nucleotide_df(input_path: Path = None) -> pl.DataFrame:
         input_path = importlib.resources.files(__package__) / "assets" / "masses.tsv"
 
     # Read nucleoside masses from file
-    masses = pl.read_csv(
-        input_path,
-        separator="\t",
-    )
+    masses = pl.read_csv(input_path, separator="\t")
     assert masses.columns == _COLS
 
     # Round nucleoside masses, we consider DECIMAL_PLACES+1 for since
@@ -97,15 +89,24 @@ def initialize_nucleotide_df(input_path: Path = None) -> pl.DataFrame:
         pl.col("modification_rate").max(),
     )
 
-    # Convert nucleosides to nucleotides and add new columns for singleton
-    # m/z values and integer masses for the DP algorithm
+    # Set mass for phosphate link between bases
+    phosphate_link = (
+        ELEMENT_MASSES["P"] + 2 * ELEMENT_MASSES["O"] - ELEMENT_MASSES["H+"]
+    )
+
+    # Add phosphate backbone to gain nucleotide masses (also rounded)
     masses = masses.with_columns(
         pl.col("nucleoside_mass")
-        .add(
-            PHOSPHATE_LINK_MASS - ELEMENT_MASSES["H+"]
-        )  # Subtract one proton from nucleotide (for singleton charge)
-        .alias("singleton_mz"),
-        ((pl.col("nucleoside_mass") + PHOSPHATE_LINK_MASS) / PRECISION)
+        .add(phosphate_link)
+        # .round(DECIMAL_PLACES + 1)
+        .alias("nucleotide_mass")
+    )
+
+    # Add new columns for singleton m/z values (subtract one proton
+    # from nucleotide) and integer masses for the DP algorithm
+    masses = masses.with_columns(
+        pl.col("nucleotide_mass").add(-ELEMENT_MASSES["H+"]).alias("singleton_mz"),
+        (pl.col("nucleotide_mass") / PRECISION)
         .round(0)
         .cast(pl.Int64)
         .alias("integer_mass"),

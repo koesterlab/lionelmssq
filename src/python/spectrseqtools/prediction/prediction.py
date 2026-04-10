@@ -10,7 +10,6 @@ from spectrseqtools.common import (
     parse_nucleosides,
 )
 from spectrseqtools.dataclasses import SolverParameters
-from spectrseqtools.masses import PHOSPHATE_LINK_MASS
 from spectrseqtools.prediction.composition_inference import is_valid_mass
 from spectrseqtools.prediction.sequence_inference import LinearProgramInstance
 from spectrseqtools.prediction.skeleton_building import SkeletonBuilder
@@ -288,10 +287,7 @@ class Predictor:
         return compositions
 
     def collect_diff_compositions_per_side(self, fragments: pl.DataFrame) -> dict:
-        max_weight = (
-            max(self.nucleotide_df.get_column("nucleoside_mass").to_list())
-            + PHOSPHATE_LINK_MASS
-        )
+        max_weight = max(self.nucleotide_df.get_column("nucleotide_mass").to_list())
         su_masses = fragments.get_column("standard_unit_mass").to_list()
         observed_masses = fragments.get_column("observed_mass").to_list()
         start = 0

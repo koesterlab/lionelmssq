@@ -3,7 +3,6 @@ import polars as pl
 
 from spectrseqtools.masses import (
     NUCLEOTIDE_DF,
-    PHOSPHATE_LINK_MASS,
     PRECISION,
 )
 from spectrseqtools.prediction.composition_inference import (
@@ -23,7 +22,7 @@ def get_seq_weight(seq: tuple) -> float:
         .map_elements(
             lambda x: (
                 NUCLEOTIDE_DF.filter(pl.col("representative") == x)
-                .get_column("nucleoside_mass")
+                .get_column("nucleotide_mass")
                 .to_list()[0]
             ),
             return_dtype=pl.Float64,
@@ -31,7 +30,7 @@ def get_seq_weight(seq: tuple) -> float:
         .alias("mass")
     )
 
-    return round(len(seq) * PHOSPHATE_LINK_MASS + seq_df.select("mass").sum().item(), 5)
+    return round(seq_df.select("mass").sum().item(), 5)
 
 
 TEST_SEQ = [
