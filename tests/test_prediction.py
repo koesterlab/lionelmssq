@@ -8,6 +8,7 @@ from pathlib import Path
 from spectrseqtools.cli import format_sequence_to_full_version, predict
 from spectrseqtools.common import parse_nucleosides
 from spectrseqtools.enums import SolverType
+from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 from spectrseqtools.parsers import PredictionOptions, PreprocessingOptions
 from spectrseqtools.plotting import plot_prediction
 from spectrseqtools.preprocessing.preprocessing import Preprocessor
@@ -72,7 +73,10 @@ def test_testcase(testcase):
 
     print("True sequence =\t\t", true_seq)
     print(
-        "Full sequence =\t\t", format_sequence_to_full_version(seq=prediction.sequence)
+        "Full sequence =\t\t",
+        format_sequence_to_full_version(
+            seq=prediction.sequence, nucleotide_alphabet=NucleotideAlphabet.from_file()
+        ),
     )
 
     plots = plot_prediction(prediction=prediction, true_seq=true_seq)

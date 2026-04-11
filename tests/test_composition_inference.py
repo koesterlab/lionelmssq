@@ -1,10 +1,8 @@
 import pytest
 import polars as pl
 
-from spectrseqtools.masses import (
-    NUCLEOTIDE_DF,
-    PRECISION,
-)
+from spectrseqtools.masses import PRECISION
+from spectrseqtools.nucleotide_alphabet import NUCLEOTIDE_DF, NucleotideAlphabet
 from spectrseqtools.prediction.composition_inference import (
     infer_compositions_with_recursion,
     infer_compositions_with_matrix,
@@ -56,19 +54,17 @@ MOD_RATE = 0.5
 @pytest.mark.parametrize("testcase", MASS_SEQ_DICT.items())
 @pytest.mark.parametrize("tolerance", TOLERANCES)
 def test_infer_composition_with_recursion(testcase, tolerance):
+    alphabet = NucleotideAlphabet.from_file()
+
     seq_info = SequenceInformation(
-        max_len=int(
-            testcase[0]
-            / PRECISION
-            / min(pl.Series(NUCLEOTIDE_DF.select("integer_mass")).to_list())
-        ),
+        max_len=int(testcase[0] / alphabet.min_mass()),
         su_mass=testcase[0],
         obs_mass=testcase[0],
         modification_rate=MOD_RATE,
     )
 
     inferrer = CompositionInferrer(
-        nucleotide_df=NUCLEOTIDE_DF,
+        nucleotide_df=alphabet.nucleotides,
         compression_rate=32,
         tolerance=tolerance,
         precision=PRECISION,
@@ -97,19 +93,17 @@ COMPRESSION_RATES = [32]
 @pytest.mark.parametrize("memo", WITH_MEMO)
 @pytest.mark.parametrize("tolerance", TOLERANCES)
 def test_infer_composition_with_matrix(testcase, compression, tolerance, memo):
+    alphabet = NucleotideAlphabet.from_file()
+
     seq_info = SequenceInformation(
-        max_len=int(
-            testcase[0]
-            / PRECISION
-            / min(pl.Series(NUCLEOTIDE_DF.select("integer_mass")).to_list())
-        ),
+        max_len=int(testcase[0] / alphabet.min_mass()),
         su_mass=testcase[0],
         obs_mass=testcase[0],
         modification_rate=MOD_RATE,
     )
 
     inferrer = CompositionInferrer(
-        nucleotide_df=NUCLEOTIDE_DF,
+        nucleotide_df=alphabet.nucleotides,
         compression_rate=compression,
         tolerance=tolerance,
         precision=PRECISION,

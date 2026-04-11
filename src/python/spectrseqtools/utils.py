@@ -1,10 +1,11 @@
 import polars as pl
 
-from spectrseqtools.masses import NUCLEOTIDE_DF as UNIQUE_MASSES
+from spectrseqtools.nucleotide_alphabet import NUCLEOTIDE_DF as UNIQUE_MASSES
 
 
 def estimate_MS_error_tolerance(
-    fragments, unique_masses=UNIQUE_MASSES, rejection_threshold=0.5, simulation=False
+    fragments, unique_masses=UNIQUE_MASSES, rejection_threshold=0.5,
+        simulation=False
 ):
     """
     Using the mass of the single nucleosides, A, U, G, C, estimate the

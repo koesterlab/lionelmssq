@@ -1,7 +1,6 @@
 import importlib.resources
 import polars as pl
 from itertools import product
-from pathlib import Path
 
 _COLS = [
     "id",
@@ -49,79 +48,6 @@ elements = pl.read_csv(
 ELEMENT_MASSES = {
     row[elements.get_column_index("symbol")]: row[elements.get_column_index("mass")]
     for row in elements.iter_rows()
-}
-
-
-def initialize_nucleotide_df(input_path: Path = None) -> pl.DataFrame:
-    """
-    Initialize dataframe over nucleotide alphabet from file.
-
-    Parameters
-    ----------
-    input_path : Path
-        Path to file with nucleoside information.
-
-    Returns
-    -------
-    pl.DataFrame
-        Polars dataframe containing nucleotide alphabet.
-
-    """
-    # If input path is None, set default
-    if input_path is None:
-        input_path = importlib.resources.files(__package__) / "assets" / "masses.tsv"
-
-    # Read nucleoside masses from file
-    masses = pl.read_csv(input_path, separator="\t")
-    assert masses.columns == _COLS
-
-    # Round nucleoside masses, we consider DECIMAL_PLACES+1 for since
-    # rounding errors propagate at the last decimal digit
-    masses = masses.with_columns(
-        pl.col("monoisotopic_mass").round(DECIMAL_PLACES + 1)
-    ).rename({"monoisotopic_mass": "nucleoside_mass"})
-
-    # Group nucleosides by their mass, select a representative for each
-    # group, and aggregate them into a list of equal-mass nucleosides
-    masses = masses.group_by("nucleoside_mass", maintain_order=True).agg(
-        pl.col("id").first().alias("representative"),
-        pl.col("id").unique().alias("id_list"),
-        pl.col("modification_rate").max(),
-    )
-
-    # Set mass for phosphate link between bases
-    phosphate_link = (
-        ELEMENT_MASSES["P"] + 2 * ELEMENT_MASSES["O"] - ELEMENT_MASSES["H+"]
-    )
-
-    # Add phosphate backbone to gain nucleotide masses (also rounded)
-    masses = masses.with_columns(
-        pl.col("nucleoside_mass")
-        .add(phosphate_link)
-        # .round(DECIMAL_PLACES + 1)
-        .alias("nucleotide_mass")
-    )
-
-    # Add new columns for singleton m/z values (subtract one proton
-    # from nucleotide) and integer masses for the DP algorithm
-    masses = masses.with_columns(
-        pl.col("nucleotide_mass").add(-ELEMENT_MASSES["H+"]).alias("singleton_mz"),
-        (pl.col("nucleotide_mass") / PRECISION)
-        .round(0)
-        .cast(pl.Int64)
-        .alias("integer_mass"),
-    )
-
-    return masses
-
-
-NUCLEOTIDE_DF = initialize_nucleotide_df()
-
-# Compute dict to map representatives to nucleotides
-_REP_IDX = NUCLEOTIDE_DF.get_column_index("representative")
-_LIST_IDX = NUCLEOTIDE_DF.get_column_index("id_list")
-NUC_REPS = {
-    **{nuc: row[_REP_IDX] for row in NUCLEOTIDE_DF.rows() for nuc in row[_LIST_IDX]}
 }
 
 

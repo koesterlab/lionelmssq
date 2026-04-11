@@ -12,7 +12,7 @@ from clr_loader import get_mono
 
 from spectrseqtools.common import set_output_path
 from spectrseqtools.enums import AveragineBackbone
-from spectrseqtools.masses import initialize_nucleotide_df
+from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 from spectrseqtools.parsers import PreprocessingOptions
 from spectrseqtools.preprocessing.deconvolution import (
     DeconvolutionParameters,
@@ -30,7 +30,7 @@ class Preprocessor:
     """Class for preprocessing of raw MS data."""
 
     def __init__(self, options: PreprocessingOptions) -> None:
-        self.alphabet = initialize_nucleotide_df(input_path=options.alphabet)
+        self.alphabet = NucleotideAlphabet.from_file(options.alphabet).nucleotides
         self.tolerance = options.tolerance
         self.singleton_boundaries = SingletonBoundaries.from_alphabet(
             alphabet=self.alphabet,

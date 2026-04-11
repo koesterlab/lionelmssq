@@ -1,4 +1,3 @@
-import os
 import polars as pl
 import yaml
 from typing import List
@@ -9,13 +8,11 @@ from spectrseqtools.enums import SolverType
 from spectrseqtools.masses import (
     COMPRESSION_RATE,
     DEFAULT_INTENSITY_CUTOFF,
-    NUC_REPS,
-    NUCLEOTIDE_DF,
     PRECISION,
     TOLERANCE,
-    UNMODIFIED_BASES,
     build_fragmentation_dict,
 )
+from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 from spectrseqtools.parsers import Options, PredictionOptions
 from spectrseqtools.prediction.fragment_classification import classify_fragments
 from spectrseqtools.prediction.prediction import Predictor
@@ -58,40 +55,9 @@ def predict(options: PredictionOptions):
     # Read preprocessed fragments
     fragments = pl.read_csv(options.fragments, separator="\t")
 
-    # Read singletons if given
-    singletons = None
-    if os.path.isfile(options.singletons):
-        singletons = pl.read_csv(options.singletons, separator="\t")
-
-    print("Singletons identified during preprocessing:", singletons)
-    print()
-
-    nucleotide_df = NUCLEOTIDE_DF
-
-    # Filter by singletons
-    if singletons is not None:
-        # Map singletons to their mass representative
-        singletons = singletons.with_columns(
-            pl.col("id").replace_strict(NUC_REPS).alias("id")
-        )
-
-        # Select only bases found in singletons
-        nucleotide_df = nucleotide_df.with_columns(
-            pl.when(
-                pl.col("representative").is_in(singletons.get_column("id").to_list())
-            )
-            .then(pl.col("modification_rate"))
-            .otherwise(pl.lit(0.0))
-            .alias("modification_rate")
-        )
-
-    # Ensure modification rates of unmodified bases are set to 1
-    nucleotide_df = nucleotide_df.with_columns(
-        pl.when(~pl.col("representative").is_in(UNMODIFIED_BASES))
-        .then(pl.col("modification_rate"))
-        .otherwise(pl.lit(1.0))
-        .alias("modification_rate")
-    )
+    # Initialize nucleotide alphabet
+    alphabet = NucleotideAlphabet.from_file()
+    alphabet.filter_by_singleton_selection(singleton_path=options.singletons)
 
     # Read additional parameter from meta file
     intensity_cutoff = meta.setdefault("intensity_cutoff", DEFAULT_INTENSITY_CUTOFF)
@@ -115,17 +81,7 @@ def predict(options: PredictionOptions):
 
     # Initialize SequenceInformation class
     seq_info = SequenceInformation(
-        max_len=int(
-            seq_mass_su
-            / PRECISION
-            / min(
-                pl.Series(
-                    nucleotide_df.filter(pl.col("modification_rate") > 0.0).select(
-                        "integer_mass"
-                    )
-                ).to_list()
-            )
-        ),
+        max_len=int(seq_mass_su / alphabet.min_mass()),
         su_mass=seq_mass_su,
         obs_mass=seq_mass_obs,
         modification_rate=options.modification_rate,
@@ -133,7 +89,7 @@ def predict(options: PredictionOptions):
 
     # Initialize CompositionInferrer class
     inferrer = CompositionInferrer(
-        nucleotide_df=nucleotide_df,
+        nucleotide_df=alphabet.nucleotides,
         compression_rate=int(COMPRESSION_RATE),
         tolerance=TOLERANCE,
         precision=PRECISION,
@@ -156,7 +112,7 @@ def predict(options: PredictionOptions):
     # Predict sequence
     prediction = Predictor(
         inferrer=inferrer,
-        nucleotide_df=nucleotide_df,
+        nucleotide_df=alphabet.nucleotides,
     ).predict(
         fragments=fragments,
         solver_params=solver_params,
@@ -172,19 +128,28 @@ def predict(options: PredictionOptions):
         print(f">{options.sequence_name}", file=f)
         print("".join(prediction.sequence), file=f)
         print(f">{options.sequence_name}_full", file=f)
-        print(format_sequence_to_full_version(seq=prediction.sequence), file=f)
+        print(
+            format_sequence_to_full_version(
+                seq=prediction.sequence, nucleotide_alphabet=alphabet
+            ),
+            file=f,
+        )
 
     return prediction
 
 
-def format_sequence_to_full_version(seq: List[str]) -> str:
+def format_sequence_to_full_version(
+    seq: List[str], nucleotide_alphabet: NucleotideAlphabet
+) -> str:
     """
     Format a sequence to its full version (i.e. include alternate nucleotides).
 
     Parameters
     ----------
-    seq: List[str]
+    seq : List[str]
         Given predicted sequence.
+    nucleotide_alphabet : NucleotideAlphabet
+        Alphabet of considered nucleotides.
 
     Returns
     -------
@@ -194,12 +159,7 @@ def format_sequence_to_full_version(seq: List[str]) -> str:
     """
     output = ""
     for nuc in seq:
-        alt_nucs = (
-            NUCLEOTIDE_DF.filter(pl.col("representative") == nuc)
-            .select("id_list")
-            .item()
-            .to_list()
-        )
+        alt_nucs = nucleotide_alphabet.get_alternatives(representative=nuc)
         if len(alt_nucs) == 1:
             output += nuc
         else:

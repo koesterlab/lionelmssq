@@ -5,7 +5,8 @@ from itertools import product, combinations_with_replacement, chain
 import polars as pl
 import numpy as np
 
-from spectrseqtools.masses import NUCLEOTIDE_DF, UNMODIFIED_BASES
+from spectrseqtools.masses import UNMODIFIED_BASES
+from spectrseqtools.nucleotide_alphabet import NUCLEOTIDE_DF
 from spectrseqtools.prediction.traceback_matrix import CompositionInferrer
 
 

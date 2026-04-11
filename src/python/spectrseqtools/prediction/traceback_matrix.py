@@ -7,7 +7,8 @@ import pathlib
 import numpy as np
 import os
 
-from spectrseqtools.masses import NUCLEOTIDE_DF, UNMODIFIED_BASES
+from spectrseqtools.masses import UNMODIFIED_BASES
+from spectrseqtools.nucleotide_alphabet import NUCLEOTIDE_DF
 
 
 # Set OS-independent cache directory for traceback matrix
