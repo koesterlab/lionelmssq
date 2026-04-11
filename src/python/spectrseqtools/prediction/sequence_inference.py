@@ -1,21 +1,21 @@
-from pulp import (
-    LpProblem,
-    LpMinimize,
-    LpInteger,
-    LpContinuous,
-    LpVariable,
-    lpSum,
-    getSolver,
-)
-from typing import Any, Set
 from itertools import combinations
-import polars as pl
+from typing import Any, Set
+
 import numpy as np
+import polars as pl
+from pulp import (
+    LpContinuous,
+    LpInteger,
+    LpMinimize,
+    LpProblem,
+    LpVariable,
+    getSolver,
+    lpSum,
+)
 
 from spectrseqtools.dataclasses import SolverParameters
 from spectrseqtools.masses import UNMODIFIED_BASES
 from spectrseqtools.prediction.traceback_matrix import CompositionInferrer
-
 
 MILP_QUASI_ONE_THRESHOLD = 0.9
 

@@ -1,7 +1,8 @@
-from typing import List
-import polars as pl
-import altair as alt
 import importlib.resources
+from typing import List
+
+import altair as alt
+import polars as pl
 
 from spectrseqtools.common import parse_nucleosides
 from spectrseqtools.prediction.prediction import Prediction

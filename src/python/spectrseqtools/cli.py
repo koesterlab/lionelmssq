@@ -1,6 +1,7 @@
+from typing import List
+
 import polars as pl
 import yaml
-from typing import List
 
 from spectrseqtools.common import set_output_path
 from spectrseqtools.dataclasses import SolverParameters

@@ -1,15 +1,14 @@
+import os
+import pathlib
 from dataclasses import dataclass
 from typing import List
-from platformdirs import user_cache_dir
 
-import polars as pl
-import pathlib
 import numpy as np
-import os
+import polars as pl
+from platformdirs import user_cache_dir
 
 from spectrseqtools.masses import UNMODIFIED_BASES
 from spectrseqtools.nucleotide_alphabet import NUCLEOTIDE_DF
-
 
 # Set OS-independent cache directory for traceback matrix
 MATRIX_DIR = user_cache_dir(

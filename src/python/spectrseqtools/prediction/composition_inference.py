@@ -1,9 +1,9 @@
 from dataclasses import dataclass
+from itertools import chain, combinations_with_replacement, product
 from typing import List, Set, Tuple
-from itertools import product, combinations_with_replacement, chain
 
-import polars as pl
 import numpy as np
+import polars as pl
 
 from spectrseqtools.masses import UNMODIFIED_BASES
 from spectrseqtools.nucleotide_alphabet import NUCLEOTIDE_DF

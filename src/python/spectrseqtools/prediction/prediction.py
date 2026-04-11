@@ -1,12 +1,13 @@
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Self, Set, Tuple
+
 import polars as pl
 from loguru import logger
 
 from spectrseqtools.common import (
-    calculate_error_threshold,
     calculate_compositions,
+    calculate_error_threshold,
     parse_nucleosides,
 )
 from spectrseqtools.dataclasses import SolverParameters

@@ -1,14 +1,15 @@
 from dataclasses import dataclass
 from itertools import chain, groupby
 from typing import List, Optional, Set, Tuple
-from loguru import logger
+
 import numpy as np
 import polars as pl
+from loguru import logger
 
 from spectrseqtools.common import (
     Composition,
-    calculate_error_threshold,
     calculate_compositions,
+    calculate_error_threshold,
 )
 from spectrseqtools.dataclasses import SolverParameters
 from spectrseqtools.prediction.fragment_classification import MAX_VARIANCE

@@ -1,6 +1,7 @@
 import importlib.resources
-import polars as pl
 from itertools import product
+
+import polars as pl
 
 _COLS = [
     "id",
