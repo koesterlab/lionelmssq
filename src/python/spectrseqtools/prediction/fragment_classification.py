@@ -1,11 +1,7 @@
-import numpy as np
-import polars as pl
+# -*- coding: utf-8 -*-
+"""Classification of fragments."""
 
-from spectrseqtools.prediction.composition_inference import is_valid_mass
-from spectrseqtools.prediction.traceback_matrix import CompositionInferrer
-
-MAX_VARIANCE = 1
-
+from spectrseqtools.dataclasses import RawFragments, StandardUnitFragments
 
 # METHOD: For each fragmentation option that yields a valid mass (i.e. one that
 # has any valid composition) for a given fragment, duplicate the fragment
@@ -14,107 +10,32 @@ MAX_VARIANCE = 1
 
 
 def classify_fragments(
-    fragment_masses: pl.DataFrame,
-    inferrer: CompositionInferrer,
+    fragments: RawFragments,
     fragmentation_dict: dict,
-    output_file_path=None,
-    mass_cutoff=50000,
-) -> pl.DataFrame:
-    # Copy each fragment for each unique fragmentation weights and set standard-unit mass
-    fragments = pl.concat(
-        [
-            fragment_masses.with_columns(
-                (pl.col("observed_mass") - (weight * inferrer.precision)).alias(
-                    "standard_unit_mass"
-                ),
-                pl.lit(fragmentation[0]).alias("fragmentation"),
-            )
-            for (weight, fragmentation) in fragmentation_dict.items()
-        ]
-    )
+) -> StandardUnitFragments:
+    """
+    Classify raw fragments while standardizing them.
 
-    # Filter out all fragments with no valid composition
-    fragments = (
-        fragments.with_columns(
-            pl.struct("observed_mass", "standard_unit_mass")
-            .map_elements(
-                lambda x: is_valid_mass(
-                    mass=x["standard_unit_mass"],
-                    inferrer=inferrer,
-                    threshold=inferrer.tolerance * x["observed_mass"],
-                ),
-                return_dtype=bool,
-            )
-            .alias("is_valid")
-        )
-        .filter(pl.col("is_valid"))
-        .drop("is_valid")
-    )
+    Parameters
+    ----------
+    fragments : RawFragments
+        Raw fragments.
+    fragmentation_dict : dict
+        Dictionary with masses of all considered fragmentation types.
 
-    # Determine all fragments that may be singletons
-    fragments = fragments.with_columns(
-        pl.struct("observed_mass", "standard_unit_mass")
-        .map_elements(
-            lambda x: is_singleton(
-                mass=x["standard_unit_mass"],
-                integer_masses=[mass.mass for mass in inferrer.alphabet],
-                inferrer=inferrer,
-                threshold=inferrer.tolerance * x["observed_mass"],
-            ),
-            return_dtype=bool,
-        )
-        .alias("is_singleton")
-    )
+    Returns
+    -------
+    StandardUnitFragments
+        SU-fragments.
 
-    # Filter out fragments that have a too high mass
-    fragments = fragments.sort(pl.col("standard_unit_mass")).filter(
-        pl.col("observed_mass") < mass_cutoff
-    )
+    """
+    fragments = fragments.standardize(fragmentation_dict=fragmentation_dict)
 
-    # Select highest valid SU mass, i.e. the sequence mass
-    mass_cutoff = inferrer.seq.su_mass
-
-    # Filter fragments based on mass cutoff
-    fragments = filter_by_intact_mass(mass_cutoff, fragments)
-
-    # Write terminal fragments to file if file name is given
-    if output_file_path is not None:
-        fragments.write_csv(output_file_path, separator="\t")
-
-    return fragments
-
-
-def is_singleton(mass, integer_masses, inferrer, threshold=None):
-    # Convert the target to an integer for easy operations
-    target = int(round(mass / inferrer.precision, 0))
-
-    # Set relative threshold if not given
-    if threshold is None:
-        threshold = inferrer.tolerance * mass
-
-    # Convert the threshold to integer
-    threshold = int(np.ceil(threshold / inferrer.precision))
-
-    # Check whether a singleton mass could be found
-    for value in range(target - threshold, target + threshold + 1):
-        if value in integer_masses:
-            return True
-    return False
-
-
-def filter_by_intact_mass(mass_cutoff: float, fragments: pl.DataFrame) -> pl.DataFrame:
-    # Filter out fragments that have a too high SU mass (within variance)
-    fragments = fragments.filter(
-        pl.col("standard_unit_mass") < mass_cutoff + MAX_VARIANCE
-    )
-
-    # Filter out all intact fragments with a too low SU mass (within variance)
-    fragments = fragments.filter(
-        (pl.col("standard_unit_mass") > mass_cutoff - MAX_VARIANCE)
-        | ~(
-            pl.col("fragmentation").str.contains("START")
-            & pl.col("fragmentation").str.contains("END")
-        )
-    )
+    # TODO: What is the purpose of the below? It is never used anyway as the
+    #  mass would be way too high for a mass spectrometer.
+    # # Filter out fragments that have a too high mass
+    # fragments = fragments.sort(pl.col("standard_unit_mass")).filter(
+    #     pl.col("observed_mass") < mass_cutoff
+    # )
 
     return fragments

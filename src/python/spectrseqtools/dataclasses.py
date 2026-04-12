@@ -9,13 +9,16 @@ from typing import List, Self
 
 import polars as pl
 
+from spectrseqtools.masses import PRECISION
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
+from spectrseqtools.prediction.composition_inference import is_valid_mass
 
 _NUCLEOSIDE_RE = re.compile(r"\d*[ACGU]")
 MASSES = pl.read_csv(
     (importlib.resources.files(__package__) / "assets" / "masses.tsv"),
     separator="\t",
 )
+MAX_VARIANCE = 1
 
 
 @dataclass
@@ -54,6 +57,95 @@ class SolverParameters:
             params.pop("time_limit_short")
 
         return params
+
+
+@dataclass
+class StandardUnitFragments:
+    """Class for SU-fragments."""
+
+    fragments: pl.DataFrame
+
+    @classmethod
+    def default(cls) -> Self:
+        """Return empty fragments dataframe."""
+        return cls(
+            fragments=pl.DataFrame(
+                schema={
+                    "orig_index": pl.UInt32,
+                    "observed_mass": pl.Float64,
+                    "standard_unit_mass": pl.Float64,
+                    "fragmentation": pl.String,
+                    "intensity": pl.Float64,
+                }
+            ),
+        )
+
+    def filter_by_intact_mass(self, intact_mass) -> None:
+        """
+        Filter SU-fragments by intact mass.
+
+        Within variance, filter out fragments whose SU-mass is either
+        1) higher than intact mass or
+        2) lower than the intact mass while being intact fragment.
+
+        Parameters
+        ----------
+        intact_mass : float
+            Intact sequence mass.
+
+        """
+        # Filter out fragments that have a too high SU mass (within variance)
+        self.fragments = self.fragments.filter(
+            pl.col("standard_unit_mass") < intact_mass + MAX_VARIANCE
+        )
+
+        # Filter out all intact fragments with a too low SU mass (within variance)
+        self.fragments = self.fragments.filter(
+            (pl.col("standard_unit_mass") > intact_mass - MAX_VARIANCE)
+            | ~(
+                pl.col("fragmentation").str.contains("START")
+                & pl.col("fragmentation").str.contains("END")
+            )
+        )
+
+    def filter_with_traceback_matrix(self, inferrer) -> None:
+        """
+        Filter out all fragments with no valid composition
+
+        Parameters
+        ----------
+        inferrer : CompositionInferrer
+            Composition inferrer, i.e., traceback matrix.
+
+        """
+        self.fragments = (
+            self.fragments.with_columns(
+                pl.struct("observed_mass", "standard_unit_mass")
+                .map_elements(
+                    lambda x: is_valid_mass(
+                        mass=x["standard_unit_mass"],
+                        inferrer=inferrer,
+                        threshold=inferrer.tolerance * x["observed_mass"],
+                    ),
+                    return_dtype=bool,
+                )
+                .alias("is_valid")
+            )
+            .filter(pl.col("is_valid"))
+            .drop("is_valid")
+        )
+
+    def save(self, output_path) -> None:
+        """
+        Save SU-fragments to file.
+
+        Parameters
+        ----------
+        output_path : Path
+            Path to output file in TSV format.
+
+        """
+        self.fragments.write_csv(output_path, separator="\t")
 
 
 @dataclass
@@ -114,6 +206,39 @@ class RawFragments:
         """
         if self.fragments.select("intensity").min().item() > -1:
             self.fragments = self.fragments.filter(pl.col("intensity") > cutoff)
+
+    def standardize(self, fragmentation_dict: dict) -> StandardUnitFragments:
+        """
+        Obtain SU-fragments for each considered fragmentation type.
+
+        Parameters
+        ----------
+        fragmentation_dict : dict
+            Dictionary with masses of all considered fragmentation types.
+
+        Returns
+        -------
+        StandardUnitFragments
+            SU-fragments.
+
+        """
+        # Copy each fragment for each unique fragmentation weights and set standard-unit mass
+        fragments = pl.concat(
+            [
+                self.fragments.with_columns(
+                    (pl.col("observed_mass") - (weight * PRECISION)).alias(
+                        "standard_unit_mass"
+                    ),
+                    pl.lit(fragmentation[0]).alias("fragmentation"),
+                )
+                for (weight, fragmentation) in fragmentation_dict.items()
+            ]
+        )
+
+        # Sort fragments
+        return StandardUnitFragments(
+            fragments=fragments.sort(pl.col("standard_unit_mass"))
+        )
 
 
 @dataclass

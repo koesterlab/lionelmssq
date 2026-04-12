@@ -1,5 +1,6 @@
 from typing import Set, Tuple
 
+import numpy as np
 import polars as pl
 from loguru import logger
 
@@ -234,6 +235,19 @@ class Predictor:
             ),
         }
 
+        # Determine all fragments that may be singletons
+        fragments = fragments.with_columns(
+            pl.struct("observed_mass", "standard_unit_mass")
+            .map_elements(
+                lambda x: is_singleton(
+                    mass=x["standard_unit_mass"],
+                    inferrer=self.inferrer,
+                    threshold=self.inferrer.tolerance * x["observed_mass"],
+                ),
+                return_dtype=bool,
+            )
+            .alias("is_singleton")
+        )
         # Collect singleton masses
         singleton_list = fragments.filter(pl.col("is_singleton"))
 
@@ -289,3 +303,46 @@ class Predictor:
                 end += 1
 
         return compositions
+
+
+def is_singleton(
+    mass,
+    inferrer: CompositionInferrer,
+    threshold: float = None,
+) -> bool:
+    """
+    Determine whether the given mass is associated with any singleton.
+
+    Parameters
+    ----------
+    mass : float
+        Given fragment mass.
+    inferrer: CompositionInferrer
+        Composition inferrer.
+    threshold : float
+        Error threshold.
+
+    Returns
+    -------
+    bool
+        Flag whether mass is associated with any singleton.
+
+    """
+    # Set singleton masses from alphabet
+    singleton_masses = [mass.mass for mass in inferrer.alphabet]
+
+    # Convert the target to an integer for easy operations
+    target = int(round(mass / inferrer.precision, 0))
+
+    # Set relative threshold if not given
+    if threshold is None:
+        threshold = inferrer.tolerance * mass
+
+    # Convert the threshold to integer
+    threshold = int(np.ceil(threshold / inferrer.precision))
+
+    # Check whether a singleton mass could be found
+    for value in range(target - threshold, target + threshold + 1):
+        if value in singleton_masses:
+            return True
+    return False

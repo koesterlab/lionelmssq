@@ -98,12 +98,18 @@ def predict(options: PredictionOptions):
     fragments = RawFragments.from_file(input_path=options.fragments)
     fragments.filter_by_intensity(cutoff=intensity_cutoff)
 
-    # Classify raw fragments
+    # Classify raw fragments into SU-fragments
     fragments = classify_fragments(
-        fragment_masses=fragments.fragments,
-        inferrer=inferrer,
+        fragments=fragments,
         fragmentation_dict=fragmentation_dict,
-        output_file_path=fragment_dir / f"{file_prefix}.standard_unit_fragments.tsv",
+    )
+
+    fragments.filter_by_intact_mass(intact_mass=inferrer.seq.su_mass)
+    fragments.filter_with_traceback_matrix(inferrer=inferrer)
+
+    # Save SU-fragments
+    fragments.save(
+        output_path=fragment_dir / f"{file_prefix}.standard_unit_fragments.tsv"
     )
 
     # Predict sequence
@@ -111,7 +117,7 @@ def predict(options: PredictionOptions):
         inferrer=inferrer,
         nucleotide_df=alphabet.nucleotides,
     ).predict(
-        fragments=fragments,
+        fragments=fragments.fragments,
         solver_params=solver_params,
     )
 
