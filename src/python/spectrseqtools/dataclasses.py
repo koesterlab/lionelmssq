@@ -64,7 +64,15 @@ class PredictedFragments:
 
     @classmethod
     def from_file(cls, input_path: Path) -> Self:
-        """Initialize predicted fragments from file."""
+        """
+        Initialize predicted fragments from file.
+
+        Parameters
+        ----------
+        input_path : Path
+            Path to input file in TSV format.
+
+        """
         return cls(fragments=pl.read_csv(input_path, separator="\t"))
 
     @classmethod
@@ -110,7 +118,15 @@ class Sequence:
 
     @classmethod
     def from_file(cls, input_path: Path) -> Self:
-        """Initialize predicted sequence from file."""
+        """
+        Initialize predicted sequence from file.
+
+        Parameters
+        ----------
+        input_path : Path
+            Path to input file in FASTA format.
+
+        """
         with open(input_path, mode="r", encoding="utf-8") as f:
             # Read only lines pertaining sequence in short format (consisting
             # only of representatives without mass-silent alternatives)
@@ -185,3 +201,69 @@ class Sequence:
             print("".join(self.sequence), file=f)
             print(f">{sequence_name}_full", file=f)
             print(self.to_full_str(nucleotide_alphabet=alphabet), file=f)
+
+
+@dataclass
+class Prediction:
+    """Class for prediction results."""
+
+    sequence: Sequence
+    fragments: PredictedFragments
+
+    @classmethod
+    def from_files(cls, sequence_path: Path, fragments_path: Path) -> Self:
+        """
+        Initialize prediction result from files.
+
+        Parameters
+        ----------
+        sequence_path : Path
+            Path to sequence file in FASTA format.
+        fragments_path : Path
+            Path to fragments file in TSV format.
+
+        """
+        return Prediction(
+            sequence=Sequence.from_file(input_path=sequence_path),
+            fragments=PredictedFragments.from_file(input_path=fragments_path),
+        )
+
+    @classmethod
+    def default(cls) -> Self:
+        """Return empty prediction."""
+        return Prediction(
+            sequence=Sequence.default(),
+            fragments=PredictedFragments.default(),
+        )
+
+    def save(
+        self,
+        fragment_path: Path,
+        sequence_path: Path,
+        sequence_name: str,
+        alphabet: NucleotideAlphabet,
+    ) -> None:
+        """
+        Save prediction results to file.
+
+        Parameters
+        ----------
+        fragment_path : Path
+            Path to output file for fragments in TSV format.
+        sequence_path : Path
+            Path to output file for sequence in FASTA format.
+        sequence_name : str
+            Name of sequence in FASTA header.
+        alphabet : NucleotideAlphabet
+            Alphabet of considered nucleotides.
+
+        """
+        # Save fragment predictions
+        self.fragments.save(output_path=fragment_path)
+
+        # Save predicted sequence
+        self.sequence.save(
+            output_path=sequence_path,
+            sequence_name=sequence_name,
+            alphabet=alphabet,
+        )

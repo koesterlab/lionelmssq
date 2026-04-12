@@ -1,5 +1,5 @@
 from itertools import combinations
-from typing import Any, Set, Tuple
+from typing import Any, Set
 
 import numpy as np
 import polars as pl
@@ -13,7 +13,12 @@ from pulp import (
     lpSum,
 )
 
-from spectrseqtools.dataclasses import PredictedFragments, Sequence, SolverParameters
+from spectrseqtools.dataclasses import (
+    PredictedFragments,
+    Prediction,
+    Sequence,
+    SolverParameters,
+)
 from spectrseqtools.masses import UNMODIFIED_BASES
 from spectrseqtools.prediction.traceback_matrix import CompositionInferrer
 
@@ -234,9 +239,7 @@ class LinearProgramInstance:
         score = self.problem.objective.value()
         return np.inf if score is None else score
 
-    def evaluate(
-        self, solver_params: SolverParameters
-    ) -> Tuple[Sequence, PredictedFragments]:
+    def evaluate(self, solver_params: SolverParameters) -> Prediction:
         # Initialize solver
         solver = getSolver(**solver_params.to_dict(filter_only=False))
 
@@ -244,9 +247,9 @@ class LinearProgramInstance:
         _ = self.problem.solve(solver)
 
         # Interpret solution
-        seq = self._get_sequence()
-        fragments = self._get_fragments()
-        return seq, fragments
+        return Prediction(
+            sequence=self._get_sequence(), fragments=self._get_fragments()
+        )
 
     def _get_sequence(self) -> Sequence:
         return Sequence(

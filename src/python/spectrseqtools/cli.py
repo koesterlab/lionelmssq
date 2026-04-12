@@ -119,12 +119,10 @@ def predict(options: PredictionOptions):
 
     print("Predicted sequence =\t", prediction.sequence)
 
-    # Save fragment predictions
-    prediction.fragments.save(output_path=options.fragment_predictions)
-
-    # Save predicted sequence
-    prediction.sequence.save(
-        output_path=options.sequence_prediction,
+    # Save prediction results
+    prediction.save(
+        fragment_path=options.fragment_predictions,
+        sequence_path=options.sequence_prediction,
         sequence_name=options.sequence_name,
         alphabet=alphabet,
     )

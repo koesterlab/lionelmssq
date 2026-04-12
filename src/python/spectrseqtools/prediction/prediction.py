@@ -1,6 +1,4 @@
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Self, Set, Tuple
+from typing import Set, Tuple
 
 import polars as pl
 from loguru import logger
@@ -9,31 +7,11 @@ from spectrseqtools.common import (
     calculate_compositions,
     calculate_error_threshold,
 )
-from spectrseqtools.dataclasses import PredictedFragments, Sequence, SolverParameters
+from spectrseqtools.dataclasses import Prediction, SolverParameters
 from spectrseqtools.prediction.composition_inference import is_valid_mass
 from spectrseqtools.prediction.sequence_inference import LinearProgramInstance
 from spectrseqtools.prediction.skeleton_building import SkeletonBuilder
 from spectrseqtools.prediction.traceback_matrix import CompositionInferrer
-
-
-@dataclass
-class Prediction:
-    sequence: Sequence
-    fragments: pl.DataFrame
-
-    @classmethod
-    def from_files(cls, sequence_path: Path, fragments_path: Path) -> Self:
-        return Prediction(
-            sequence=Sequence.from_file(input_path=sequence_path),
-            fragments=PredictedFragments.from_file(input_path=fragments_path),
-        )
-
-    @classmethod
-    def default(cls) -> Self:
-        return Prediction(
-            sequence=Sequence.default(),
-            fragments=PredictedFragments.default(),
-        )
 
 
 class Predictor:
@@ -148,7 +126,7 @@ class Predictor:
                 skeleton_seq=skeleton_seq,
             )
 
-            return Prediction(*lp_instance.evaluate(solver_params=solver_params))
+            return lp_instance.evaluate(solver_params=solver_params)
         except Exception:
             return Prediction.default()
 
