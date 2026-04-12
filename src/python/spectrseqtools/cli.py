@@ -1,5 +1,3 @@
-from typing import List
-
 import polars as pl
 import yaml
 
@@ -125,47 +123,13 @@ def predict(options: PredictionOptions):
     prediction.fragments.write_csv(options.fragment_predictions, separator="\t")
 
     # Save predicted sequence
-    with open(options.sequence_prediction, "w") as f:
-        print(f">{options.sequence_name}", file=f)
-        print("".join(prediction.sequence), file=f)
-        print(f">{options.sequence_name}_full", file=f)
-        print(
-            format_sequence_to_full_version(
-                seq=prediction.sequence, nucleotide_alphabet=alphabet
-            ),
-            file=f,
-        )
+    prediction.sequence.save(
+        output_path=options.sequence_prediction,
+        sequence_name=options.sequence_name,
+        alphabet=alphabet,
+    )
 
     return prediction
-
-
-def format_sequence_to_full_version(
-    seq: List[str], nucleotide_alphabet: NucleotideAlphabet
-) -> str:
-    """
-    Format a sequence to its full version (i.e. include alternate nucleotides).
-
-    Parameters
-    ----------
-    seq : List[str]
-        Given predicted sequence.
-    nucleotide_alphabet : NucleotideAlphabet
-        Alphabet of considered nucleotides.
-
-    Returns
-    -------
-    str
-        Sequence with all alternate nucleotides.
-
-    """
-    output = ""
-    for nuc in seq:
-        alt_nucs = nucleotide_alphabet.get_alternatives(representative=nuc)
-        if len(alt_nucs) == 1:
-            output += nuc
-        else:
-            output += "[" + "|".join(alt_nucs) + "]"
-    return output
 
 
 def select_solver(solver: SolverType):

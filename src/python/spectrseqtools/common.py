@@ -1,4 +1,3 @@
-import re
 from pathlib import Path
 from typing import List, Tuple
 
@@ -8,7 +7,6 @@ from spectrseqtools.prediction.composition_inference import (
 from spectrseqtools.prediction.traceback_matrix import CompositionInferrer
 
 ERROR_METHOD = "l1_norm"
-_NUCLEOSIDE_RE = re.compile(r"\d*[ACGU]")
 
 
 def set_output_path(input_path: Path, output_dir: Path) -> Tuple[Path, str]:
@@ -17,10 +15,6 @@ def set_output_path(input_path: Path, output_dir: Path) -> Tuple[Path, str]:
     path_prefix = path.stem
 
     return path_dir, path_prefix
-
-
-def parse_nucleosides(sequence: str):
-    return _NUCLEOSIDE_RE.findall(sequence)
 
 
 class Composition:

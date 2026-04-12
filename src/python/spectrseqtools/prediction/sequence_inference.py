@@ -13,7 +13,7 @@ from pulp import (
     lpSum,
 )
 
-from spectrseqtools.dataclasses import SolverParameters
+from spectrseqtools.dataclasses import Sequence, SolverParameters
 from spectrseqtools.masses import UNMODIFIED_BASES
 from spectrseqtools.prediction.traceback_matrix import CompositionInferrer
 
@@ -242,7 +242,9 @@ class LinearProgramInstance:
         _ = self.problem.solve(solver)
 
         # Interpret solution
-        seq = [self._get_sequence_nucleotide(k) for k in range(self.seq_len)]
+        seq = Sequence(
+            sequence=[self._get_sequence_nucleotide(k) for k in range(self.seq_len)]
+        )
 
         fragment_masses = self.fragments.get_column("standard_unit_mass").to_list()
 

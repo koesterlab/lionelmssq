@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Self, Set, Tuple
+from typing import Self, Set, Tuple
 
 import polars as pl
 from loguru import logger
@@ -8,9 +8,8 @@ from loguru import logger
 from spectrseqtools.common import (
     calculate_compositions,
     calculate_error_threshold,
-    parse_nucleosides,
 )
-from spectrseqtools.dataclasses import SolverParameters
+from spectrseqtools.dataclasses import Sequence, SolverParameters
 from spectrseqtools.prediction.composition_inference import is_valid_mass
 from spectrseqtools.prediction.sequence_inference import LinearProgramInstance
 from spectrseqtools.prediction.skeleton_building import SkeletonBuilder
@@ -19,24 +18,22 @@ from spectrseqtools.prediction.traceback_matrix import CompositionInferrer
 
 @dataclass
 class Prediction:
-    sequence: List[str]
+    sequence: Sequence
     fragments: pl.DataFrame
 
     @classmethod
     def from_files(cls, sequence_path: Path, fragments_path: Path) -> Self:
-        with open(sequence_path) as f:
-            # Read only lines pertaining sequence in short format (consisting
-            # only of representatives without mass-silent alternatives)
-            head, seq = f.readlines()[:2]
-            assert head.startswith(">")
-
         fragments = pl.read_csv(fragments_path, separator="\t")
-        return Prediction(sequence=parse_nucleosides(seq.strip()), fragments=fragments)
+
+        return Prediction(
+            sequence=Sequence.from_file(input_path=sequence_path),
+            fragments=fragments,
+        )
 
     @classmethod
     def default(cls) -> Self:
         return Prediction(
-            sequence=[],
+            sequence=Sequence.default(),
             fragments=pl.DataFrame(
                 schema={
                     "left": pl.Int64,

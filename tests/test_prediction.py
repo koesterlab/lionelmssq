@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 import yaml
 from clr_loader import get_mono
-from spectrseqtools.cli import format_sequence_to_full_version, predict
-from spectrseqtools.common import parse_nucleosides
+from spectrseqtools.cli import predict
+from spectrseqtools.dataclasses import Sequence
 from spectrseqtools.enums import SolverType
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 from spectrseqtools.parsers import PredictionOptions, PreprocessingOptions
@@ -69,13 +69,13 @@ def test_testcase(testcase):
     )
 
     # Read true sequence from meta file
-    true_seq = parse_nucleosides(meta["true_sequence"])
+    true_seq = Sequence.from_str(meta["true_sequence"])
 
     print("True sequence =\t\t", true_seq)
     print(
         "Full sequence =\t\t",
-        format_sequence_to_full_version(
-            seq=prediction.sequence, nucleotide_alphabet=NucleotideAlphabet.from_file()
+        prediction.sequence.to_full_str(
+            nucleotide_alphabet=NucleotideAlphabet.from_file()
         ),
     )
 
@@ -87,7 +87,7 @@ def test_testcase(testcase):
     plots[3].save(base_path / "fragments.plot.html")
 
     # Save updated meta data
-    meta["predicted_sequence"] = "".join(prediction.sequence)
+    meta["predicted_sequence"] = prediction.sequence.to_str()
     with open(base_path / "fragments.testing.meta.yaml", "w") as f:
         yaml.safe_dump(meta, f)
 
