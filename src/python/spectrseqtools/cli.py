@@ -1,8 +1,7 @@
-import polars as pl
 import yaml
 
 from spectrseqtools.common import set_output_path
-from spectrseqtools.dataclasses import SolverParameters
+from spectrseqtools.dataclasses import RawFragments, SolverParameters
 from spectrseqtools.enums import SolverType
 from spectrseqtools.masses import (
     COMPRESSION_RATE,
@@ -51,9 +50,6 @@ def predict(options: PredictionOptions):
     with open(options.meta, "r") as f:
         meta = yaml.safe_load(f)
 
-    # Read preprocessed fragments
-    fragments = pl.read_csv(options.fragments, separator="\t")
-
     # Initialize nucleotide alphabet
     alphabet = NucleotideAlphabet.from_file()
     alphabet.filter_by_singleton_selection(singleton_path=options.singletons)
@@ -66,8 +62,7 @@ def predict(options: PredictionOptions):
     # Build fragmentation dict
     fragmentation_dict = build_fragmentation_dict(start_tag=start_tag, end_tag=end_tag)
 
-    # Standardize intact sequence mass by removing START_END fragmentation to
-    # gain SU mass
+    # Standardize intact sequence mass by removing START_END fragmentation to gain SU mass
     seq_mass_obs = meta["intact_mass"]
     seq_mass_su = (
         seq_mass_obs
@@ -99,13 +94,16 @@ def predict(options: PredictionOptions):
     inferrer.print_alphabet()
     print()
 
-    # Classify preprocessed fragments
+    # Initialize raw fragments
+    fragments = RawFragments.from_file(input_path=options.fragments)
+    fragments.filter_by_intensity(cutoff=intensity_cutoff)
+
+    # Classify raw fragments
     fragments = classify_fragments(
-        fragment_masses=fragments,
+        fragment_masses=fragments.fragments,
         inferrer=inferrer,
         fragmentation_dict=fragmentation_dict,
         output_file_path=fragment_dir / f"{file_prefix}.standard_unit_fragments.tsv",
-        intensity_cutoff=intensity_cutoff,
     )
 
     # Predict sequence

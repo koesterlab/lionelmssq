@@ -14,26 +14,12 @@ MAX_VARIANCE = 1
 
 
 def classify_fragments(
-    fragment_masses,
+    fragment_masses: pl.DataFrame,
     inferrer: CompositionInferrer,
     fragmentation_dict: dict,
     output_file_path=None,
-    intensity_cutoff=0.5e6,
     mass_cutoff=50000,
 ) -> pl.DataFrame:
-    # If no intensity is given, set it so that all fragments pass the filter
-    if "intensity" not in fragment_masses.columns:
-        fragment_masses = fragment_masses.with_columns(
-            pl.lit(intensity_cutoff * 1.1).alias("intensity"),
-        )
-
-    # Rename 'neutral_mass' values from deisotoping to 'observed_mass'
-    if "neutral_mass" in fragment_masses.columns:
-        fragment_masses = fragment_masses.rename({"neutral_mass": "observed_mass"})
-
-    # Index fragments
-    fragment_masses = fragment_masses.with_row_index("fragment_index")
-
     # Copy each fragment for each unique fragmentation weights and set standard-unit mass
     fragments = pl.concat(
         [
@@ -80,11 +66,9 @@ def classify_fragments(
         .alias("is_singleton")
     )
 
-    # Filter out fragments that have a too high mass or too low intensity
-    fragments = (
-        fragments.sort(pl.col("standard_unit_mass"))
-        .filter(pl.col("intensity") > intensity_cutoff)
-        .filter(pl.col("observed_mass") < mass_cutoff)
+    # Filter out fragments that have a too high mass
+    fragments = fragments.sort(pl.col("standard_unit_mass")).filter(
+        pl.col("observed_mass") < mass_cutoff
     )
 
     # Select highest valid SU mass, i.e. the sequence mass
