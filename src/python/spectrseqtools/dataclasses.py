@@ -57,6 +57,49 @@ class SolverParameters:
 
 
 @dataclass
+class PredictedFragments:
+    """Class for predicted fragments."""
+
+    fragments: pl.DataFrame
+
+    @classmethod
+    def from_file(cls, input_path: Path) -> Self:
+        """Initialize predicted fragments from file."""
+        return cls(fragments=pl.read_csv(input_path, separator="\t"))
+
+    @classmethod
+    def default(cls) -> Self:
+        """Return empty fragments dataframe."""
+        return cls(
+            fragments=pl.DataFrame(
+                schema={
+                    "left": pl.Int64,
+                    "right": pl.Int64,
+                    "observed_mass": pl.Float64,
+                    "standard_unit_mass": pl.Float64,
+                    "predicted_mass": pl.Float64,
+                    "predicted_diff": pl.Float64,
+                    "predicted_seq": pl.String,
+                    "orig_index": pl.UInt32,
+                    "intensity": pl.Float64,
+                }
+            ),
+        )
+
+    def save(self, output_path) -> None:
+        """
+        Save predicted fragments to file.
+
+        Parameters
+        ----------
+        output_path : Path
+            Path to output file in TSV format.
+
+        """
+        self.fragments.write_csv(output_path, separator="\t")
+
+
+@dataclass
 class Sequence:
     """Class for (predicted) sequence."""
 

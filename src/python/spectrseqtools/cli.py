@@ -120,7 +120,7 @@ def predict(options: PredictionOptions):
     print("Predicted sequence =\t", prediction.sequence)
 
     # Save fragment predictions
-    prediction.fragments.write_csv(options.fragment_predictions, separator="\t")
+    prediction.fragments.save(output_path=options.fragment_predictions)
 
     # Save predicted sequence
     prediction.sequence.save(

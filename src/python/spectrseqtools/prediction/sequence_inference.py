@@ -1,5 +1,5 @@
 from itertools import combinations
-from typing import Any, Set
+from typing import Any, Set, Tuple
 
 import numpy as np
 import polars as pl
@@ -13,7 +13,7 @@ from pulp import (
     lpSum,
 )
 
-from spectrseqtools.dataclasses import Sequence, SolverParameters
+from spectrseqtools.dataclasses import PredictedFragments, Sequence, SolverParameters
 from spectrseqtools.masses import UNMODIFIED_BASES
 from spectrseqtools.prediction.traceback_matrix import CompositionInferrer
 
@@ -234,7 +234,9 @@ class LinearProgramInstance:
         score = self.problem.objective.value()
         return np.inf if score is None else score
 
-    def evaluate(self, solver_params: SolverParameters):
+    def evaluate(
+        self, solver_params: SolverParameters
+    ) -> Tuple[Sequence, PredictedFragments]:
         # Initialize solver
         solver = getSolver(**solver_params.to_dict(filter_only=False))
 
@@ -242,10 +244,22 @@ class LinearProgramInstance:
         _ = self.problem.solve(solver)
 
         # Interpret solution
-        seq = Sequence(
+        seq = self._get_sequence()
+        fragments = self._get_fragments()
+        return seq, fragments
+
+    def _get_sequence(self) -> Sequence:
+        return Sequence(
             sequence=[self._get_sequence_nucleotide(k) for k in range(self.seq_len)]
         )
 
+    def _get_sequence_nucleotide(self, k):
+        for i, nuc in enumerate(self.nucleoside_names):
+            if milp_is_one(self.y[i][k]):
+                return nuc
+        return None
+
+    def _get_fragments(self) -> PredictedFragments:
         fragment_masses = self.fragments.get_column("standard_unit_mass").to_list()
 
         # Get the sequence corresponding to each of the fragments!
@@ -277,15 +291,8 @@ class LinearProgramInstance:
             [
                 {
                     # Because of the relaxation of the LP, sometimes the value is not exactly 1
-                    "left": min(
-                        (k for k in range(self.seq_len) if milp_is_one(self.x[j][k])),
-                        default=0,
-                    ),
-                    "right": max(
-                        (k for k in range(self.seq_len) if milp_is_one(self.x[j][k])),
-                        default=-1,
-                    )
-                    + 1,  # Right-side bound shall be exclusive, hence add 1
+                    "left": self._get_leftmost_position(j),
+                    "right": self._get_rightmost_position(j),
                     "observed_mass": observed_masses[j],
                     "standard_unit_mass": fragment_masses[j],
                     "predicted_mass": predicted_fragment_mass[j],
@@ -306,18 +313,25 @@ class LinearProgramInstance:
         )
 
         # Reorder fragment predictions to again match the original order
-        fragment_predictions = fragment_predictions.sort("orig_index")
-
-        return seq, fragment_predictions
-
-    def _get_sequence_nucleotide(self, k):
-        for i, nuc in enumerate(self.nucleoside_names):
-            if milp_is_one(self.y[i][k]):
-                return nuc
-        return None
+        return PredictedFragments(fragments=fragment_predictions.sort("orig_index"))
 
     def _get_fragment_nucleotide(self, j, k):
         for i, nuc in enumerate(self.nucleoside_names):
             if milp_is_one(self.z[i][j][k]):
                 return nuc
         return None
+
+    def _get_leftmost_position(self, j):
+        return min(
+            (k for k in range(self.seq_len) if milp_is_one(self.x[j][k])),
+            default=0,
+        )
+
+    def _get_rightmost_position(self, j):
+        return (
+            max(
+                (k for k in range(self.seq_len) if milp_is_one(self.x[j][k])),
+                default=-1,
+            )
+            + 1  # Right-side bound shall be exclusive, hence add 1
+        )

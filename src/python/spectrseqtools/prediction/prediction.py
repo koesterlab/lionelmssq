@@ -9,7 +9,7 @@ from spectrseqtools.common import (
     calculate_compositions,
     calculate_error_threshold,
 )
-from spectrseqtools.dataclasses import Sequence, SolverParameters
+from spectrseqtools.dataclasses import PredictedFragments, Sequence, SolverParameters
 from spectrseqtools.prediction.composition_inference import is_valid_mass
 from spectrseqtools.prediction.sequence_inference import LinearProgramInstance
 from spectrseqtools.prediction.skeleton_building import SkeletonBuilder
@@ -23,30 +23,16 @@ class Prediction:
 
     @classmethod
     def from_files(cls, sequence_path: Path, fragments_path: Path) -> Self:
-        fragments = pl.read_csv(fragments_path, separator="\t")
-
         return Prediction(
             sequence=Sequence.from_file(input_path=sequence_path),
-            fragments=fragments,
+            fragments=PredictedFragments.from_file(input_path=fragments_path),
         )
 
     @classmethod
     def default(cls) -> Self:
         return Prediction(
             sequence=Sequence.default(),
-            fragments=pl.DataFrame(
-                schema={
-                    "left": pl.Int64,
-                    "right": pl.Int64,
-                    "observed_mass": pl.Float64,
-                    "standard_unit_mass": pl.Float64,
-                    "predicted_mass": pl.Float64,
-                    "predicted_diff": pl.Float64,
-                    "predicted_seq": pl.String,
-                    "orig_index": pl.UInt32,
-                    "intensity": pl.Float64,
-                }
-            ),
+            fragments=PredictedFragments.default(),
         )
 
 

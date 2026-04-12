@@ -44,7 +44,9 @@ def plot_prediction(
     def create_range(left, right):
         return list(range(left, right))
 
-    fragment_predictions = prediction.fragments.with_columns(
+    fragment_predictions = prediction.fragments.fragments
+
+    fragment_predictions = fragment_predictions.with_columns(
         pl.col("left") - 0.5,
         pl.col("right") - 1 + 0.5,
         pl.struct(["left", "right"])
