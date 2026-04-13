@@ -288,7 +288,7 @@ def average_deisotope_ms1_collect_ms2(raw_file_read, decon_params, min_scan_time
             ms1_mass_ms2_scans_list.append(ms1_mass_ms2_scans)
     return ms1_mass_ms2_scans_list
 
-def cluster_ms1_masses(ms1_mass_m42354352s2_scans_list):
+def cluster_ms1_masses(ms1_mass_ms2_scans_list):
     df_ms1_clusters = pl.DataFrame(
                 data=np.array(
                     [[frag.__dict__[key] for key in COL_TYPES_MS1_CLUSTER.keys()] for frag in ms1_mass_ms2_scans_list]
