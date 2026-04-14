@@ -20,7 +20,7 @@ from spectrseqtools.dataclasses import (
     SolverParameters,
 )
 from spectrseqtools.masses import UNMODIFIED_BASES
-from spectrseqtools.prediction.traceback_matrix import CompositionInferrer
+from spectrseqtools.prediction.composition_inference import CompositionInferrer
 
 MILP_QUASI_ONE_THRESHOLD = 0.9
 

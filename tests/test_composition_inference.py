@@ -3,12 +3,10 @@ import pytest
 from spectrseqtools.masses import PRECISION
 from spectrseqtools.nucleotide_alphabet import NUCLEOTIDE_DF, NucleotideAlphabet
 from spectrseqtools.prediction.composition_inference import (
-    infer_compositions_with_matrix,
-    infer_compositions_with_recursion,
-)
-from spectrseqtools.prediction.traceback_matrix import (
     CompositionInferrer,
     SequenceInformation,
+    infer_compositions_with_matrix,
+    infer_compositions_with_recursion,
 )
 
 

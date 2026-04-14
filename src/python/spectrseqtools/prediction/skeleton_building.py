@@ -12,11 +12,11 @@ from spectrseqtools.common import (
     calculate_error_threshold,
 )
 from spectrseqtools.dataclasses import MAX_VARIANCE, SolverParameters
-from spectrseqtools.prediction.sequence_inference import LinearProgramInstance
-from spectrseqtools.prediction.traceback_matrix import (
+from spectrseqtools.prediction.composition_inference import (
     CompositionInferrer,
     compute_sequence_length_bound,
 )
+from spectrseqtools.prediction.sequence_inference import LinearProgramInstance
 
 
 @dataclass

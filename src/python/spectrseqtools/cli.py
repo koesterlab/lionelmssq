@@ -12,12 +12,12 @@ from spectrseqtools.masses import (
 )
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 from spectrseqtools.parsers import Options, PredictionOptions
-from spectrseqtools.prediction.fragment_classification import classify_fragments
-from spectrseqtools.prediction.prediction import Predictor
-from spectrseqtools.prediction.traceback_matrix import (
+from spectrseqtools.prediction.composition_inference import (
     CompositionInferrer,
     SequenceInformation,
 )
+from spectrseqtools.prediction.fragment_classification import classify_fragments
+from spectrseqtools.prediction.prediction import Predictor
 from spectrseqtools.preprocessing.preprocessing import Preprocessor
 
 

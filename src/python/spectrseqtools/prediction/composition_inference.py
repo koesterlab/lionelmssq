@@ -7,7 +7,12 @@ import polars as pl
 
 from spectrseqtools.masses import UNMODIFIED_BASES
 from spectrseqtools.nucleotide_alphabet import NUCLEOTIDE_DF
-from spectrseqtools.prediction.traceback_matrix import CompositionInferrer
+from spectrseqtools.prediction.traceback_matrix import (
+    MAX_SEQ_LENGTH,
+    load_matrix,
+    set_matrix_path,
+    set_up_bit_matrix,
+)
 
 
 @dataclass
@@ -41,6 +46,327 @@ IS_MOD = {
     )
     for mass in NUCLEOTIDE_DF.get_column("integer_mass").to_list()
 }
+
+
+@dataclass
+class NucleotideMass:
+    mass: int
+    names: List[str]
+    is_modification: bool
+    modification_rate: float
+
+    def __eq__(self, other):
+        return self.mass == other.mass
+
+    def __le__(self, other):
+        return self.mass <= other.mass
+
+    def __lt__(self, other):
+        return self.mass < other.mass
+
+    def __ge__(self, other):
+        return self.mass >= other.mass
+
+    def __gt__(self, other):
+        return self.mass > other.mass
+
+
+@dataclass
+class SequenceInformation:
+    max_len: int
+    su_mass: float
+    obs_mass: float
+    modification_rate: float
+
+
+@dataclass
+class CompositionInferrer:
+    matrix: np.ndarray
+    compression_per_cell: int
+    precision: float
+    tolerance: float
+    seq: SequenceInformation
+    alphabet: List[NucleotideMass]
+
+    def __init__(
+        self,
+        nucleotide_df: pl.DataFrame,
+        compression_rate: int,
+        tolerance: float,
+        precision: float,
+        seq: SequenceInformation,
+    ):
+        self.compression_per_cell = compression_rate
+        self.tolerance = tolerance
+        self.precision = precision
+        self.seq = seq
+        self.alphabet = initialize_nucleotide_alphabet(nucleotide_df)
+        self.matrix = None
+
+        # Adapt individual modification rates to universal one
+        self._adapt_individual_modification_rates_by_universal_one()
+
+        # Initialize matrix from file (for no alphabet reduction)
+        if self.matrix is None:
+            self.matrix = load_matrix(
+                path=set_matrix_path(precision, compression_rate),
+                integer_masses=[mass.mass for mass in self.alphabet],
+            )
+
+    def _adapt_individual_modification_rates_by_universal_one(self):
+        for nucleotide_mass in self.alphabet:
+            if not nucleotide_mass.is_modification:
+                continue
+            if nucleotide_mass.modification_rate > self.seq.modification_rate:
+                nucleotide_mass.modification_rate = self.seq.modification_rate
+        self._reduce_nucleotide_alphabet()
+
+    def adapt_individual_modification_rates_by_alphabet_reduction(self, alphabet):
+        for nucleotide_mass in self.alphabet:
+            if not nucleotide_mass.is_modification:
+                continue
+            if all(name not in alphabet for name in nucleotide_mass.names):
+                nucleotide_mass.modification_rate = 0.0
+        self._reduce_nucleotide_alphabet()
+
+    def _reduce_nucleotide_alphabet(self):
+        new_alphabet = [
+            mass
+            for mass in self.alphabet
+            if mass.mass == 0.0 or mass.modification_rate > 0.0
+        ]
+
+        # Return if alphabet was not reduced
+        if len(new_alphabet) == len(self.alphabet):
+            return
+
+        # Recompute matrix
+        self.matrix = set_up_bit_matrix(
+            integer_masses=[mass.mass for mass in new_alphabet],
+            max_mass=max([mass.mass for mass in new_alphabet]) * MAX_SEQ_LENGTH,
+            compression_rate=self.compression_per_cell,
+        )
+
+        # Update nucleotide alphabet
+        self.alphabet = new_alphabet
+
+    def print_alphabet(self):
+        mass_names = []
+        for mass in self.alphabet:
+            mass_names += mass.names
+        masses = NUCLEOTIDE_DF.sort("nucleoside_mass").filter(
+            pl.col("representative").is_in(mass_names)
+        )
+
+        print(
+            masses.replace_column(
+                masses.get_column_index("modification_rate"),
+                pl.Series(
+                    "modification_rate",
+                    [mass.modification_rate for mass in self.alphabet[1:]],
+                ),
+            )
+        )
+
+
+def initialize_nucleotide_alphabet(nucleotide_df):
+    # Get list of integer masses
+    integer_masses = nucleotide_df.get_column("integer_mass").to_list()
+
+    # Add a default weight for easier initialization
+    integer_masses += [0]
+
+    # Ensure unique and sorted entries after tolerance correction
+    integer_masses = sorted(set(integer_masses))
+
+    # Create dict with all associated nucleotide names for each mass
+    names = {
+        mass: pl.DataFrame({"integer_mass": mass})
+        .join(
+            nucleotide_df,
+            on="integer_mass",
+            how="left",
+        )
+        .get_column("representative")
+        .to_list()
+        for mass in nucleotide_df.get_column("integer_mass").to_list()
+    }
+
+    # Create dict with indicator whether each mass is associated with a modified base
+    is_mod = {
+        mass: any(base not in UNMODIFIED_BASES for base in names[mass])
+        for mass in nucleotide_df.get_column("integer_mass").to_list()
+    }
+
+    # Create dict with the largest associated modification rate for each mass
+    rates = {
+        mass: max(
+            pl.DataFrame({"integer_mass": mass})
+            .join(
+                nucleotide_df,
+                on="integer_mass",
+                how="left",
+            )
+            .get_column("modification_rate")
+            .to_list()
+        )
+        for mass in nucleotide_df.get_column("integer_mass").to_list()
+    }
+
+    # Return alphabet of NucleotideMass instances
+    return [
+        NucleotideMass(mass, names[mass], is_mod[mass], rates[mass])
+        if mass != 0
+        else NucleotideMass(0, [], False, 0.0)
+        for mass in integer_masses
+    ]
+
+
+def compute_sequence_length_bound(inferrer: CompositionInferrer, dir: str) -> int:
+    """
+    Return bound on length for any sequence that could explain the given mass.
+    """
+    # Set compression rate
+    compression_rate = inferrer.compression_per_cell
+
+    # Set maximum number of modifications
+    max_modifications = round(inferrer.seq.modification_rate * inferrer.seq.max_len)
+
+    # Convert the target to an integer for easy operations
+    target = int(round(inferrer.seq.su_mass / inferrer.precision, 0))
+
+    # Convert the threshold to integer
+    threshold = int(
+        np.ceil(inferrer.tolerance * inferrer.seq.obs_mass / inferrer.precision)
+    )
+
+    # Initialize memorization dict
+    memo = {}
+
+    # Select default value based on desired bound
+    match dir:
+        case "lower":
+            default_bound = inferrer.seq.max_len + 1
+        case "upper":
+            default_bound = -1
+        case _:
+            raise NotImplementedError(f"Support for '{dir}' is currently not given.")
+
+    def backtrack(total_mass, current_idx, max_mods_all, max_mods_ind):
+        current_weight = inferrer.alphabet[current_idx].mass
+
+        # If the result for this state is already computed, return it
+        if (total_mass, current_idx) in memo:
+            return memo[(total_mass, current_idx)]
+
+        # Return default value for cells outside of matrix
+        if total_mass < 0:
+            return default_bound
+
+        # Initialize new counter for valid start in matrix
+        if total_mass == 0:
+            return 0
+
+        # Raise error if mass is not in matrix (due to its size)
+        if total_mass >= len(inferrer.matrix[0]) * compression_rate:
+            raise NotImplementedError(
+                f"The value {value} is not in the traceback matrix. "
+                f"Extend its size if you want to compute larger masses."
+            )
+
+        current_value = (
+            inferrer.matrix[current_idx, total_mass]
+            if compression_rate == 1
+            else inferrer.matrix[current_idx, total_mass // compression_rate]
+            >> 2 * (compression_rate - 1 - total_mass % compression_rate)
+        )
+
+        # Return default value for unreachable cells
+        if compression_rate != 1 and current_value % compression_rate == 0.0:
+            return default_bound
+
+        # Initialize list of possible bounds
+        bounds = [default_bound]
+
+        # Backtrack to the next row above if possible
+        if current_value % 2 == 1:
+            bounds.append(
+                backtrack(
+                    total_mass,
+                    current_idx - 1,
+                    max_mods_all,
+                    round(
+                        inferrer.seq.max_len
+                        * inferrer.alphabet[current_idx - 1].modification_rate
+                    ),
+                )
+            )
+
+        # Backtrack to the next left-side column if possible
+        if (current_value >> 1) % 2 == 1:
+            if not inferrer.alphabet[current_idx].is_modification or (
+                max_mods_all > 0 and max_mods_ind > 0
+            ):
+                # Adjust number of still allowed modifications if necessary
+                if inferrer.alphabet[current_idx].is_modification:
+                    max_mods_all -= 1
+                    max_mods_ind -= 1
+
+                bounds.append(
+                    backtrack(
+                        total_mass - current_weight,
+                        current_idx,
+                        max_mods_all,
+                        max_mods_ind,
+                    )
+                    + 1
+                )
+
+        # Select result based on desired bound
+        match dir:
+            case "lower":
+                result = min(bounds)
+            case "upper":
+                result = max(bounds)
+            case _:
+                raise NotImplementedError(
+                    f"Support for '{dir}' is currently not given."
+                )
+
+        # Store result in memo
+        memo[(total_mass, current_idx)] = result
+
+        return result
+
+    # Compute bounds for all masses within the threshold interval
+    solutions = []
+    for value in range(
+        target - threshold,
+        target + threshold + 1,
+    ):
+        solutions.append(
+            backtrack(
+                value,
+                len(inferrer.alphabet) - 1,
+                max_modifications,
+                round(inferrer.seq.max_len * inferrer.alphabet[-1].modification_rate),
+            )
+        )
+
+    # Return solution based on desired bound and replace default value if selected
+    match dir:
+        case "lower":
+            opt_len = min(solutions)
+            if opt_len == default_bound:
+                opt_len = 1
+        case "upper":
+            opt_len = max(solutions)
+            if opt_len == default_bound:
+                opt_len = inferrer.seq.max_len
+        case _:
+            raise NotImplementedError(f"Support for '{dir}' is currently not given.")
+
+    return opt_len
 
 
 def is_valid_mass(
