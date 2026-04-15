@@ -8,10 +8,8 @@ import polars as pl
 from spectrseqtools.masses import UNMODIFIED_BASES
 from spectrseqtools.nucleotide_alphabet import NUCLEOTIDE_DF
 from spectrseqtools.prediction.traceback_matrix import (
-    MAX_SEQ_LENGTH,
-    load_matrix,
+    TracebackMatrix,
     set_matrix_path,
-    set_up_bit_matrix,
 )
 
 
@@ -81,8 +79,7 @@ class SequenceInformation:
 
 @dataclass
 class CompositionInferrer:
-    matrix: np.ndarray
-    compression_per_cell: int
+    matrix: TracebackMatrix
     precision: float
     tolerance: float
     seq: SequenceInformation
@@ -96,7 +93,6 @@ class CompositionInferrer:
         precision: float,
         seq: SequenceInformation,
     ):
-        self.compression_per_cell = compression_rate
         self.tolerance = tolerance
         self.precision = precision
         self.seq = seq
@@ -104,22 +100,26 @@ class CompositionInferrer:
         self.matrix = None
 
         # Adapt individual modification rates to universal one
-        self._adapt_individual_modification_rates_by_universal_one()
+        self._adapt_individual_modification_rates_by_universal_one(
+            compression_rate=compression_rate
+        )
 
         # Initialize matrix from file (for no alphabet reduction)
         if self.matrix is None:
-            self.matrix = load_matrix(
+            self.matrix = TracebackMatrix.load(
                 path=set_matrix_path(precision, compression_rate),
                 integer_masses=[mass.mass for mass in self.alphabet],
             )
 
-    def _adapt_individual_modification_rates_by_universal_one(self):
+    def _adapt_individual_modification_rates_by_universal_one(
+        self, compression_rate: int
+    ):
         for nucleotide_mass in self.alphabet:
             if not nucleotide_mass.is_modification:
                 continue
             if nucleotide_mass.modification_rate > self.seq.modification_rate:
                 nucleotide_mass.modification_rate = self.seq.modification_rate
-        self._reduce_nucleotide_alphabet()
+        self._reduce_nucleotide_alphabet(compression_rate=compression_rate)
 
     def adapt_individual_modification_rates_by_alphabet_reduction(self, alphabet):
         for nucleotide_mass in self.alphabet:
@@ -129,7 +129,7 @@ class CompositionInferrer:
                 nucleotide_mass.modification_rate = 0.0
         self._reduce_nucleotide_alphabet()
 
-    def _reduce_nucleotide_alphabet(self):
+    def _reduce_nucleotide_alphabet(self, compression_rate: int = None):
         new_alphabet = [
             mass
             for mass in self.alphabet
@@ -139,12 +139,13 @@ class CompositionInferrer:
         # Return if alphabet was not reduced
         if len(new_alphabet) == len(self.alphabet):
             return
+        if self.matrix is not None:
+            compression_rate = self.matrix.compression_rate
 
         # Recompute matrix
-        self.matrix = set_up_bit_matrix(
+        self.matrix = TracebackMatrix.set_up_bit_matrix(
             integer_masses=[mass.mass for mass in new_alphabet],
-            max_mass=max([mass.mass for mass in new_alphabet]) * MAX_SEQ_LENGTH,
-            compression_rate=self.compression_per_cell,
+            compression_rate=compression_rate,
         )
 
         # Update nucleotide alphabet
@@ -226,9 +227,6 @@ def compute_sequence_length_bound(inferrer: CompositionInferrer, dir: str) -> in
     """
     Return bound on length for any sequence that could explain the given mass.
     """
-    # Set compression rate
-    compression_rate = inferrer.compression_per_cell
-
     # Set maximum number of modifications
     max_modifications = round(inferrer.seq.modification_rate * inferrer.seq.max_len)
 
@@ -267,22 +265,14 @@ def compute_sequence_length_bound(inferrer: CompositionInferrer, dir: str) -> in
         if total_mass == 0:
             return 0
 
-        # Raise error if mass is not in matrix (due to its size)
-        if total_mass >= len(inferrer.matrix[0]) * compression_rate:
-            raise NotImplementedError(
-                f"The value {value} is not in the traceback matrix. "
-                f"Extend its size if you want to compute larger masses."
-            )
+        # Assert that total mass is in matrix
+        inferrer.matrix.assert_in_matrix(mass=total_mass)
 
-        current_value = (
-            inferrer.matrix[current_idx, total_mass]
-            if compression_rate == 1
-            else inferrer.matrix[current_idx, total_mass // compression_rate]
-            >> 2 * (compression_rate - 1 - total_mass % compression_rate)
-        )
+        # Get current value
+        current_value = inferrer.matrix.get_entry(mass=total_mass, nuc_idx=current_idx)
 
         # Return default value for unreachable cells
-        if compression_rate != 1 and current_value % compression_rate == 0.0:
+        if inferrer.matrix.is_unreachable(value):
             return default_bound
 
         # Initialize list of possible bounds
@@ -384,30 +374,19 @@ def is_valid_mass(
     # Convert the threshold to integer
     threshold = int(np.ceil(threshold / inferrer.precision))
 
-    compression_rate = inferrer.compression_per_cell
-
-    current_idx = len(inferrer.matrix) - 1
     for value in range(target - threshold, target + threshold + 1):
         # Skip non-positive masses
         if value <= 0:
             continue
 
-        # Raise error if mass is not in matrix (due to its size)
-        if value >= len(inferrer.matrix[0]) * compression_rate:
-            raise NotImplementedError(
-                f"The value {value} is not in the traceback matrix. "
-                f"Extend its size if you want to compute larger masses."
-            )
+        # Assert that value is in matrix
+        inferrer.matrix.assert_in_matrix(mass=value)
 
-        current_value = (
-            inferrer.matrix[current_idx, value]
-            if compression_rate == 1
-            else inferrer.matrix[current_idx, value // compression_rate]
-            >> 2 * (compression_rate - 1 - value % compression_rate)
-        )
+        # Get current value
+        current_value = inferrer.matrix.get_entry(mass=value, nuc_idx=-1)
 
         # Skip unreachable cells
-        if compression_rate != 1 and current_value % compression_rate == 0.0:
+        if inferrer.matrix.is_unreachable(value=current_value):
             continue
 
         # Return True when mass corresponds to valid entry in matrix
@@ -420,16 +399,12 @@ def infer_compositions_with_matrix(
     mass: float,
     inferrer: CompositionInferrer,
     max_modifications=np.inf,
-    compression_rate=None,
     threshold=None,
     with_memo=True,
 ) -> MassCompositions:
     """
     Return all possible nucleotide compositions that could sum up to the given mass.
     """
-    if compression_rate is None:
-        compression_rate = inferrer.compression_per_cell
-
     # Convert the target to an integer for easy operations
     target = int(round(mass / inferrer.precision, 0))
 
@@ -458,22 +433,14 @@ def infer_compositions_with_matrix(
         if target_mass == 0:
             return [[]]
 
-        # Raise error if mass is not in matrix (due to its size)
-        if target_mass >= len(inferrer.matrix[0]) * compression_rate:
-            raise NotImplementedError(
-                f"The value {value} is not in the traceback matrix. "
-                f"Extend its size if you want to compute larger masses."
-            )
+        # Assert that target mass is in matrix
+        inferrer.matrix.assert_in_matrix(mass=target_mass)
 
-        current_value = (
-            inferrer.matrix[current_idx, target_mass]
-            if compression_rate == 1
-            else inferrer.matrix[current_idx, target_mass // compression_rate]
-            >> 2 * (compression_rate - 1 - target_mass % compression_rate)
-        )
+        # Get current value
+        current_value = inferrer.matrix.get_entry(mass=target_mass, nuc_idx=current_idx)
 
         # Return empty list for unreachable cells
-        if compression_rate != 1 and current_value % compression_rate == 0.0:
+        if inferrer.matrix.is_unreachable(value=current_value):
             return []
 
         # Initialize list to store all compositions for this state
