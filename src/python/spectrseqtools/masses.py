@@ -3,15 +3,6 @@ from itertools import product
 
 import polars as pl
 
-_COLS = [
-    "id",
-    "canonical_name",
-    "monoisotopic_mass",
-    "modification_rate",
-    "encoding",
-]
-
-
 # TODO: Currently, the list of unmodified bases is only defined for RNA;
 #  make it universally applicable
 UNMODIFIED_BASES = ["A", "C", "G", "U"]

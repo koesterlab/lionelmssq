@@ -5,8 +5,9 @@ import importlib.resources
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List
+from typing import List, Self
 
+import numpy as np
 import polars as pl
 
 from spectrseqtools.masses import (
@@ -26,7 +27,7 @@ _COLS = [
 
 @dataclass
 class NucleotideAlphabet:
-    """Class for considered nucleotide alphabet."""
+    """Class for considered nucleotide alphabet as Polars dataframe."""
 
     nucleotides: pl.DataFrame
 
@@ -175,3 +176,194 @@ class NucleotideAlphabet:
 
 
 NUCLEOTIDE_DF = NucleotideAlphabet.from_file().nucleotides
+
+
+@dataclass
+class NucleotideMass:
+    """Class for nucleotide masses."""
+
+    mass: int
+    names: List[str]
+    is_modification: bool
+    modification_rate: float
+
+    def __eq__(self, other):
+        return self.mass == other.mass
+
+    def __le__(self, other):
+        return self.mass <= other.mass
+
+    def __lt__(self, other):
+        return self.mass < other.mass
+
+    def __ge__(self, other):
+        return self.mass >= other.mass
+
+    def __gt__(self, other):
+        return self.mass > other.mass
+
+
+@dataclass
+class NucleotideAlphabetReduced:
+    """Class for considered nucleotide alphabet."""
+
+    alphabet: List[NucleotideMass]
+    precision: float
+
+    def __repr__(self) -> str:
+        masses = NUCLEOTIDE_DF.sort("nucleoside_mass").filter(
+            pl.col("representative").is_in(self.names())
+        )
+        masses = masses.replace_column(
+            masses.get_column_index("modification_rate"),
+            pl.Series(
+                "modification_rate",
+                [mass.modification_rate for mass in self.alphabet[1:]],
+            ),
+        )
+
+        return masses.__repr__()
+
+    @classmethod
+    def from_dataframe(
+        cls, nucleotide_df: pl.DataFrame, modification_rate: float, precision: float
+    ) -> Self:
+        """
+        Initialize nucleotide alphabet from file.
+
+        Parameters
+        ----------
+        nucleotide_df : polars.DataFrame
+            Polars dataframe containing nucleoside information.
+        modification_rate : float
+            Maximum percentage of modification in sequence.
+        precision : float
+            Precision used for (nucleotide) masses.
+
+        """
+        # Get list of integer masses
+        integer_masses = nucleotide_df.get_column("integer_mass").to_list()
+
+        # Add a default weight for easier initialization
+        integer_masses += [0]
+
+        # Ensure unique and sorted entries after tolerance correction
+        integer_masses = sorted(set(integer_masses))
+
+        # Create dict with all associated nucleotide names for each mass
+        names = {
+            mass: pl.DataFrame({"integer_mass": mass})
+            .join(
+                nucleotide_df,
+                on="integer_mass",
+                how="left",
+            )
+            .get_column("representative")
+            .to_list()
+            for mass in nucleotide_df.get_column("integer_mass").to_list()
+        }
+
+        # Create dict with indicator whether each mass is associated with a modified base
+        is_mod = {
+            mass: any(base not in UNMODIFIED_BASES for base in names[mass])
+            for mass in nucleotide_df.get_column("integer_mass").to_list()
+        }
+
+        # Create dict with the largest associated modification rate for each mass
+        rates = {
+            mass: max(
+                pl.DataFrame({"integer_mass": mass})
+                .join(
+                    nucleotide_df,
+                    on="integer_mass",
+                    how="left",
+                )
+                .get_column("modification_rate")
+                .to_list()
+            )
+            for mass in nucleotide_df.get_column("integer_mass").to_list()
+        }
+
+        # Return alphabet of NucleotideMass instances
+        nucleotides = list(
+            NucleotideMass(mass, names[mass], is_mod[mass], rates[mass])
+            if mass != 0
+            else NucleotideMass(0, [], False, 0.0)
+            for mass in integer_masses
+        )
+
+        # Adapt individual modification rates to universal one
+        for nucleotide_mass in nucleotides:
+            if not nucleotide_mass.is_modification:
+                continue
+            nucleotide_mass.modification_rate = min(
+                nucleotide_mass.modification_rate, modification_rate
+            )
+
+        return cls(alphabet=nucleotides, precision=precision)
+
+    @property
+    def size(self) -> int:
+        """Return alphabet size."""
+        return len(self.alphabet)
+
+    @property
+    def max(self) -> int:
+        """Return highest mass in alphabet."""
+        return max(mass.mass for mass in self.alphabet)
+
+    def get_mass(self, idx: int) -> int:
+        """Return mass at index in alphabet."""
+        return self.alphabet[idx].mass
+
+    def get_rate(self, idx: int) -> float:
+        """Return modification rate at index in alphabet."""
+        return self.alphabet[idx].modification_rate
+
+    def is_mod(self, idx: int) -> bool:
+        """Return whether nucleotide at index in alphabet is modification."""
+        return self.alphabet[idx].is_modification
+
+    def names(self) -> List[str]:
+        """Return list of all nucleotide names in alphabet."""
+        return list(name for mass in self.alphabet for name in mass.names)
+
+    def reps(self) -> List[str]:
+        """Return list of all representative names in alphabet."""
+        return list(mass.names[0] for mass in self.alphabet[1:])
+
+    def to_dict(self) -> dict:
+        """Return dictionary assigning masses to each representative."""
+        return {mass.names[0]: mass.mass * self.precision for mass in self.alphabet[1:]}
+
+    def set_threshold(self, value: float) -> int:
+        """Return precision-adapted inference threshold."""
+        return int(np.ceil(value / self.precision))
+
+    def set_target(self, value: float) -> int:
+        """Return precision-adapted inference target."""
+        return int(round(value / self.precision, 0))
+
+    def adapt_individual_modification_rates_by_alphabet(self, alphabet: List) -> None:
+        """
+        Set individual modification rate to 0 if nucleotide not in new alphabet.
+
+        Parameters
+        ----------
+        alphabet : List
+            List of nucleotide names in new alphabet.
+
+        """
+        for nucleotide_mass in self.alphabet:
+            if not nucleotide_mass.is_modification:
+                continue
+            if all(name not in alphabet for name in nucleotide_mass.names):
+                nucleotide_mass.modification_rate = 0.0
+
+    def reduce(self) -> None:
+        """Reduce alphabet by removing nucleotides that cannot be in sequence."""
+        self.alphabet = [
+            mass
+            for mass in self.alphabet
+            if mass.mass == 0.0 or mass.modification_rate > 0.0
+        ]

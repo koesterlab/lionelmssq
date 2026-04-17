@@ -4,10 +4,12 @@
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Self
+from typing import Self
 
 import numpy as np
 from platformdirs import user_cache_dir
+
+from spectrseqtools.nucleotide_alphabet import NucleotideAlphabetReduced
 
 # Set OS-independent cache directory for traceback matrix
 MATRIX_DIR = user_cache_dir(
@@ -31,7 +33,7 @@ class TracebackMatrix:
     compression_rate: int
 
     @classmethod
-    def load(cls, path: str, integer_masses: List[int]) -> Self:
+    def load(cls, path: str, alphabet: NucleotideAlphabetReduced) -> Self:
         """
         Load traceback matrix if it exists and compute it otherwise.
 
@@ -39,8 +41,8 @@ class TracebackMatrix:
         ----------
         path : str
             Path to traceback matrix.
-        integer_masses : List[int]
-            List of integer nucleotide masses.
+        alphabet : NucleotideAlphabetReduced
+            Nucleotide alphabet.
 
         """
         # Select compression rate from path string
@@ -50,9 +52,9 @@ class TracebackMatrix:
         if not Path(f"{path}.npy").is_file():
             print("Matrix not found")
             matrix = (
-                cls.set_up_matrix(integer_masses)
+                cls.set_up_matrix(alphabet)
                 if compression_rate == 1
-                else cls.set_up_bit_matrix(integer_masses, compression_rate)
+                else cls.set_up_bit_matrix(alphabet, compression_rate)
             )
             np.save(path, matrix)
 
@@ -60,25 +62,25 @@ class TracebackMatrix:
         return cls(matrix=np.load(f"{path}.npy"), compression_rate=compression_rate)
 
     @classmethod
-    def set_up_matrix(cls, integer_masses: List[int]) -> Self:
+    def set_up_matrix(cls, alphabet: NucleotideAlphabetReduced) -> Self:
         """
         Calculate complete matrix with dynamic programming.
 
         Parameters
         ----------
-        integer_masses : List[int]
-            List of integer nucleotide masses.
+        alphabet : NucleotideAlphabetReduced
+            Nucleotide alphabet.
 
         """
         # Select maximum integer mass for which matrix should be built
-        max_mass = max(integer_masses) * MAX_SEQ_LENGTH
+        max_mass = alphabet.max() * MAX_SEQ_LENGTH
 
         # Initialize matrix as numpy table
-        matrix = np.zeros((len(integer_masses), max_mass + 1), dtype=np.uint8)
+        matrix = np.zeros((alphabet.size, max_mass + 1), dtype=np.uint8)
         matrix[0, 0] = 3.0
 
         # Fill traceback matrix row-wise
-        for i in range(1, len(integer_masses)):
+        for i in range(1, alphabet.size):
             # Case: Start new row (i.e. move on to new nucleoside) by initializing
             # reachable cells from before
             matrix[i] = [int(val != 0.0) for val in matrix[i - 1]]
@@ -90,22 +92,22 @@ class TracebackMatrix:
                     continue
 
                 # Add another nucleoside if possible
-                if integer_masses[i] + j <= max_mass:
-                    matrix[i, j + integer_masses[i]] += 2.0
+                if alphabet.get_mass(i) + j <= max_mass:
+                    matrix[i, j + alphabet.get_mass(i)] += 2.0
 
         return cls(matrix=matrix, compression_rate=1)
 
     @classmethod
     def set_up_bit_matrix(
-        cls, integer_masses: List[int], compression_rate: int
+        cls, alphabet: NucleotideAlphabetReduced, compression_rate: int
     ) -> Self:
         """
         Calculate complete bit-representation matrix with dynamic programming.
 
         Parameters
         ----------
-        integer_masses : List[int]
-            List of integer nucleotide masses.
+        alphabet : NucleotideAlphabetReduced
+            Nucleotide alphabet.
         compression_rate : int
             Compression per matrix cell.
 
@@ -113,15 +115,15 @@ class TracebackMatrix:
         settings = select_matrix_building_settings(compression_rate)
 
         # Select maximum integer mass for which matrix should be built
-        max_mass = max(integer_masses) * MAX_SEQ_LENGTH
+        max_mass = alphabet.max * MAX_SEQ_LENGTH
 
         # Initialize bit-representation matrix as numpy table
         max_col = int(np.ceil((max_mass + 1) / compression_rate))
-        matrix = np.zeros((len(integer_masses), max_col), dtype=settings["type"])
+        matrix = np.zeros((alphabet.size, max_col), dtype=settings["type"])
         matrix[0, 0] = settings["init"]
 
         # Fill traceback matrix row-wise
-        for i in range(1, len(integer_masses)):
+        for i in range(1, alphabet.size):
             # Case: Start new row (i.e. move on to new nucleotide)
             # by initializing reachable cells from before
             matrix[i] = [
@@ -129,8 +131,8 @@ class TracebackMatrix:
             ]
 
             # Define number of cells to move (step) and bit shift in a cell (shift)
-            step = int(integer_masses[i] / compression_rate)
-            shift = integer_masses[i] % compression_rate
+            step = int(alphabet.get_mass(i) / compression_rate)
+            shift = alphabet.get_mass(i) % compression_rate
 
             # Case: Add more of current nucleotide
             for j in range(max_col):

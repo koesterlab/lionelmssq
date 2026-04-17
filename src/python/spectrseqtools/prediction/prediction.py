@@ -1,6 +1,5 @@
 from typing import Set, Tuple
 
-import numpy as np
 import polars as pl
 from loguru import logger
 
@@ -139,8 +138,8 @@ class Predictor:
         old_alphabet_size = -1
 
         compositions = {}
-        while old_alphabet_size != len(self.inferrer.alphabet):
-            old_alphabet_size = len(self.inferrer.alphabet)
+        while old_alphabet_size != self.inferrer.alphabet.size:
+            old_alphabet_size = self.inferrer.alphabet.size
             # Roughly infer compositions for mass differences (to reduce the alphabet)
             # Note there may be faulty mass fragments leading to not truly existent values
             compositions = self.collect_diff_compositions(fragments=fragments)
@@ -331,17 +330,9 @@ def is_singleton(
 
     """
     # Set singleton masses from alphabet
-    singleton_masses = [mass.mass for mass in inferrer.alphabet]
+    singleton_masses = [mass.mass for mass in inferrer.alphabet.alphabet]
 
-    # Convert the target to an integer for easy operations
-    target = int(round(mass / inferrer.precision, 0))
-
-    # Set relative threshold if not given
-    if threshold is None:
-        threshold = inferrer.tolerance * mass
-
-    # Convert the threshold to integer
-    threshold = int(np.ceil(threshold / inferrer.precision))
+    target, threshold = inferrer.set_target(mass=mass, threshold=threshold)
 
     # Check whether a singleton mass could be found
     for value in range(target - threshold, target + threshold + 1):

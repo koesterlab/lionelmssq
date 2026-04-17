@@ -46,11 +46,8 @@ class LinearProgramInstance:
         # k = 1,...,S: positions in the sequence
         self.fragments = fragments
         self.seq_len = len(skeleton_seq)
-        self.nucleoside_names = [mass.names[0] for mass in inferrer.alphabet[1:]]
-        self.nucleoside_masses = {
-            mass.names[0]: mass.mass * inferrer.precision
-            for mass in inferrer.alphabet[1:]
-        }
+        self.nucleoside_names = inferrer.alphabet.reps()
+        self.nucleoside_masses = inferrer.alphabet.to_dict()
 
         fragment_masses = self.fragments.get_column("standard_unit_mass").to_list()
         valid_fragment_range = list(range(len(fragment_masses)))
@@ -196,7 +193,7 @@ class LinearProgramInstance:
         ) <= np.ceil(inferrer.seq.modification_rate * self.seq_len)
 
         # Enforce individual modification rates
-        for mass in inferrer.alphabet:
+        for mass in inferrer.alphabet.alphabet:
             for i in mass.names:
                 if i in range(len(self.nucleoside_names)):
                     problem += lpSum(

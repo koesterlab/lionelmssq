@@ -216,10 +216,7 @@ class SkeletonBuilder:
         )
 
         # Initialize nucleotide mass dict
-        nucleotide_masses = {
-            mass.names[0]: mass.mass * self.inferrer.precision
-            for mass in self.inferrer.alphabet[1:]
-        }
+        nucleotide_masses = self.inferrer.alphabet.to_dict()
 
         # Determine lower and upper bound
         min_len = compute_sequence_length_bound(inferrer=self.inferrer, dir="lower")
@@ -328,10 +325,7 @@ class SkeletonBuilder:
         )
 
         # Initialize nucleotide mass dict
-        nucleoside_masses = {
-            mass.names[0]: mass.mass * self.inferrer.precision
-            for mass in self.inferrer.alphabet[1:]
-        }
+        nucleoside_masses = self.inferrer.alphabet.to_dict()
 
         # Determine lower and upper bound
         min_len = compute_sequence_length_bound(inferrer=self.inferrer, dir="lower")
