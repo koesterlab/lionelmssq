@@ -73,7 +73,7 @@ class TracebackMatrix:
 
         """
         # Select maximum integer mass for which matrix should be built
-        max_mass = alphabet.max() * MAX_SEQ_LENGTH
+        max_mass = alphabet.max * MAX_SEQ_LENGTH
 
         # Initialize matrix as numpy table
         matrix = np.zeros((alphabet.size, max_mass + 1), dtype=np.uint8)

@@ -3,7 +3,7 @@
 
 import importlib.resources
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Self
 
@@ -16,12 +16,23 @@ from spectrseqtools.masses import (
     UNMODIFIED_BASES,
 )
 
-_COLS = [
+_DF_COLS = [
     "id",
     "canonical_name",
     "monoisotopic_mass",
     "modification_rate",
     "encoding",
+]
+
+
+_ALPHABET_COLS = [
+    "integer_mass",
+    "nucleoside_mass",
+    "nucleotide_mass",
+    "singleton_mz",
+    "names",
+    "modification_rate",
+    "is_modification",
 ]
 
 
@@ -50,7 +61,9 @@ class NucleotideAlphabet:
 
         # Read nucleoside masses from file
         masses = pl.read_csv(input_path, separator="\t")
-        assert masses.columns == _COLS
+        assert masses.columns == _DF_COLS
+
+        # TODO: Round other masses in DF (not just nucleoside one)
 
         # Round nucleoside masses, we consider DECIMAL_PLACES+1 for since
         # rounding errors propagate at the last decimal digit
@@ -87,6 +100,11 @@ class NucleotideAlphabet:
             .round(0)
             .cast(pl.Int64)
             .alias("integer_mass"),
+        )
+
+        # Add modification flag
+        masses = masses.with_columns(
+            ~pl.col("representative").is_in(UNMODIFIED_BASES).alias("is_modification")
         )
 
         return NucleotideAlphabet(nucleotides=masses)
@@ -137,7 +155,7 @@ class NucleotideAlphabet:
 
         # Ensure modification rates of unmodified bases are set to 1
         self.nucleotides = self.nucleotides.with_columns(
-            pl.when(~pl.col("representative").is_in(UNMODIFIED_BASES))
+            pl.when(pl.col("is_modification"))
             .then(pl.col("modification_rate"))
             .otherwise(pl.lit(1.0))
             .alias("modification_rate")
@@ -174,18 +192,49 @@ class NucleotideAlphabet:
             .to_list()
         )
 
+    def get_seq_weight(self, seq: tuple) -> float:
+        """
+        Determine weight of given sequence.
 
-NUCLEOTIDE_DF = NucleotideAlphabet.from_file().nucleotides
+        Parameters
+        ----------
+        seq : tuple
+            Given sequence consisting only of nucleotide representatives.
+
+        Returns
+        -------
+        float
+            Sequence weight.
+
+        """
+        seq_df = pl.DataFrame(data=seq, schema=["name"])
+        seq_df = seq_df.with_columns(
+            pl.col("name")
+            .map_elements(
+                lambda x: (
+                    self.nucleotides.filter(pl.col("representative") == x)
+                    .get_column("nucleotide_mass")
+                    .to_list()[0]
+                ),
+                return_dtype=pl.Float64,
+            )
+            .alias("mass")
+        )
+
+        return round(seq_df.select("mass").sum().item(), 5)
 
 
 @dataclass
 class NucleotideMass:
     """Class for nucleotide masses."""
 
-    mass: int
-    names: List[str]
-    is_modification: bool
-    modification_rate: float
+    integer_mass: int = 0
+    nucleoside_mass: float = 0.0
+    nucleotide_mass: float = 0.0
+    singleton_mz: float = 0.0
+    names: List[str] = field(default_factory=list)
+    modification_rate: float = 0.0
+    is_modification: bool = False
 
     def __eq__(self, other):
         return self.mass == other.mass
@@ -202,6 +251,16 @@ class NucleotideMass:
     def __gt__(self, other):
         return self.mass > other.mass
 
+    @property
+    def mass(self) -> int:
+        """Return integer mass."""
+        return self.integer_mass
+
+    @property
+    def representative(self) -> str:
+        """Return name of representative nucleotide."""
+        return self.names[0]
+
 
 @dataclass
 class NucleotideAlphabetReduced:
@@ -211,18 +270,7 @@ class NucleotideAlphabetReduced:
     precision: float
 
     def __repr__(self) -> str:
-        masses = NUCLEOTIDE_DF.sort("nucleoside_mass").filter(
-            pl.col("representative").is_in(self.names())
-        )
-        masses = masses.replace_column(
-            masses.get_column_index("modification_rate"),
-            pl.Series(
-                "modification_rate",
-                [mass.modification_rate for mass in self.alphabet[1:]],
-            ),
-        )
-
-        return masses.__repr__()
+        return self.to_dataframe().__repr__()
 
     @classmethod
     def from_dataframe(
@@ -241,66 +289,20 @@ class NucleotideAlphabetReduced:
             Precision used for (nucleotide) masses.
 
         """
-        # Get list of integer masses
-        integer_masses = nucleotide_df.get_column("integer_mass").to_list()
-
-        # Add a default weight for easier initialization
-        integer_masses += [0]
-
-        # Ensure unique and sorted entries after tolerance correction
-        integer_masses = sorted(set(integer_masses))
-
-        # Create dict with all associated nucleotide names for each mass
-        names = {
-            mass: pl.DataFrame({"integer_mass": mass})
-            .join(
-                nucleotide_df,
-                on="integer_mass",
-                how="left",
+        new_df = (
+            nucleotide_df.sort("integer_mass")
+            .rename({"id_list": "names"})
+            .drop("representative")
+            .with_columns(
+                pl.when(pl.col("is_modification"))
+                .then(pl.col("modification_rate").clip(upper_bound=modification_rate))
+                .otherwise(pl.col("modification_rate"))
             )
-            .get_column("representative")
-            .to_list()
-            for mass in nucleotide_df.get_column("integer_mass").to_list()
-        }
-
-        # Create dict with indicator whether each mass is associated with a modified base
-        is_mod = {
-            mass: any(base not in UNMODIFIED_BASES for base in names[mass])
-            for mass in nucleotide_df.get_column("integer_mass").to_list()
-        }
-
-        # Create dict with the largest associated modification rate for each mass
-        rates = {
-            mass: max(
-                pl.DataFrame({"integer_mass": mass})
-                .join(
-                    nucleotide_df,
-                    on="integer_mass",
-                    how="left",
-                )
-                .get_column("modification_rate")
-                .to_list()
-            )
-            for mass in nucleotide_df.get_column("integer_mass").to_list()
-        }
-
-        # Return alphabet of NucleotideMass instances
-        nucleotides = list(
-            NucleotideMass(mass, names[mass], is_mod[mass], rates[mass])
-            if mass != 0
-            else NucleotideMass(0, [], False, 0.0)
-            for mass in integer_masses
         )
-
-        # Adapt individual modification rates to universal one
-        for nucleotide_mass in nucleotides:
-            if not nucleotide_mass.is_modification:
-                continue
-            nucleotide_mass.modification_rate = min(
-                nucleotide_mass.modification_rate, modification_rate
-            )
-
-        return cls(alphabet=nucleotides, precision=precision)
+        new_nucs = [NucleotideMass()] + [
+            NucleotideMass(**row) for row in new_df.rows(named=True)
+        ]
+        return cls(alphabet=new_nucs, precision=precision)
 
     @property
     def size(self) -> int:
@@ -315,6 +317,10 @@ class NucleotideAlphabetReduced:
     def get_mass(self, idx: int) -> int:
         """Return mass at index in alphabet."""
         return self.alphabet[idx].mass
+
+    def get_rep(self, idx: int) -> str:
+        """Return representative nucleotide at index in alphabet."""
+        return self.alphabet[idx].representative
 
     def get_rate(self, idx: int) -> float:
         """Return modification rate at index in alphabet."""
@@ -367,3 +373,12 @@ class NucleotideAlphabetReduced:
             for mass in self.alphabet
             if mass.mass == 0.0 or mass.modification_rate > 0.0
         ]
+
+    def to_dataframe(self) -> pl.DataFrame:
+        """Return nucleotide alphabet as Polars dataframe."""
+        return pl.DataFrame(
+            {
+                col: [mass.__dict__[col] for mass in self.alphabet[1:]]
+                for col in _ALPHABET_COLS
+            }
+        )

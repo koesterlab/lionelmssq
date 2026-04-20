@@ -1,12 +1,10 @@
 from dataclasses import dataclass
-from itertools import chain, combinations_with_replacement, product
-from typing import List, Set, Tuple
+from typing import List, Self, Set, Tuple
 
 import numpy as np
 import polars as pl
 
-from spectrseqtools.masses import UNMODIFIED_BASES
-from spectrseqtools.nucleotide_alphabet import NUCLEOTIDE_DF, NucleotideAlphabetReduced
+from spectrseqtools.nucleotide_alphabet import NucleotideAlphabetReduced
 from spectrseqtools.prediction.traceback_matrix import (
     TracebackMatrix,
     set_matrix_path,
@@ -15,35 +13,40 @@ from spectrseqtools.prediction.traceback_matrix import (
 
 @dataclass
 class MassCompositions:
-    compositions: Set[Tuple[str]]
+    """Class for set of compositions to explain a given mass."""
 
+    compositions: Set[Tuple[str]] = None
 
-MASS_NAMES = {
-    mass: pl.DataFrame({"integer_mass": mass})
-    .join(
-        NUCLEOTIDE_DF,
-        on="integer_mass",
-        how="left",
-    )
-    .get_column("representative")
-    .to_list()
-    for mass in NUCLEOTIDE_DF.get_column("integer_mass").to_list()
-}
+    @classmethod
+    def from_indices(
+        cls, solutions: List[List[int]], alphabet: NucleotideAlphabetReduced
+    ) -> Self:
+        """
+        Initialize composition list from index lists.
 
-IS_MOD = {
-    mass: any(
-        base not in UNMODIFIED_BASES
-        for base in pl.DataFrame({"integer_mass": mass})
-        .join(
-            NUCLEOTIDE_DF,
-            on="integer_mass",
-            how="left",
-        )
-        .get_column("representative")
-        .to_list()
-    )
-    for mass in NUCLEOTIDE_DF.get_column("integer_mass").to_list()
-}
+        Parameters
+        ----------
+        solutions : List[List[int]]
+            List of nucleotide index lists (representing compositions).
+        alphabet : NucleotideAlphabetReduced
+            Nucleotide alphabet.
+
+        """
+        # Return default if no composition is found
+        if len(solutions) == 0:
+            return MassCompositions()
+
+        # Store the representative tuples for the given indices in a set
+        solution_names = set()
+
+        # Convert the masses to their respective representative
+        for solution in solutions:
+            if len(solution) == 0:
+                continue
+            solution_names.update([(alphabet.get_rep(entry) for entry in solution)])
+
+        # Return composition set
+        return cls(solution_names)
 
 
 @dataclass
@@ -351,7 +354,7 @@ def infer_compositions_with_matrix(
                     max_mods_ind -= 1
 
                 compositions += [
-                    entry + [current_mass]
+                    entry + [current_idx]
                     for entry in backtrack(
                         target_mass - current_mass,
                         current_idx,
@@ -376,7 +379,9 @@ def infer_compositions_with_matrix(
             round(inferrer.seq.max_len * inferrer.alphabet.get_rate(-1)),
         )
 
-    return convert_nucleotide_masses_to_names(solutions=solutions)
+    return MassCompositions.from_indices(
+        solutions=solutions, alphabet=inferrer.alphabet
+    )
 
 
 def infer_compositions_with_recursion(
@@ -416,19 +421,20 @@ def infer_compositions_with_recursion(
         compositions = []
 
         # Try each mass starting from the current position to avoid duplicates
-        for i in range(current_idx, inferrer.alphabet.size):
-            current_mass = inferrer.alphabet.get_mass(i)
+        for idx in range(current_idx, inferrer.alphabet.size):
+            current_mass = inferrer.alphabet.get_mass(idx=idx)
+            is_mod = inferrer.alphabet.is_mod(idx=idx)
 
             # Add compositions for recursion with reduced target and current mass
             compositions += [
-                [current_mass] + entry
+                [idx] + entry
                 for entry in backtrack(
                     target_mass - current_mass,
-                    i,
-                    used_mods_all + 1 if IS_MOD[current_mass] else used_mods_all,
+                    idx,
+                    used_mods_all + 1 if is_mod else used_mods_all,
                     0
-                    if i != current_idx
-                    else (used_mods_ind + 1 if IS_MOD[current_mass] else used_mods_ind),
+                    if idx != current_idx
+                    else (used_mods_ind + 1 if is_mod else used_mods_ind),
                 )
             ]
 
@@ -440,40 +446,6 @@ def infer_compositions_with_recursion(
     # Compute all solutions for the full target and all allowed masses (except 0.0)
     solutions = backtrack(target, 1, 0, 0)
 
-    return convert_nucleotide_masses_to_names(solutions=solutions)
-
-
-def convert_nucleotide_masses_to_names(solutions: List[List[int]]) -> MassCompositions:
-    # Store the nucleotide names (as tuples) for the given masses in a set
-    solution_names = set()
-    # Return None if no composition is found
-    if len(solutions) == 0:
-        return MassCompositions(None)
-    # Convert the masses to their respective nucleotide names
-    for solution in solutions:
-        if len(solution) == 0:
-            continue
-        solution_names.update(
-            [
-                tuple(chain.from_iterable(entry))
-                for entry in list(
-                    product(
-                        *[
-                            list(
-                                combinations_with_replacement(
-                                    MASS_NAMES[mass], solution.count(mass)
-                                )
-                            )
-                            for mass in [
-                                solution[idx]
-                                for idx in range(len(solution))
-                                if idx == 0 or solution[idx - 1] != solution[idx]
-                            ]
-                        ]
-                    )
-                )
-            ]
-        )
-
-    # Return composition set
-    return MassCompositions(solution_names)
+    return MassCompositions.from_indices(
+        solutions=solutions, alphabet=inferrer.alphabet
+    )

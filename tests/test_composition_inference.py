@@ -1,32 +1,12 @@
-import polars as pl
 import pytest
 from spectrseqtools.masses import PRECISION
-from spectrseqtools.nucleotide_alphabet import NUCLEOTIDE_DF, NucleotideAlphabet
+from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 from spectrseqtools.prediction.composition_inference import (
     CompositionInferrer,
     SequenceInformation,
     infer_compositions_with_matrix,
     infer_compositions_with_recursion,
 )
-
-
-def get_seq_weight(seq: tuple) -> float:
-    seq_df = pl.DataFrame(data=seq, schema=["name"])
-    seq_df = seq_df.with_columns(
-        pl.col("name")
-        .map_elements(
-            lambda x: (
-                NUCLEOTIDE_DF.filter(pl.col("representative") == x)
-                .get_column("nucleotide_mass")
-                .to_list()[0]
-            ),
-            return_dtype=pl.Float64,
-        )
-        .alias("mass")
-    )
-
-    return round(seq_df.select("mass").sum().item(), 5)
-
 
 TEST_SEQ = [
     tuple("A"),
@@ -37,26 +17,21 @@ TEST_SEQ = [
     ("C", "U", "A", "G"),
     ("C", "C", "U", "A", "G", "G"),
 ]
-
-MASS_SEQ_DICT = dict(
-    zip(
-        [get_seq_weight(seq) for seq in TEST_SEQ],
-        TEST_SEQ,
-    )
-)
 TOLERANCES = [10e-6, 5e-6, 2e-6]
 MOD_RATE = 0.5
 
 
-@pytest.mark.parametrize("testcase", MASS_SEQ_DICT.items())
+@pytest.mark.parametrize("seq", TEST_SEQ)
 @pytest.mark.parametrize("tolerance", TOLERANCES)
-def test_infer_composition_with_recursion(testcase, tolerance):
+def test_infer_composition_with_recursion(seq, tolerance):
     alphabet = NucleotideAlphabet.from_file()
 
+    seq_weight = alphabet.get_seq_weight(seq)
+
     seq_info = SequenceInformation(
-        max_len=int(testcase[0] / alphabet.min_mass()),
-        su_mass=testcase[0],
-        obs_mass=testcase[0],
+        max_len=int(seq_weight / alphabet.min_mass()),
+        su_mass=seq_weight,
+        obs_mass=seq_weight,
         modification_rate=MOD_RATE,
     )
 
@@ -69,33 +44,35 @@ def test_infer_composition_with_recursion(testcase, tolerance):
     )
 
     predicted_compositions = infer_compositions_with_recursion(
-        testcase[0],
+        seq_weight,
         inferrer=inferrer,
-        max_modifications=round(MOD_RATE * len(testcase[1])),
+        max_modifications=round(MOD_RATE * len(seq)),
     ).compositions
 
     assert predicted_compositions is not None
 
     compositions = [tuple(comp) for comp in predicted_compositions]
 
-    assert tuple(testcase[1]) in compositions
+    assert tuple(seq) in compositions
 
 
 WITH_MEMO = [True]
 COMPRESSION_RATES = [32]
 
 
-@pytest.mark.parametrize("testcase", MASS_SEQ_DICT.items())
+@pytest.mark.parametrize("seq", TEST_SEQ)
 @pytest.mark.parametrize("compression", COMPRESSION_RATES)
 @pytest.mark.parametrize("memo", WITH_MEMO)
 @pytest.mark.parametrize("tolerance", TOLERANCES)
-def test_infer_composition_with_matrix(testcase, compression, tolerance, memo):
+def test_infer_composition_with_matrix(seq, compression, tolerance, memo):
     alphabet = NucleotideAlphabet.from_file()
 
+    seq_weight = alphabet.get_seq_weight(seq)
+
     seq_info = SequenceInformation(
-        max_len=int(testcase[0] / alphabet.min_mass()),
-        su_mass=testcase[0],
-        obs_mass=testcase[0],
+        max_len=int(seq_weight / alphabet.min_mass()),
+        su_mass=seq_weight,
+        obs_mass=seq_weight,
         modification_rate=MOD_RATE,
     )
 
@@ -108,9 +85,9 @@ def test_infer_composition_with_matrix(testcase, compression, tolerance, memo):
     )
 
     predicted_compositions = infer_compositions_with_matrix(
-        testcase[0],
+        seq_weight,
         inferrer=inferrer,
-        max_modifications=round(MOD_RATE * len(testcase[1])),
+        max_modifications=round(MOD_RATE * len(seq)),
         with_memo=memo,
     ).compositions
 
@@ -118,4 +95,4 @@ def test_infer_composition_with_matrix(testcase, compression, tolerance, memo):
 
     compositions = [tuple(comp) for comp in predicted_compositions]
 
-    assert tuple(testcase[1]) in compositions
+    assert tuple(seq) in compositions
