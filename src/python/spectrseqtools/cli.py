@@ -51,8 +51,9 @@ def predict(options: PredictionOptions):
         meta = yaml.safe_load(f)
 
     # Initialize nucleotide alphabet
-    alphabet = NucleotideAlphabet.from_file()
-    alphabet.filter_by_singleton_selection(singleton_path=options.singletons)
+    alphabet = NucleotideAlphabet.from_file(modification_rate=options.modification_rate)
+    max_weight = alphabet.max
+    alphabet.filter_by_singletons(singleton_path=options.singletons)
 
     # Read additional parameter from meta file
     intensity_cutoff = meta.setdefault("intensity_cutoff", DEFAULT_INTENSITY_CUTOFF)
@@ -75,7 +76,7 @@ def predict(options: PredictionOptions):
 
     # Initialize SequenceInformation class
     seq_info = SequenceInformation(
-        max_len=int(seq_mass_su / alphabet.min_mass()),
+        max_len=int(seq_mass_su / alphabet.min),
         su_mass=seq_mass_su,
         obs_mass=seq_mass_obs,
         modification_rate=options.modification_rate,
@@ -83,10 +84,9 @@ def predict(options: PredictionOptions):
 
     # Initialize CompositionInferrer class
     inferrer = CompositionInferrer(
-        nucleotide_df=alphabet.nucleotides,
+        alphabet=alphabet,
         compression_rate=int(COMPRESSION_RATE),
         tolerance=TOLERANCE,
-        precision=PRECISION,
         seq=seq_info,
     )
 
@@ -115,7 +115,7 @@ def predict(options: PredictionOptions):
     # Predict sequence
     prediction = Predictor(
         inferrer=inferrer,
-        nucleotide_df=alphabet.nucleotides,
+        max_weight=max_weight,
     ).predict(
         fragments=fragments.fragments,
         solver_params=solver_params,

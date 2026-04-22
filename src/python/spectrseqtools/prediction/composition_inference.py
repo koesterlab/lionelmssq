@@ -2,13 +2,9 @@ from dataclasses import dataclass
 from typing import List, Self, Set, Tuple
 
 import numpy as np
-import polars as pl
 
-from spectrseqtools.nucleotide_alphabet import NucleotideAlphabetReduced
-from spectrseqtools.prediction.traceback_matrix import (
-    TracebackMatrix,
-    set_matrix_path,
-)
+from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
+from spectrseqtools.prediction.traceback_matrix import TracebackMatrix
 
 
 @dataclass
@@ -19,7 +15,7 @@ class MassCompositions:
 
     @classmethod
     def from_indices(
-        cls, solutions: List[List[int]], alphabet: NucleotideAlphabetReduced
+        cls, solutions: List[List[int]], alphabet: NucleotideAlphabet
     ) -> Self:
         """
         Initialize composition list from index lists.
@@ -28,8 +24,8 @@ class MassCompositions:
         ----------
         solutions : List[List[int]]
             List of nucleotide index lists (representing compositions).
-        alphabet : NucleotideAlphabetReduced
-            Nucleotide alphabet.
+        alphabet : NucleotideAlphabet
+            Alphabet of considered nucleotides.
 
         """
         # Return default if no composition is found
@@ -62,32 +58,26 @@ class CompositionInferrer:
     matrix: TracebackMatrix
     tolerance: float
     seq: SequenceInformation
-    alphabet: NucleotideAlphabetReduced
+    alphabet: NucleotideAlphabet
 
     def __init__(
         self,
-        nucleotide_df: pl.DataFrame,
+        alphabet: NucleotideAlphabet,
         compression_rate: int,
         tolerance: float,
-        precision: float,
         seq: SequenceInformation,
     ):
         self.tolerance = tolerance
         self.seq = seq
         self.matrix = None
 
-        self.alphabet = NucleotideAlphabetReduced.from_dataframe(
-            nucleotide_df=nucleotide_df,
-            modification_rate=seq.modification_rate,
-            precision=precision,
-        )
+        self.alphabet = alphabet
         self._reduce_nucleotide_alphabet(compression_rate=compression_rate)
 
         # Initialize matrix from file (for no alphabet reduction)
         if self.matrix is None:
             self.matrix = TracebackMatrix.load(
-                path=set_matrix_path(precision, compression_rate),
-                alphabet=self.alphabet,
+                alphabet=self.alphabet, compression_rate=compression_rate
             )
 
     def adapt_individual_modification_rates_by_alphabet_reduction(self, alphabet):

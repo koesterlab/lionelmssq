@@ -13,6 +13,7 @@ import polars as pl
 from spectrseqtools.masses import (
     DECIMAL_PLACES,
     ELEMENT_MASSES,
+    PRECISION,
     UNMODIFIED_BASES,
 )
 
@@ -37,18 +38,75 @@ _ALPHABET_COLS = [
 
 
 @dataclass
-class NucleotideAlphabet:
-    """Class for considered nucleotide alphabet as Polars dataframe."""
+class NucleotideMass:
+    """Class for nucleotide masses."""
 
-    nucleotides: pl.DataFrame
+    integer_mass: int = 0
+    nucleoside_mass: float = 0.0
+    nucleotide_mass: float = 0.0
+    singleton_mz: float = 0.0
+    names: List[str] = field(default_factory=list)
+    modification_rate: float = 0.0
+    is_modification: bool = False
+
+    def __eq__(self, other):
+        return self.mass == other.mass
+
+    def __le__(self, other):
+        return self.mass <= other.mass
+
+    def __lt__(self, other):
+        return self.mass < other.mass
+
+    def __ge__(self, other):
+        return self.mass >= other.mass
+
+    def __gt__(self, other):
+        return self.mass > other.mass
+
+    @property
+    def mass(self) -> int:
+        """Return integer mass."""
+        return self.integer_mass
+
+    @property
+    def representative(self) -> str:
+        """Return name of representative nucleotide."""
+        return self.names[0]
+
+    def fmt(self) -> str:
+        """Return nucleotide names formatted to string."""
+        if len(self.names) == 1:
+            return self.names[0]
+        return "[" + "|".join(self.names) + "]"
+
+
+@dataclass
+class NucleotideAlphabet:
+    """Class for considered nucleotide alphabet."""
+
+    alphabet: List[NucleotideMass]
+    precision: float
+
+    def __repr__(self) -> str:
+        return self.to_dataframe().__repr__()
 
     @classmethod
-    def from_file(cls, input_path: Path = None):
+    def from_file(
+        cls,
+        precision: float = PRECISION,
+        modification_rate: float = 0.5,
+        input_path: Path = None,
+    ) -> Self:
         """
         Initialize nucleotide alphabet from file.
 
         Parameters
         ----------
+        modification_rate : float
+            Maximum percentage of modification in sequence.
+        precision : float
+            Precision used for (nucleotide) masses.
         input_path : Path
             Path to file with nucleoside information.
 
@@ -107,170 +165,11 @@ class NucleotideAlphabet:
             ~pl.col("representative").is_in(UNMODIFIED_BASES).alias("is_modification")
         )
 
-        return NucleotideAlphabet(nucleotides=masses)
-
-    def filter_by_singleton_selection(self, singleton_path: Path) -> None:
-        """Filter out nucleotides not found during singleton identification.
-
-        Parameters
-        ----------
-        singleton_path : Path
-            Path to file with singletons identified during preprocessing.
-
-        """
-        # Read singletons if given
-        singletons = None
-        if os.path.isfile(singleton_path):
-            singletons = pl.read_csv(singleton_path, separator="\t")
-
-        print("Singletons identified during preprocessing:", singletons)
-        print()
-
-        # Filter by singletons
-        if singletons is not None:
-            # Map singletons to their mass representative
-            singletons = singletons.with_columns(
-                pl.col("id")
-                .replace_strict(
-                    {
-                        nuc: row["representative"]
-                        for row in self.nucleotides.rows(named=True)
-                        for nuc in row["id_list"]
-                    }
-                )
-                .alias("id")
-            )
-
-            # Select only bases found in singletons
-            self.nucleotides = self.nucleotides.with_columns(
-                pl.when(
-                    pl.col("representative").is_in(
-                        singletons.get_column("id").to_list()
-                    )
-                )
-                .then(pl.col("modification_rate"))
-                .otherwise(pl.lit(0.0))
-                .alias("modification_rate")
-            )
-
-        # Ensure modification rates of unmodified bases are set to 1
-        self.nucleotides = self.nucleotides.with_columns(
-            pl.when(pl.col("is_modification"))
-            .then(pl.col("modification_rate"))
-            .otherwise(pl.lit(1.0))
-            .alias("modification_rate")
+        return cls.from_dataframe(
+            nucleotide_df=masses,
+            modification_rate=modification_rate,
+            precision=precision,
         )
-
-    def min_mass(self) -> float:
-        """Return smallest nucleotide mass in alphabet."""
-        return (
-            self.nucleotides.filter(pl.col("modification_rate") > 0.0)
-            .select("nucleotide_mass")
-            .min()
-            .item()
-        )
-
-    def get_alternatives(self, representative: str) -> List[str]:
-        """
-        Return alternatives for given representative.
-
-        Parameters
-        ----------
-        representative : str
-            Nucleotide for which to find mass-equivalent alternatives.
-
-        Returns
-        -------
-        List[str]
-            List of alternatives.
-
-        """
-        return (
-            self.nucleotides.filter(pl.col("representative") == representative)
-            .select("id_list")
-            .item()
-            .to_list()
-        )
-
-    def get_seq_weight(self, seq: tuple) -> float:
-        """
-        Determine weight of given sequence.
-
-        Parameters
-        ----------
-        seq : tuple
-            Given sequence consisting only of nucleotide representatives.
-
-        Returns
-        -------
-        float
-            Sequence weight.
-
-        """
-        seq_df = pl.DataFrame(data=seq, schema=["name"])
-        seq_df = seq_df.with_columns(
-            pl.col("name")
-            .map_elements(
-                lambda x: (
-                    self.nucleotides.filter(pl.col("representative") == x)
-                    .get_column("nucleotide_mass")
-                    .to_list()[0]
-                ),
-                return_dtype=pl.Float64,
-            )
-            .alias("mass")
-        )
-
-        return round(seq_df.select("mass").sum().item(), 5)
-
-
-@dataclass
-class NucleotideMass:
-    """Class for nucleotide masses."""
-
-    integer_mass: int = 0
-    nucleoside_mass: float = 0.0
-    nucleotide_mass: float = 0.0
-    singleton_mz: float = 0.0
-    names: List[str] = field(default_factory=list)
-    modification_rate: float = 0.0
-    is_modification: bool = False
-
-    def __eq__(self, other):
-        return self.mass == other.mass
-
-    def __le__(self, other):
-        return self.mass <= other.mass
-
-    def __lt__(self, other):
-        return self.mass < other.mass
-
-    def __ge__(self, other):
-        return self.mass >= other.mass
-
-    def __gt__(self, other):
-        return self.mass > other.mass
-
-    @property
-    def mass(self) -> int:
-        """Return integer mass."""
-        return self.integer_mass
-
-    @property
-    def representative(self) -> str:
-        """Return name of representative nucleotide."""
-        return self.names[0]
-
-
-@dataclass
-class NucleotideAlphabetReduced:
-    """Class for considered nucleotide alphabet."""
-
-    alphabet: List[NucleotideMass]
-    precision: float
-
-    def __repr__(self) -> str:
-        return self.to_dataframe().__repr__()
 
     @classmethod
     def from_dataframe(
@@ -310,9 +209,29 @@ class NucleotideAlphabetReduced:
         return len(self.alphabet)
 
     @property
-    def max(self) -> int:
-        """Return highest mass in alphabet."""
-        return max(mass.mass for mass in self.alphabet)
+    def min(self) -> float:
+        """Return lowest nucleotide mass in alphabet."""
+        return min(mass.nucleotide_mass for mass in self.alphabet[1:])
+
+    @property
+    def max(self) -> float:
+        """Return highest nucleotide mass in alphabet."""
+        return max(mass.nucleotide_mass for mass in self.alphabet[1:])
+
+    @property
+    def min_mz(self) -> float:
+        """Return lowest sigleton m/z in alphabet."""
+        return min(mass.singleton_mz for mass in self.alphabet[1:])
+
+    @property
+    def max_mz(self) -> float:
+        """Return highest singleton m/z in alphabet."""
+        return max(mass.singleton_mz for mass in self.alphabet[1:])
+
+    @property
+    def max_integer(self) -> int:
+        """Return highest integer mass in alphabet."""
+        return max(mass.mass for mass in self.alphabet[1:])
 
     def get_mass(self, idx: int) -> int:
         """Return mass at index in alphabet."""
@@ -329,6 +248,13 @@ class NucleotideAlphabetReduced:
     def is_mod(self, idx: int) -> bool:
         """Return whether nucleotide at index in alphabet is modification."""
         return self.alphabet[idx].is_modification
+
+    def fmt(self, rep: str) -> str:
+        """Return formatted nucleotide by representative in alphabet."""
+        for nuc in self.alphabet[1:]:
+            if rep == nuc.names[0]:
+                return nuc.fmt()
+        return ""
 
     def names(self) -> List[str]:
         """Return list of all nucleotide names in alphabet."""
@@ -350,6 +276,36 @@ class NucleotideAlphabetReduced:
         """Return precision-adapted inference target."""
         return int(round(value / self.precision, 0))
 
+    def filter_by_singletons(self, singleton_path: Path) -> None:
+        """Filter out nucleotides not found during singleton identification.
+
+        Parameters
+        ----------
+        singleton_path : Path
+            Path to file with singletons identified during preprocessing.
+
+        """
+        # Read singletons if given
+        singletons = None
+        if os.path.isfile(singleton_path):
+            singletons = pl.read_csv(singleton_path, separator="\t")
+
+        print("Singletons identified during preprocessing:", singletons)
+        print()
+
+        # Filter by singletons
+        if singletons is None:
+            return
+
+        # Select nucleotide names for all singletons
+        singleton_names = set(singletons.get_column("id").to_list())
+        print(singleton_names)
+
+        # Select only bases found in singletons
+        for nuc in self.alphabet:
+            if len(set(nuc.names) & singleton_names) == 0 and nuc.is_modification:
+                nuc.modification_rate = 0.0
+
     def adapt_individual_modification_rates_by_alphabet(self, alphabet: List) -> None:
         """
         Set individual modification rate to 0 if nucleotide not in new alphabet.
@@ -365,6 +321,27 @@ class NucleotideAlphabetReduced:
                 continue
             if all(name not in alphabet for name in nucleotide_mass.names):
                 nucleotide_mass.modification_rate = 0.0
+
+    def get_seq_weight(self, seq: tuple) -> float:
+        """
+        Determine weight of given sequence.
+
+        Parameters
+        ----------
+        seq : tuple
+            Given sequence consisting only of nucleotide representatives.
+
+        Returns
+        -------
+        float
+            Sequence weight.
+
+        """
+        mass_dict = {
+            nuc_id: nuc.nucleotide_mass for nuc in self.alphabet for nuc_id in nuc.names
+        }
+
+        return round(sum(mass_dict[nuc] for nuc in seq), 5)
 
     def reduce(self) -> None:
         """Reduce alphabet by removing nucleotides that cannot be in sequence."""

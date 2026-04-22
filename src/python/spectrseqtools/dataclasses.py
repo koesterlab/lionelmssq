@@ -335,7 +335,7 @@ class Sequence:
         """Format sequence to string."""
         return "".join(self.sequence)
 
-    def to_full_str(self, nucleotide_alphabet: NucleotideAlphabet) -> str:
+    def fmt(self, nucleotide_alphabet: NucleotideAlphabet) -> str:
         """
         Format sequence to full string (i.e. include alternate nucleotides).
 
@@ -350,14 +350,7 @@ class Sequence:
             Sequence with all alternate nucleotides.
 
         """
-        output = ""
-        for nuc in self.sequence:
-            alt_nucs = nucleotide_alphabet.get_alternatives(representative=nuc)
-            if len(alt_nucs) == 1:
-                output += nuc
-            else:
-                output += "[" + "|".join(alt_nucs) + "]"
-        return output
+        return "".join(nucleotide_alphabet.fmt(rep=nuc) for nuc in self.sequence)
 
     def to_encoding(self) -> List[str]:
         """Format sequence to use encoding."""
@@ -386,7 +379,7 @@ class Sequence:
             print(f">{sequence_name}", file=f)
             print("".join(self.sequence), file=f)
             print(f">{sequence_name}_full", file=f)
-            print(self.to_full_str(nucleotide_alphabet=alphabet), file=f)
+            print(self.fmt(nucleotide_alphabet=alphabet), file=f)
 
 
 @dataclass

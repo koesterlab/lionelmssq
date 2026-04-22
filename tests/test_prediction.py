@@ -74,9 +74,7 @@ def test_testcase(testcase):
     print("True sequence =\t\t", true_seq)
     print(
         "Full sequence =\t\t",
-        prediction.sequence.to_full_str(
-            nucleotide_alphabet=NucleotideAlphabet.from_file()
-        ),
+        prediction.sequence.fmt(nucleotide_alphabet=NucleotideAlphabet.from_file()),
     )
 
     plots = plot_prediction(prediction=prediction, true_seq=true_seq)

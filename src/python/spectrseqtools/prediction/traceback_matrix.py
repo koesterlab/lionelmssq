@@ -9,7 +9,7 @@ from typing import Self
 import numpy as np
 from platformdirs import user_cache_dir
 
-from spectrseqtools.nucleotide_alphabet import NucleotideAlphabetReduced
+from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 
 # Set OS-independent cache directory for traceback matrix
 MATRIX_DIR = user_cache_dir(
@@ -33,20 +33,20 @@ class TracebackMatrix:
     compression_rate: int
 
     @classmethod
-    def load(cls, path: str, alphabet: NucleotideAlphabetReduced) -> Self:
+    def load(cls, alphabet: NucleotideAlphabet, compression_rate: int) -> Self:
         """
         Load traceback matrix if it exists and compute it otherwise.
 
         Parameters
         ----------
-        path : str
-            Path to traceback matrix.
-        alphabet : NucleotideAlphabetReduced
-            Nucleotide alphabet.
+        alphabet : NucleotideAlphabet
+            Alphabet of considered nucleotides.
+        compression_rate : int
+            Compression per matrix cell.
 
         """
-        # Select compression rate from path string
-        compression_rate = int(path.split(".")[-1].rstrip("_per_cell"))
+        # Set matrix path
+        path = set_matrix_path(alphabet.precision, compression_rate)
 
         # Compute and save bit-representation matrix if not existing
         if not Path(f"{path}.npy").is_file():
@@ -62,18 +62,18 @@ class TracebackMatrix:
         return cls(matrix=np.load(f"{path}.npy"), compression_rate=compression_rate)
 
     @classmethod
-    def set_up_matrix(cls, alphabet: NucleotideAlphabetReduced) -> Self:
+    def set_up_matrix(cls, alphabet: NucleotideAlphabet) -> Self:
         """
         Calculate complete matrix with dynamic programming.
 
         Parameters
         ----------
-        alphabet : NucleotideAlphabetReduced
-            Nucleotide alphabet.
+        alphabet : NucleotideAlphabet
+            Alphabet of considered nucleotides.
 
         """
         # Select maximum integer mass for which matrix should be built
-        max_mass = alphabet.max * MAX_SEQ_LENGTH
+        max_mass = alphabet.max_integer * MAX_SEQ_LENGTH
 
         # Initialize matrix as numpy table
         matrix = np.zeros((alphabet.size, max_mass + 1), dtype=np.uint8)
@@ -99,15 +99,15 @@ class TracebackMatrix:
 
     @classmethod
     def set_up_bit_matrix(
-        cls, alphabet: NucleotideAlphabetReduced, compression_rate: int
+        cls, alphabet: NucleotideAlphabet, compression_rate: int
     ) -> Self:
         """
         Calculate complete bit-representation matrix with dynamic programming.
 
         Parameters
         ----------
-        alphabet : NucleotideAlphabetReduced
-            Nucleotide alphabet.
+        alphabet : NucleotideAlphabet
+            Alphabet of considered nucleotides.
         compression_rate : int
             Compression per matrix cell.
 
@@ -115,7 +115,7 @@ class TracebackMatrix:
         settings = select_matrix_building_settings(compression_rate)
 
         # Select maximum integer mass for which matrix should be built
-        max_mass = alphabet.max * MAX_SEQ_LENGTH
+        max_mass = alphabet.max_integer * MAX_SEQ_LENGTH
 
         # Initialize bit-representation matrix as numpy table
         max_col = int(np.ceil((max_mass + 1) / compression_rate))

@@ -20,10 +20,10 @@ class Predictor:
     def __init__(
         self,
         inferrer: CompositionInferrer,
-        nucleotide_df: pl.DataFrame,
+        max_weight: float = None,
     ):
-        self.nucleotide_df = nucleotide_df
         self.inferrer = inferrer
+        self.max_weight = max_weight
 
     def predict(
         self,
@@ -264,7 +264,6 @@ class Predictor:
         return compositions
 
     def collect_diff_compositions_per_side(self, fragments: pl.DataFrame) -> dict:
-        max_weight = max(self.nucleotide_df.get_column("nucleotide_mass").to_list())
         su_masses = fragments.get_column("standard_unit_mass").to_list()
         observed_masses = fragments.get_column("observed_mass").to_list()
         start = 0
@@ -280,8 +279,9 @@ class Predictor:
             # Determine mass difference between fragments
             diff = su_masses[end] - su_masses[start]
 
+            # TODO: Set max_weight to be the maximum nucleotide mass in alphabet * factor
             # If mass difference > any nucleotide mass, drop 1st fragment in window
-            if diff > max_weight:
+            if diff > self.max_weight:
                 start += 1
                 end = start + 1
                 continue

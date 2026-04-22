@@ -30,7 +30,7 @@ class Preprocessor:
     """Class for preprocessing of raw MS data."""
 
     def __init__(self, options: PreprocessingOptions) -> None:
-        self.alphabet = NucleotideAlphabet.from_file(options.alphabet).nucleotides
+        self.alphabet = NucleotideAlphabet.from_file(input_path=options.alphabet)
         self.tolerance = options.tolerance
         self.singleton_boundaries = SingletonBoundaries.from_alphabet(
             alphabet=self.alphabet,
@@ -145,6 +145,7 @@ class Preprocessor:
         -------
         polars.DataFrame
             Dataframe containing singleton candidates.
+
         """
         # Initialize iterator for RAW file
         raw_file_read = initialize_raw_file_iterator(file_path=str(self.input_path))
