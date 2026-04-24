@@ -11,7 +11,8 @@ from spectrseqtools.common import (
     calculate_compositions,
     calculate_error_threshold,
 )
-from spectrseqtools.dataclasses import MAX_VARIANCE, SolverParameters
+from spectrseqtools.dataclasses import SolverParameters
+from spectrseqtools.fragments import MAX_VARIANCE
 from spectrseqtools.prediction.composition_inference import (
     CompositionInferrer,
     compute_sequence_length_bound,

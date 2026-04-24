@@ -1,8 +1,9 @@
 import yaml
 
 from spectrseqtools.common import set_output_path
-from spectrseqtools.dataclasses import RawFragments, SolverParameters
+from spectrseqtools.dataclasses import SolverParameters
 from spectrseqtools.enums import SolverType
+from spectrseqtools.fragments import RawFragments
 from spectrseqtools.masses import (
     COMPRESSION_RATE,
     DEFAULT_INTENSITY_CUTOFF,

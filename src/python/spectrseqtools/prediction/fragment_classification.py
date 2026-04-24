@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Classification of fragments."""
 
-from spectrseqtools.dataclasses import RawFragments, StandardUnitFragments
+from spectrseqtools.fragments import RawFragments, StandardUnitFragments
 
 # METHOD: For each fragmentation option that yields a valid mass (i.e. one that
 # has any valid composition) for a given fragment, duplicate the fragment
