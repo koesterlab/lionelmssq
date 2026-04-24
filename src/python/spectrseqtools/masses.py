@@ -92,7 +92,7 @@ def build_fragmentation_dict(start_tag, end_tag):
 
     # Collect all unique fragmentation-related mass combinations in dict
     fragmentation_dict = {}
-    for start, end in list(product(start_dict.keys(), end_dict.keys())):
+    for start, end in list(product(start_dict, end_dict)):
         val = int((start_dict[start] + end_dict[end]) / PRECISION)
         if val not in fragmentation_dict:
             fragmentation_dict[val] = []

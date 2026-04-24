@@ -274,7 +274,7 @@ def set_averagine(backbone: AveragineBackbone) -> dict:
 
     # Calculate average elemental composition
     average_composition = {}
-    for element in base_compositions[0].keys():
+    for element in base_compositions[0]:
         average_composition[element] = sum(
             float(base[element]) for base in base_compositions
         ) / len(base_compositions)
