@@ -113,12 +113,17 @@ def predict(options: PredictionOptions):
         output_path=fragment_dir / f"{file_prefix}.standard_unit_fragments.tsv"
     )
 
+    fragments.index()
+
+    print("Number of fragments before prediction:", len(fragments))
+    print()
+
     # Predict sequence
     prediction = Predictor(
         inferrer=inferrer,
         max_weight=max_weight,
     ).predict(
-        fragments=fragments.fragments,
+        fragments=fragments,
         solver_params=solver_params,
     )
 

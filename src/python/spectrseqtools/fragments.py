@@ -7,8 +7,15 @@ from typing import Self
 
 import polars as pl
 
+from spectrseqtools.common import (
+    calculate_compositions,
+    calculate_error_threshold,
+)
 from spectrseqtools.masses import PRECISION
-from spectrseqtools.prediction.composition_inference import is_valid_mass
+from spectrseqtools.prediction.composition_inference import (
+    CompositionInferrer,
+    is_valid_mass,
+)
 
 MAX_VARIANCE = 1
 
@@ -70,6 +77,10 @@ class StandardUnitFragments:
 
     fragments: pl.DataFrame
 
+    def __len__(self):
+        """Return length of fragment list."""
+        return len(self.fragments)
+
     @classmethod
     def default(cls) -> Self:
         """Return empty fragments dataframe."""
@@ -81,6 +92,8 @@ class StandardUnitFragments:
                     "standard_unit_mass": pl.Float64,
                     "fragmentation": pl.String,
                     "intensity": pl.Float64,
+                    "min_end": pl.UInt32,
+                    "max_end": pl.UInt32,
                 }
             ),
         )
@@ -140,6 +153,14 @@ class StandardUnitFragments:
             .drop("is_valid")
         )
 
+    def index(self) -> None:
+        """Index fragments."""
+        self.fragments = (
+            self.fragments.with_row_index(name="orig_index")
+            .sort("standard_unit_mass")
+            .with_row_index(name="index")
+        )
+
     def save(self, output_path) -> None:
         """
         Save SU-fragments to file.
@@ -151,6 +172,107 @@ class StandardUnitFragments:
 
         """
         self.fragments.write_csv(output_path, separator="\t")
+
+    def collect_singleton_compositions(self, inferrer: CompositionInferrer) -> dict:
+        """
+        Collect compositions of singletons in fragment list.
+
+        Parameters
+        ----------
+        inferrer : CompositionInferrer
+            Composition inferrer.
+
+        Returns
+        -------
+        dict
+            Dictionary of singleton masses and their corresponding compositions.
+
+        """
+        # Determine all fragments that may be singletons
+        fragments = self.fragments.filter(
+            pl.col("standard_unit_mass") <= 1.1 * inferrer.alphabet.max
+        )
+
+        # Collect singleton masses
+        compositions = {}
+        for frag in fragments.rows(named=True):
+            # Compute mass compositions
+            comps = calculate_compositions(
+                diff=frag["standard_unit_mass"],
+                threshold=inferrer.tolerance * frag["observed_mass"],
+                inferrer=inferrer,
+            )
+
+            # Ensure mass corresponds to true singleton
+            if comps is not None and any(len(comp) == 1 for comp in comps):
+                compositions[frag["standard_unit_mass"]] = comps
+
+        return compositions
+
+    def collect_compositions_from_ladder_differences(
+        self, inferrer: CompositionInferrer, max_weight: float, direction: str
+    ) -> dict:
+        """
+        Collect compositions of singletons in fragment list.
+
+        Parameters
+        ----------
+        inferrer : CompositionInferrer
+            Composition inferrer.
+        max_weight : float
+            Maximum nucleotide weight to consider.
+        direction : str
+            Ladder direction (START or END).
+
+        Returns
+        -------
+        dict
+            Dictionary of differences and their corresponding compositions.
+
+        """
+        fragments = self.fragments.filter(
+            pl.col("fragmentation").str.contains(direction)
+        )
+        su_masses = fragments.get_column("standard_unit_mass").to_list()
+        observed_masses = fragments.get_column("observed_mass").to_list()
+        start = 0
+        end = 1
+
+        compositions = {}
+        while end < len(fragments):
+            # Skip singletons
+            if (end - start) <= 0:
+                end += 1
+                continue
+
+            # Determine mass difference between fragments
+            diff = su_masses[end] - su_masses[start]
+
+            # TODO: Set max_weight to be the maximum nucleotide mass in alphabet * factor
+            # If mass difference > any nucleotide mass, drop 1st fragment in window
+            if diff > max_weight:
+                start += 1
+                end = start + 1
+                continue
+
+            diff_error = calculate_error_threshold(
+                observed_masses[start],
+                observed_masses[end],
+                inferrer.tolerance,
+            )
+            comp = calculate_compositions(
+                diff=diff,
+                threshold=diff_error,
+                inferrer=inferrer,
+            )
+            if comp is not None and len(comp) >= 1:
+                compositions[diff] = comp
+            if end == len(fragments) - 1:
+                start += 1
+            else:
+                end += 1
+
+        return compositions
 
 
 @dataclass
@@ -238,6 +360,12 @@ class RawFragments:
                 )
                 for (weight, fragmentation) in fragmentation_dict.items()
             ]
+        )
+
+        # Initialize sequence boundaries
+        fragments = fragments.with_columns(
+            pl.lit(0, dtype=pl.Int64).alias("min_end"),
+            pl.lit(-1, dtype=pl.Int64).alias("max_end"),
         )
 
         # Sort fragments

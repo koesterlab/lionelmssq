@@ -3,15 +3,9 @@ from typing import Set, Tuple
 import polars as pl
 from loguru import logger
 
-from spectrseqtools.common import (
-    calculate_compositions,
-    calculate_error_threshold,
-)
 from spectrseqtools.dataclasses import Prediction, SolverParameters
-from spectrseqtools.prediction.composition_inference import (
-    CompositionInferrer,
-    is_valid_mass,
-)
+from spectrseqtools.fragments import StandardUnitFragments
+from spectrseqtools.prediction.composition_inference import CompositionInferrer
 from spectrseqtools.prediction.sequence_inference import LinearProgramInstance
 from spectrseqtools.prediction.skeleton_building import SkeletonBuilder
 
@@ -20,29 +14,16 @@ class Predictor:
     def __init__(
         self,
         inferrer: CompositionInferrer,
-        max_weight: float = None,
+        max_weight: float,
     ):
         self.inferrer = inferrer
         self.max_weight = max_weight
 
     def predict(
         self,
-        fragments: pl.DataFrame,
+        fragments: StandardUnitFragments,
         solver_params: SolverParameters,
     ) -> Prediction:
-        fragments = (
-            fragments.with_row_index(name="orig_index")
-            .sort("standard_unit_mass")
-            .with_row_index(name="index")
-        )
-        print("Number of fragments before prediction:", len(fragments))
-        print()
-
-        fragments = fragments.with_columns(
-            pl.lit(0, dtype=pl.Int64).alias("min_end"),
-            pl.lit(-1, dtype=pl.Int64).alias("max_end"),
-        )
-
         fragments, compositions = self.filter_by_composition(fragments)
 
         skeleton_builder = SkeletonBuilder(
@@ -53,10 +34,12 @@ class Predictor:
         # Build skeleton sequence from both sides and align them into final sequence
         try:
             skeleton_seq, fragments = skeleton_builder.build_skeleton(
-                fragments=fragments, solver_params=solver_params
+                fragments=fragments.fragments, solver_params=solver_params
             )
         except Exception:
             return Prediction.default()
+
+        fragments = StandardUnitFragments(fragments)
 
         print()
         print("Number of fragments before skeleton-based reduction:", len(fragments))
@@ -73,6 +56,8 @@ class Predictor:
         print("Alphabet after skeleton-based reduction:")
         self.inferrer.print_alphabet()
         print()
+
+        fragments = fragments.fragments
 
         # Filter out all internal fragments that do not fit anywhere in skeleton
         print(
@@ -133,16 +118,29 @@ class Predictor:
             return Prediction.default()
 
     def filter_by_composition(
-        self, fragments: pl.DataFrame
-    ) -> Tuple[pl.DataFrame, dict]:
+        self, fragments: StandardUnitFragments
+    ) -> Tuple[StandardUnitFragments, dict]:
         old_alphabet_size = -1
 
-        compositions = {}
+        singleton_compositions = fragments.collect_singleton_compositions(
+            inferrer=self.inferrer
+        )
         while old_alphabet_size != self.inferrer.alphabet.size:
             old_alphabet_size = self.inferrer.alphabet.size
+
             # Roughly infer compositions for mass differences (to reduce the alphabet)
             # Note there may be faulty mass fragments leading to not truly existent values
-            compositions = self.collect_diff_compositions(fragments=fragments)
+            compositions = {
+                **singleton_compositions,
+                **fragments.collect_compositions_from_ladder_differences(
+                    inferrer=self.inferrer,
+                    max_weight=self.max_weight,
+                    direction="START",
+                ),
+                **fragments.collect_compositions_from_ladder_differences(
+                    inferrer=self.inferrer, max_weight=self.max_weight, direction="END"
+                ),
+            }
 
             # TODO: Also consider that the observations are not complete and that
             #  we probably don't see all the letters as diffs or singletons.
@@ -167,29 +165,17 @@ class Predictor:
         return fragments, compositions
 
     def _reduce_alphabet(
-        self, nucleotide_list: Set[str], fragments: pl.DataFrame
-    ) -> pl.DataFrame:
+        self, nucleotide_list: Set[str], fragments: StandardUnitFragments
+    ) -> StandardUnitFragments:
+        # Reduce nucleotide alphabet
         self.inferrer.adapt_individual_modification_rates_by_alphabet_reduction(
             nucleotide_list
         )
 
         # Filter out all fragments with no valid composition
-        return (
-            fragments.with_columns(
-                pl.struct("observed_mass", "standard_unit_mass")
-                .map_elements(
-                    lambda x: is_valid_mass(
-                        mass=x["standard_unit_mass"],
-                        inferrer=self.inferrer,
-                        threshold=self.inferrer.tolerance * x["observed_mass"],
-                    ),
-                    return_dtype=bool,
-                )
-                .alias("is_valid")
-            )
-            .filter(pl.col("is_valid"))
-            .drop("is_valid")
-        )
+        fragments.filter_with_traceback_matrix(inferrer=self.inferrer)
+
+        return fragments
 
     def filter_with_linear_optimization(
         self,
@@ -222,120 +208,3 @@ class Predictor:
 
         # Return only valid fragments
         return fragments.filter(~pl.col("index").is_in(is_invalid))
-
-    def collect_diff_compositions(self, fragments: pl.DataFrame) -> dict:
-        # Collect compositions for all reasonable mass differences for each side
-        compositions = {
-            **self.collect_diff_compositions_per_side(
-                fragments=fragments.filter(
-                    pl.col("fragmentation").str.contains("START")
-                ),
-            ),
-            **self.collect_diff_compositions_per_side(
-                fragments=fragments.filter(pl.col("fragmentation").str.contains("END")),
-            ),
-        }
-
-        # Determine all fragments that may be singletons
-        fragments = fragments.with_columns(
-            pl.struct("observed_mass", "standard_unit_mass")
-            .map_elements(
-                lambda x: is_singleton(
-                    mass=x["standard_unit_mass"],
-                    inferrer=self.inferrer,
-                    threshold=self.inferrer.tolerance * x["observed_mass"],
-                ),
-                return_dtype=bool,
-            )
-            .alias("is_singleton")
-        )
-        # Collect singleton masses
-        singleton_list = fragments.filter(pl.col("is_singleton"))
-
-        idx_observed_mass = fragments.get_column_index("observed_mass")
-        idx_su_mass = fragments.get_column_index("standard_unit_mass")
-        for singleton in singleton_list.rows():
-            compositions[singleton[idx_su_mass]] = calculate_compositions(
-                diff=singleton[idx_su_mass],
-                threshold=self.inferrer.tolerance * singleton[idx_observed_mass],
-                inferrer=self.inferrer,
-            )
-
-        return compositions
-
-    def collect_diff_compositions_per_side(self, fragments: pl.DataFrame) -> dict:
-        su_masses = fragments.get_column("standard_unit_mass").to_list()
-        observed_masses = fragments.get_column("observed_mass").to_list()
-        start = 0
-        end = 1
-
-        compositions = {}
-        while end < len(fragments):
-            # Skip singletons
-            if (end - start) <= 0:
-                end += 1
-                continue
-
-            # Determine mass difference between fragments
-            diff = su_masses[end] - su_masses[start]
-
-            # TODO: Set max_weight to be the maximum nucleotide mass in alphabet * factor
-            # If mass difference > any nucleotide mass, drop 1st fragment in window
-            if diff > self.max_weight:
-                start += 1
-                end = start + 1
-                continue
-
-            diff_error = calculate_error_threshold(
-                observed_masses[start],
-                observed_masses[end],
-                self.inferrer.tolerance,
-            )
-            comp = calculate_compositions(
-                diff=diff,
-                threshold=diff_error,
-                inferrer=self.inferrer,
-            )
-            if comp is not None and len(comp) >= 1:
-                compositions[diff] = comp
-            if end == len(fragments) - 1:
-                start += 1
-            else:
-                end += 1
-
-        return compositions
-
-
-def is_singleton(
-    mass,
-    inferrer: CompositionInferrer,
-    threshold: float = None,
-) -> bool:
-    """
-    Determine whether the given mass is associated with any singleton.
-
-    Parameters
-    ----------
-    mass : float
-        Given fragment mass.
-    inferrer: CompositionInferrer
-        Composition inferrer.
-    threshold : float
-        Error threshold.
-
-    Returns
-    -------
-    bool
-        Flag whether mass is associated with any singleton.
-
-    """
-    # Set singleton masses from alphabet
-    singleton_masses = [mass.mass for mass in inferrer.alphabet.alphabet]
-
-    target, threshold = inferrer.set_target(mass=mass, threshold=threshold)
-
-    # Check whether a singleton mass could be found
-    for value in range(target - threshold, target + threshold + 1):
-        if value in singleton_masses:
-            return True
-    return False
