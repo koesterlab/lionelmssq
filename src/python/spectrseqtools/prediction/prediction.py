@@ -34,12 +34,10 @@ class Predictor:
         # Build skeleton sequence from both sides and align them into final sequence
         try:
             skeleton_seq, fragments = skeleton_builder.build_skeleton(
-                fragments=fragments.fragments, solver_params=solver_params
+                fragments=fragments, solver_params=solver_params
             )
         except Exception:
             return Prediction.default()
-
-        fragments = StandardUnitFragments(fragments)
 
         print()
         print("Number of fragments before skeleton-based reduction:", len(fragments))
@@ -132,13 +130,13 @@ class Predictor:
             # Note there may be faulty mass fragments leading to not truly existent values
             compositions = {
                 **singleton_compositions,
-                **fragments.collect_compositions_from_ladder_differences(
+                **fragments.start.collect_mass_difference_compositions(
                     inferrer=self.inferrer,
                     max_weight=self.max_weight,
-                    direction="START",
                 ),
-                **fragments.collect_compositions_from_ladder_differences(
-                    inferrer=self.inferrer, max_weight=self.max_weight, direction="END"
+                **fragments.end.collect_mass_difference_compositions(
+                    inferrer=self.inferrer,
+                    max_weight=self.max_weight,
                 ),
             }
 

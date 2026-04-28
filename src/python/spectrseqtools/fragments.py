@@ -3,9 +3,10 @@
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Self
+from typing import List, Self, Set
 
 import polars as pl
+from loguru import logger
 
 from spectrseqtools.common import (
     calculate_compositions,
@@ -77,7 +78,7 @@ class StandardUnitFragments:
 
     fragments: pl.DataFrame
 
-    def __len__(self):
+    def __len__(self) -> int:
         """Return length of fragment list."""
         return len(self.fragments)
 
@@ -96,6 +97,143 @@ class StandardUnitFragments:
                     "max_end": pl.UInt32,
                 }
             ),
+        )
+
+    @classmethod
+    def from_bins(cls, bins: List[Self], invalid_list: List) -> Self:
+        """
+        Initialize SU-fragments from list of binned fragments.
+
+        Parameters
+        ----------
+        bins : List[StandardUnitFragments]
+            List of binned SU-fragments.
+        invalid_list : List
+            List of indices for invalid fragments.
+
+        """
+        # Concatenate bins
+        fragments = pl.concat(frag_bin.fragments for frag_bin in bins)
+
+        # Filter out all invalid fragments
+        return cls(fragments.filter(~pl.col("index").is_in(invalid_list)))
+
+    @classmethod
+    def from_terminals(
+        cls, start_fragments: Self, end_fragments: Self, seq_len: int
+    ) -> Self:
+        """
+        Initialize SU-fragments from terminal fragments.
+
+        Parameters
+        ----------
+        start_fragments : StandardUnitFragments
+            List of terminal fragments in 5'-direction.
+        end_fragments : StandardUnitFragments
+            List of terminal fragments in 3'-direction.
+        seq_len : int
+            Sequence length.
+
+        """
+        # Clone fragments from classes
+        start_fragments = start_fragments.fragments.clone()
+        end_fragments = end_fragments.fragments.clone()
+
+        # Ensure fragments only occur once
+        end_fragments = end_fragments.filter(
+            ~pl.col("index").is_in(start_fragments.get_column("index").to_list())
+        )
+
+        # Remove indexing of the next pos for START fragments
+        start_fragments = start_fragments.with_columns(
+            (pl.col("min_end") - 1).alias("min_end"),
+            (pl.col("max_end") - 1).alias("max_end"),
+        )
+
+        # Remove reverse indexing for END fragments
+        end_fragments = end_fragments.with_columns(
+            (seq_len - pl.col("min_end")).alias("min_end"),
+            (seq_len - pl.col("max_end")).alias("max_end"),
+        )
+
+        return cls(fragments=start_fragments.vstack(end_fragments).sort("index"))
+
+    @classmethod
+    def from_fragment_classes(
+        cls,
+        start_fragments: Self,
+        end_fragments: Self,
+        internal_fragments: Self,
+        seq_len: int,
+    ) -> Self:
+        """
+        Initialize SU-fragments from fragment classes.
+
+        Parameters
+        ----------
+        start_fragments : StandardUnitFragments
+            List of terminal fragments in 5'-direction.
+        end_fragments : StandardUnitFragments
+            List of terminal fragments in 3'-direction.
+        internal_fragments : StandardUnitFragments
+            List of internal fragments.
+        seq_len : int
+            Sequence length.
+
+        """
+        frag_terminal = cls.from_terminals(
+            start_fragments, end_fragments, seq_len=seq_len
+        ).fragments
+
+        # TODO: Move filter outside of skeleton building
+        # Remove all "internal" fragment duplicates that are truly terminal fragments
+        frag_internal = internal_fragments.fragments.filter(
+            ~pl.col("fragment_index").is_in(
+                frag_terminal.get_column("fragment_index").to_list()
+            )
+        )
+
+        # Rebuild fragment dataframe from internal and terminal fragments
+        fragments = frag_internal.vstack(frag_terminal).sort("index")
+
+        # Ensure all end indices match estimated sequence length
+        fragments = fragments.with_columns(
+            pl.when((pl.col("min_end") < 0) | (pl.col("min_end") >= seq_len))
+            .then(pl.lit(seq_len - 1))
+            .otherwise(pl.col("min_end"))
+            .alias("min_end"),
+            pl.when((pl.col("max_end") < 0) | (pl.col("max_end") >= seq_len))
+            .then(pl.lit(seq_len - 1))
+            .otherwise(pl.col("max_end"))
+            .alias("max_end"),
+        )
+
+        return cls(fragments=fragments)
+
+    @property
+    def start(self) -> Self:
+        """Return terminal fragments in 5'-direction."""
+        return StandardUnitFragments(
+            fragments=self.fragments.filter(
+                pl.col("fragmentation").str.contains("START")
+            )
+        )
+
+    @property
+    def end(self) -> Self:
+        """Return terminal fragments in 3'-direction."""
+        return StandardUnitFragments(
+            fragments=self.fragments.filter(pl.col("fragmentation").str.contains("END"))
+        )
+
+    @property
+    def internal(self) -> Self:
+        """Return internal fragments."""
+        return StandardUnitFragments(
+            fragments=self.fragments.filter(
+                ~pl.col("fragmentation").str.contains("START")
+                & ~pl.col("fragmentation").str.contains("END")
+            )
         )
 
     def filter_by_intact_mass(self, intact_mass) -> None:
@@ -209,11 +347,80 @@ class StandardUnitFragments:
 
         return compositions
 
-    def collect_compositions_from_ladder_differences(
-        self, inferrer: CompositionInferrer, max_weight: float, direction: str
+    def bin(self, tolerance: float) -> List[Self]:
+        """
+        Split fragments into bins within mass tolerance.
+
+        Parameters
+        ----------
+        tolerance : float
+            Relative mass tolerance.
+
+        """
+        # Sort fragments for consecutive binning
+        self.fragments = self.fragments.sort("standard_unit_mass")
+
+        bins = []
+        start_idx = 0
+        for frag_idx in range(1, len(self)):
+            # Define mass difference and threshold between neighboring fragments
+            neighbor_diff = self.fragments.item(
+                frag_idx, "standard_unit_mass"
+            ) - self.fragments.item(frag_idx - 1, "standard_unit_mass")
+            neighbor_threshold = calculate_error_threshold(
+                self.fragments.item(frag_idx - 1, "observed_mass"),
+                self.fragments.item(frag_idx, "observed_mass"),
+                tolerance,
+            )
+
+            # Continue filling bin for fragments with similar mass
+            if neighbor_diff <= neighbor_threshold:
+                continue
+
+            # Close bin and update information for new one
+            bins.append(StandardUnitFragments(self.fragments[start_idx:frag_idx]))
+            start_idx = frag_idx
+
+        # Add last bin to list
+        bins.append(StandardUnitFragments(self.fragments[start_idx:]))
+
+        return bins
+
+    def invalidate(self) -> Self:
+        """Invalidate all fragments."""
+        # Add a warning in the log for the skipped fragment
+        for frag in self.fragments.rows(named=True):
+            logger.warning(
+                f"Skipping {frag['fragmentation']} "
+                f"fragment {frag['index']} with observed "
+                f"mass {frag['observed_mass']:.4f} and "
+                f"SU mass {frag['standard_unit_mass']:.4f}"
+                f" because no valid compositions were found."
+            )
+
+        return self.fragments.get_column("index").to_list()
+
+    def update_end_indices(self, pos: Set[int]) -> None:
+        """
+        Update minimum and maximum end index, respectively.
+
+        Parameters
+        ----------
+        pos : Set[int]
+            Set of possible follow-up indices.
+
+        """
+        # Adapt information on end index for given bin
+        self.fragments = self.fragments.with_columns(
+            pl.lit(min(pos, default=1), dtype=pl.Int64).alias("min_end"),
+            pl.lit(max(pos, default=1), dtype=pl.Int64).alias("max_end"),
+        )
+
+    def collect_mass_difference_compositions(
+        self, inferrer: CompositionInferrer, max_weight: float
     ) -> dict:
         """
-        Collect compositions of singletons in fragment list.
+        Collect compositions of mass differences between fragments in list.
 
         Parameters
         ----------
@@ -221,8 +428,6 @@ class StandardUnitFragments:
             Composition inferrer.
         max_weight : float
             Maximum nucleotide weight to consider.
-        direction : str
-            Ladder direction (START or END).
 
         Returns
         -------
@@ -230,16 +435,13 @@ class StandardUnitFragments:
             Dictionary of differences and their corresponding compositions.
 
         """
-        fragments = self.fragments.filter(
-            pl.col("fragmentation").str.contains(direction)
-        )
-        su_masses = fragments.get_column("standard_unit_mass").to_list()
-        observed_masses = fragments.get_column("observed_mass").to_list()
+        su_masses = self.fragments.get_column("standard_unit_mass").to_list()
+        observed_masses = self.fragments.get_column("observed_mass").to_list()
         start = 0
         end = 1
 
         compositions = {}
-        while end < len(fragments):
+        while end < len(self):
             # Skip singletons
             if (end - start) <= 0:
                 end += 1
@@ -267,7 +469,7 @@ class StandardUnitFragments:
             )
             if comp is not None and len(comp) >= 1:
                 compositions[diff] = comp
-            if end == len(fragments) - 1:
+            if end == len(self) - 1:
                 start += 1
             else:
                 end += 1

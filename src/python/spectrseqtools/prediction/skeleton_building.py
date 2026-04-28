@@ -1,10 +1,11 @@
+# -*- coding: utf-8 -*-
+"""Building of sequence skeletons."""
+
 from dataclasses import dataclass
 from itertools import chain, groupby
 from typing import List, Optional, Set, Tuple
 
 import numpy as np
-import polars as pl
-from loguru import logger
 
 from spectrseqtools.common import (
     Composition,
@@ -12,7 +13,7 @@ from spectrseqtools.common import (
     calculate_error_threshold,
 )
 from spectrseqtools.dataclasses import SolverParameters
-from spectrseqtools.fragments import MAX_VARIANCE
+from spectrseqtools.fragments import MAX_VARIANCE, StandardUnitFragments
 from spectrseqtools.prediction.composition_inference import (
     CompositionInferrer,
     compute_sequence_length_bound,
@@ -22,22 +23,42 @@ from spectrseqtools.prediction.sequence_inference import LinearProgramInstance
 
 @dataclass
 class SkeletonBuilder:
+    """Class to build skeleton sequence."""
+
     compositions: dict
     inferrer: CompositionInferrer
 
     def build_skeleton(
-        self, fragments: pl.DataFrame, solver_params: SolverParameters
-    ) -> Tuple[List[Set[str]], pl.DataFrame]:
+        self, fragments: StandardUnitFragments, solver_params: SolverParameters
+    ) -> Tuple[List[Set[str]], StandardUnitFragments]:
+        """
+        Build skeleton from given fragments.
+
+        Parameters
+        ----------
+        fragments : StandardUnitFragments
+            SU-fragments to build skeleton.
+        solver_params : SolverParameters
+            Solver parameter.
+
+        Returns
+        -------
+        List[Set[str]]
+            Skeleton sequence.
+        StandardUnitFragments
+            SU-fragments after skeleton building.
+
+        """
         # Build skeleton sequence from 5'-end
         start_skeleton, start_fragments = self._predict_skeleton(
-            fragments=fragments.filter(pl.col("fragmentation").str.contains("START")),
+            fragments=fragments.start,
             skeleton_seq=[set() for _ in range(self.inferrer.seq.max_len)],
         )
         print("Skeleton sequence (5'-end)\t= ", start_skeleton)
 
         # Build skeleton sequence from 3'-end and reverse it
         end_skeleton, end_fragments = self._predict_skeleton(
-            fragments=fragments.filter(pl.col("fragmentation").str.contains("END")),
+            fragments=fragments.end,
             skeleton_seq=[set() for _ in range(self.inferrer.seq.max_len)],
         )
         end_skeleton = end_skeleton[::-1]
@@ -66,48 +87,12 @@ class SkeletonBuilder:
         )
         print("Skeleton sequence (combined)\t= ", skeleton_seq)
 
-        # Ensure fragments only occur once
-        end_fragments = end_fragments.filter(
-            ~pl.col("index").is_in(start_fragments.get_column("index").to_list())
-        )
-
-        # Remove indexing of the next pos for START fragments
-        start_fragments = start_fragments.with_columns(
-            (pl.col("min_end") - 1).alias("min_end"),
-            (pl.col("max_end") - 1).alias("max_end"),
-        )
-
-        # Remove reverse indexing for END fragments
-        end_fragments = end_fragments.with_columns(
-            (len(skeleton_seq) - pl.col("min_end")).alias("min_end"),
-            (len(skeleton_seq) - pl.col("max_end")).alias("max_end"),
-        )
-
-        frag_terminal = pl.concat([start_fragments, end_fragments])
-
-        # Remove all "internal" fragment duplicates that are truly terminal fragments
-        frag_internal = fragments.filter(
-            ~pl.col("fragmentation").str.contains("START")
-            & ~pl.col("fragmentation").str.contains("END")
-        ).filter(
-            ~pl.col("fragment_index").is_in(
-                frag_terminal.get_column("fragment_index").to_list()
-            )
-        )
-
-        # Rebuild fragment dataframe from internal and terminal fragments
-        fragments = frag_internal.vstack(frag_terminal).sort("index")
-
-        # Ensure all end indices match estimated sequence length
-        fragments = fragments.with_columns(
-            pl.when((pl.col("min_end") < 0) | (pl.col("min_end") >= len(skeleton_seq)))
-            .then(pl.lit(len(skeleton_seq) - 1))
-            .otherwise(pl.col("min_end"))
-            .alias("min_end"),
-            pl.when((pl.col("max_end") < 0) | (pl.col("max_end") >= len(skeleton_seq)))
-            .then(pl.lit(len(skeleton_seq) - 1))
-            .otherwise(pl.col("max_end"))
-            .alias("max_end"),
+        # Combine all fragments into one list
+        fragments = StandardUnitFragments.from_fragment_classes(
+            start_fragments=start_fragments,
+            end_fragments=end_fragments,
+            internal_fragments=fragments.internal,
+            seq_len=len(skeleton_seq),
         )
 
         # Return skeleton and fragments
@@ -115,9 +100,27 @@ class SkeletonBuilder:
 
     def _predict_skeleton(
         self,
-        fragments: pl.DataFrame,
+        fragments: StandardUnitFragments,
         skeleton_seq: Optional[List[Set[str]]] = None,
-    ) -> Tuple[List[Set[str]], pl.DataFrame]:
+    ) -> Tuple[List[Set[str]], StandardUnitFragments]:
+        """
+        Predict directional skeleton from given fragments.
+
+        Parameters
+        ----------
+        fragments : StandardUnitFragments
+            SU-fragments to build skeleton.
+        skeleton_seq : List[Set[str]]
+            Skeleton sequence.
+
+        Returns
+        -------
+        List[Set[str]]
+            Directional skeleton sequence.
+        StandardUnitFragments
+            Terminal SU-fragments used for skeleton building.
+
+        """
         # Initialize skeleton sequence (if not already given)
         if skeleton_seq is None:
             skeleton_seq = [set() for _ in range(self.inferrer.seq.max_len)]
@@ -127,53 +130,28 @@ class SkeletonBuilder:
         # to keep track of similar masses and reject them in bulk.
 
         pos = {0}
-        last_valid_bin = None
 
         invalid_list = []
-        current_bin = [0]
-        for frag_idx in range(1, len(fragments)):
+        last_valid_bin = None
+        bins = fragments.bin(tolerance=self.inferrer.tolerance)
+        for bin_idx, current_bin in enumerate(bins):
             # Stop if no positions are left to fill
             if len(pos) == 0:
-                invalid_list.append(fragments.item(frag_idx, "index"))
+                invalid_list += current_bin.invalidate()
                 continue
 
-            # Define mass difference and threshold between neighboring fragments
-            neighbor_diff = fragments.item(
-                frag_idx, "standard_unit_mass"
-            ) - fragments.item(frag_idx - 1, "standard_unit_mass")
-            neighbor_threshold = calculate_error_threshold(
-                fragments.item(frag_idx - 1, "observed_mass"),
-                fragments.item(frag_idx, "observed_mass"),
-                self.inferrer.tolerance,
-            )
-
-            # Bin fragments with similar mass together
-            if neighbor_diff <= neighbor_threshold:
-                current_bin.append(frag_idx)
-
-                # Only process bin immediately if there are no unbinned fragments left
-                if frag_idx + 1 < len(fragments):
-                    continue
+            # TODO: This condition imitates bug found in previous code; remove it
+            if (bin_idx + 1 == len(bins)) & (len(current_bin) == 1):
+                continue
 
             compositions = self.infer_compositions_for_bin_differences(
                 prev_bin=last_valid_bin,
                 current_bin=current_bin,
-                fragments=fragments,
             )
 
             # Skip bins with no valid compositions
             if compositions is None:
-                for idx in current_bin:
-                    # Add a warning in the log for the skipped fragment
-                    logger.warning(
-                        f"Skipping {fragments.item(idx, 'fragmentation')} "
-                        f"fragment {fragments.item(idx, 'index')} with observed "
-                        f"mass {fragments.item(idx, 'observed_mass'):.4f} and "
-                        f"SU mass {fragments.item(idx, 'standard_unit_mass'):.4f}"
-                        f" because no valid compositions were found."
-                    )
-
-                    invalid_list.append(fragments.item(idx, "index"))
+                invalid_list += current_bin.invalidate()
             else:
                 # Continue skeleton building
                 pos, skeleton_seq = self.update_skeleton_for_given_compositions(
@@ -182,30 +160,46 @@ class SkeletonBuilder:
                     skeleton_seq=skeleton_seq,
                 )
 
-                # Adapt information on end index for given bin
-                for idx in current_bin:
-                    fragments[idx, "min_end"] = min(pos, default=1)
-                    fragments[idx, "max_end"] = max(pos, default=0)
+                # Update information on end index
+                current_bin.update_end_indices(pos=pos)
 
                 # Update information for previous bin
                 last_valid_bin = current_bin
 
-            # Update information for current bin
-            current_bin = [frag_idx]
-
-        # Filter out all invalid fragments
-        fragments = fragments.filter(~pl.col("index").is_in(invalid_list))
-
-        return skeleton_seq, fragments
+        return skeleton_seq, StandardUnitFragments.from_bins(
+            bins=bins, invalid_list=invalid_list
+        )
 
     def select_sequence_length_with_lp(
         self,
         start_skeleton: List[Set[str]],
         end_skeleton: List[Set[str]],
-        start_fragments: pl.DataFrame,
-        end_fragments: pl.DataFrame,
+        start_fragments: StandardUnitFragments,
+        end_fragments: StandardUnitFragments,
         solver_params: SolverParameters,
     ) -> int:
+        """
+        Select sequence length based on LP score.
+
+        Parameters
+        ----------
+        start_skeleton : List[Set[str]]
+            Skeleton in 5'-direction.
+        end_skeleton : List[Set[str]]
+            Skeleton in 3'-direction.
+        start_fragments : StandardUnitFragments
+            List of terminal fragments in 5'-direction.
+        end_fragments : StandardUnitFragments
+            List of terminal fragments in 3'-direction.
+        solver_params : SolverParameters
+            Solver parameter.
+
+        Returns
+        -------
+        int
+            Selected sequence length.
+
+        """
         # Reduce nucleotide alphabet based on skeleton parts
         nucleotides = {
             nuc
@@ -232,10 +226,16 @@ class SkeletonBuilder:
                 start_skeleton=start_skeleton,
                 end_skeleton=end_skeleton,
             )
+
+            fragments = StandardUnitFragments.from_terminals(
+                start_fragments=start_fragments,
+                end_fragments=end_fragments,
+                seq_len=len_cand,
+            )
+
             # Determine LP score for terminal-fragment alignment
             value = self.determine_lp_score(
-                start_fragments=start_fragments.clone(),
-                end_fragments=end_fragments.clone(),
+                terminal_fragments=fragments,
                 skeleton_seq=seq,
                 solver_params=solver_params,
             )
@@ -253,32 +253,31 @@ class SkeletonBuilder:
 
     def determine_lp_score(
         self,
-        start_fragments: pl.DataFrame,
-        end_fragments: pl.DataFrame,
+        terminal_fragments: StandardUnitFragments,
         skeleton_seq: list,
         solver_params: SolverParameters,
-    ) -> pl.DataFrame:
-        # Ensure fragments only occur once
-        end_fragments = end_fragments.filter(
-            ~pl.col("index").is_in(start_fragments.get_column("index").to_list())
-        )
+    ) -> float:
+        """
 
-        # Remove indexing of the next pos for START fragments
-        start_fragments = start_fragments.with_columns(
-            (pl.col("min_end") - 1).alias("min_end"),
-            (pl.col("max_end") - 1).alias("max_end"),
-        )
+        Parameters
+        ----------
+        terminal_fragments : StandardUnitFragments
+            Terminal SU-fragments.
+        skeleton_seq : list
+            Skeleton sequence.
+        solver_params : SolverParameters
+            Solver parameter.
 
-        # Remove reverse indexing for END fragments
-        end_fragments = end_fragments.with_columns(
-            (len(skeleton_seq) - pl.col("min_end")).alias("min_end"),
-            (len(skeleton_seq) - pl.col("max_end")).alias("max_end"),
-        )
+        Returns
+        -------
+        float
+            Score of linear program solution.
 
+        """
         # Initialize LP instance for terminal fragment
         try:
             lp_instance = LinearProgramInstance(
-                fragments=pl.concat([start_fragments, end_fragments]),
+                fragments=terminal_fragments.fragments,
                 inferrer=self.inferrer,
                 skeleton_seq=skeleton_seq,
             )
@@ -294,14 +293,32 @@ class SkeletonBuilder:
         end_skeleton: List[Set[str]],
         nuc_masses: dict,
     ) -> bool:
+        """
+        Validate sequence length by mass.
+
+        Parameters
+        ----------
+        start_skeleton : List[Set[str]]
+            Skeleton in 5'-direction.
+        end_skeleton : List[Set[str]]
+            Skeleton in 3'-direction.
+        nuc_masses : dict
+            Dictionary assigning masses to each representative in alphabet.
+
+        Returns
+        -------
+        bool
+            Flag whether sequence length is valid.
+
+        """
         min_mass = 0
         max_mass = 0
         for start_nucs, end_nucs in zip(start_skeleton, end_skeleton):
             min_mass += min(
-                [nuc_masses[nuc] for nuc in (start_nucs | end_nucs)], default=0
+                (nuc_masses[nuc] for nuc in (start_nucs | end_nucs)), default=0
             )
             max_mass += max(
-                [nuc_masses[nuc] for nuc in (start_nucs | end_nucs)], default=0
+                (nuc_masses[nuc] for nuc in (start_nucs | end_nucs)), default=0
             )
 
         # Check whether mass interval defined by skeleton contains sequence mass
@@ -315,6 +332,22 @@ class SkeletonBuilder:
     def select_sequence_length_with_jaccard(
         self, start_skeleton: List[Set[str]], end_skeleton: List[Set[str]]
     ) -> int:
+        """
+        Select sequence length based on Jaccard index.
+
+        Parameters
+        ----------
+        start_skeleton : List[Set[str]]
+            Skeleton in 5'-direction.
+        end_skeleton : List[Set[str]]
+            Skeleton in 3'-direction.
+
+        Returns
+        -------
+        int
+            Selected sequence length.
+
+        """
         # Reduce nucleotide alphabet based on skeleton parts
         nucleotides = {
             nuc
@@ -368,32 +401,49 @@ class SkeletonBuilder:
 
     def infer_compositions_for_bin_differences(
         self,
-        prev_bin: list,
-        current_bin: list,
-        fragments: pl.DataFrame,
+        prev_bin: StandardUnitFragments,
+        current_bin: StandardUnitFragments,
     ) -> List[Composition]:
+        """
+        Infer compositions between two bins.
+
+        Parameters
+        ----------
+        prev_bin : StandardUnitFragments
+            Previous SU-fragment bin.
+        current_bin : StandardUnitFragments
+            Current SU-fragment bin.
+
+        Returns
+        -------
+        List[Composition]
+            List of compositions.
+
+        """
+        current_bin = current_bin.fragments
         # Collect compositions for first bin
         if prev_bin is None:
             compositions = [
                 self.infer_compositions_for_mass_difference(
-                    diff=fragments.item(idx, "standard_unit_mass"),
+                    diff=row["standard_unit_mass"],
                     prev_mass=0.0,
-                    current_mass=fragments.item(idx, "observed_mass"),
+                    current_mass=row["observed_mass"],
                 )
-                for idx in current_bin
+                for row in current_bin.rows(named=True)
             ]
 
         # Collect compositions between previous and current bin
         else:
+            prev_bin = prev_bin.fragments
             compositions = [
                 self.infer_compositions_for_mass_difference(
-                    diff=fragments.item(current_idx, "standard_unit_mass")
-                    - fragments.item(prev_idx, "standard_unit_mass"),
-                    prev_mass=fragments.item(prev_idx, "observed_mass"),
-                    current_mass=fragments.item(current_idx, "observed_mass"),
+                    diff=current_row["standard_unit_mass"]
+                    - prev_row["standard_unit_mass"],
+                    prev_mass=prev_row["observed_mass"],
+                    current_mass=current_row["observed_mass"],
                 )
-                for prev_idx in prev_bin
-                for current_idx in current_bin
+                for prev_row in prev_bin.rows(named=True)
+                for current_row in current_bin.rows(named=True)
             ]
 
         # If no valid composition was found, return None
@@ -423,6 +473,24 @@ class SkeletonBuilder:
         prev_mass: float,
         current_mass: float,
     ) -> List[Composition]:
+        """
+        Infer compositions between two masses.
+
+        Parameters
+        ----------
+        diff : float
+            Difference between SU-masses.
+        prev_mass : float
+            Previous observed mass.
+        current_mass : float
+            Current observed mass.
+
+        Returns
+        -------
+        List[Composition]
+            List of compositions.
+
+        """
         if diff in self.compositions:
             return self.compositions.get(diff, [])
         threshold = calculate_error_threshold(
@@ -441,7 +509,27 @@ class SkeletonBuilder:
         compositions: List[Composition],
         pos: Set[int],
         skeleton_seq: List[Set[str]],
-    ):
+    ) -> Tuple[Set[int], List[Set[str]]]:
+        """
+        Update skeleton for given compositions.
+
+        Parameters
+        ----------
+        compositions : List[Composition]
+            List of compositions.
+        pos : Set[int]
+            Set of possible follow-up indices.
+        skeleton_seq : List[Set[str]]
+            Skeleton sequence.
+
+        Returns
+        -------
+        Set[int]
+            Updated set of follow-up indices.
+        List[Set[str]]
+            Updated skeleton sequence.
+
+        """
         next_pos = set()
         for p in pos:
             # Group compositions by length in dict
@@ -479,13 +567,29 @@ class SkeletonBuilder:
         return next_pos, skeleton_seq
 
 
-def jaccard_index(input: Tuple[Set[str], Set[str]]) -> float:
+def jaccard_index(input_tuple: Tuple[Set[str], Set[str]]) -> float:
+    """
+    Determine Jaccard index.
+
+    Parameters
+    ----------
+    input_tuple : Tuple[Set[str], Set[str]]
+        Tuple of candidates for nucleotides at any skeleton position.
+
+    Returns
+    -------
+    float
+        Jaccard index.
+
+    """
     # Return score for perfect similarity if one set is empty
-    if len(input[0]) == 0 or len(input[1]) == 0:
+    if len(input_tuple[0]) == 0 or len(input_tuple[1]) == 0:
         return 1
 
     # Return Jaccard score
-    return len(input[0].intersection(input[1])) / len(input[0].union(input[1]))
+    return len(input_tuple[0].intersection(input_tuple[1])) / len(
+        input_tuple[0].union(input_tuple[1])
+    )
 
 
 def combine_skeleton_sequences(
@@ -493,6 +597,24 @@ def combine_skeleton_sequences(
     start_skeleton: List[Set[str]],
     end_skeleton: List[Set[str]],
 ) -> List[Set[str]]:
+    """
+    Combine directional skeleton sequences into final one.
+
+    Parameters
+    ----------
+    seq_len : int
+        Sequence length.
+    start_skeleton : List[Set[str]]
+        Skeleton in 5'-direction.
+    end_skeleton : List[Set[str]]
+        Skeleton in 3'-direction.
+
+    Returns
+    -------
+    List[Set[str]]
+        Skeleton sequence.
+
+    """
     # Adapt directed skeleton parts to have correct length
     start_skeleton = start_skeleton[:seq_len]
     end_skeleton = end_skeleton[len(end_skeleton) - seq_len :]
