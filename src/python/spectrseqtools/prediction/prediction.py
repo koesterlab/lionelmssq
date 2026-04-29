@@ -1,7 +1,7 @@
-from typing import Set, Tuple
+# -*- coding: utf-8 -*-
+"""Prediction of sequence and fragments."""
 
-import polars as pl
-from loguru import logger
+from typing import Set, Tuple
 
 from spectrseqtools.dataclasses import Prediction, SolverParameters
 from spectrseqtools.fragments import StandardUnitFragments
@@ -11,6 +11,8 @@ from spectrseqtools.prediction.skeleton_building import SkeletonBuilder
 
 
 class Predictor:
+    """Class to predict sequence and fragment."""
+
     def __init__(
         self,
         inferrer: CompositionInferrer,
@@ -24,6 +26,22 @@ class Predictor:
         fragments: StandardUnitFragments,
         solver_params: SolverParameters,
     ) -> Prediction:
+        """
+        Predict sequence from fragments (with all modifications).
+
+        Parameters
+        ----------
+        fragments : StandardUnitFragments
+            SU-fragments for prediction.
+        solver_params : SolverParameters
+            Solver parameter.
+
+        Returns
+        -------
+        Prediction
+            Predicted sequence and fragments.
+
+        """
         fragments, compositions = self.filter_by_composition(fragments)
 
         skeleton_builder = SkeletonBuilder(
@@ -55,58 +73,32 @@ class Predictor:
         self.inferrer.print_alphabet()
         print()
 
-        fragments = fragments.fragments
-
         # Filter out all internal fragments that do not fit anywhere in skeleton
-        print(
-            "Number of internal fragments before filtering: ",
-            len(
-                fragments.filter(
-                    ~pl.col("fragmentation").str.contains("START")
-                    & ~pl.col("fragmentation").str.contains("END")
-                )
-            ),
-        )
+        print("Number of internal fragments before filter: ", len(fragments.internal))
 
         # TODO: Investigate LP initialization of highly modified sequences
         #  for being wrong-length predictions (min/max length issue?)
         try:
-            fragments = self.filter_with_linear_optimization(
-                fragments=fragments,
+            fragments.filter_with_linear_optimization(
+                inferrer=self.inferrer,
                 skeleton_seq=skeleton_seq,
                 solver_params=solver_params,
             )
         except ValueError:
             return Prediction.default()
 
-        print(
-            "Number of internal fragments after filtering: ",
-            len(
-                fragments.filter(
-                    ~pl.col("fragmentation").str.contains("START")
-                    & ~pl.col("fragmentation").str.contains("END")
-                )
-            ),
-        )
+        print("Number of internal fragments after filter: ", len(fragments.internal))
 
         print()
         print("Number of fragments considered for fitting:", len(fragments))
         print()
 
-        if len(fragments.filter(pl.col("fragmentation").str.contains("START"))) == 0:
-            logger.warning(
-                "No start fragments provided, this will likely lead to suboptimal results."
-            )
-
-        if len(fragments.filter(pl.col("fragmentation").str.contains("END"))) == 0:
-            logger.warning(
-                "No end fragments provided, this will likely lead to suboptimal results."
-            )
+        fragments.print_warning()
 
         # Remove ambiguities in skeleton by solving LP instance
         try:
             lp_instance = LinearProgramInstance(
-                fragments=fragments,
+                fragments=fragments.fragments,
                 inferrer=self.inferrer,
                 skeleton_seq=skeleton_seq,
             )
@@ -118,6 +110,22 @@ class Predictor:
     def filter_by_composition(
         self, fragments: StandardUnitFragments
     ) -> Tuple[StandardUnitFragments, dict]:
+        """
+        Filter nucleotide alphabet and fragments by composition validity.
+
+        Parameters
+        ----------
+        fragments : StandardUnitFragments
+            SU-fragments before reduction.
+
+        Returns
+        -------
+        StandardUnitFragments
+            SU-fragments before reduction.
+        dict
+            Dictionary of masses and their corresponding compositions.
+
+        """
         old_alphabet_size = -1
 
         singleton_compositions = fragments.collect_singleton_compositions(
@@ -165,6 +173,22 @@ class Predictor:
     def _reduce_alphabet(
         self, nucleotide_list: Set[str], fragments: StandardUnitFragments
     ) -> StandardUnitFragments:
+        """
+        Reduce nucleotide alphabet (and fragments) by list of valid nucleotides.
+
+        Parameters
+        ----------
+        nucleotide_list : Set[str]
+            List of valid nucleotides.
+        fragments : StandardUnitFragments
+            SU-fragments before reduction.
+
+        Returns
+        -------
+        fragments : StandardUnitFragments
+            SU-fragments after reduction.
+
+        """
         # Reduce nucleotide alphabet
         self.inferrer.adapt_individual_modification_rates_by_alphabet_reduction(
             nucleotide_list
@@ -174,35 +198,3 @@ class Predictor:
         fragments.filter_with_traceback_matrix(inferrer=self.inferrer)
 
         return fragments
-
-    def filter_with_linear_optimization(
-        self,
-        fragments: pl.DataFrame,
-        skeleton_seq: list,
-        solver_params: SolverParameters,
-    ) -> pl.DataFrame:
-        is_invalid = []
-        for idx in range(len(fragments)):
-            # TODO: Add terminal-fragment filter based on LP output of
-            #  sequence-length estimation and reuse the below (for speed-up)
-            # # Skip terminal (i.e. non-internal) fragments
-            # if ("START" in fragments.item(idx, "fragmentation")) or (
-            #     "END" in fragments.item(idx, "fragmentation")
-            # ):
-            #     continue
-
-            # Initialize LP instance for a singular fragment
-            filter_instance = LinearProgramInstance(
-                fragments=fragments[idx],
-                inferrer=self.inferrer,
-                skeleton_seq=skeleton_seq,
-            )
-
-            # Check whether fragment can feasibly be aligned to skeleton
-            if filter_instance.minimize_error(
-                solver_params=solver_params
-            ) > self.inferrer.tolerance * fragments.item(idx, "observed_mass"):
-                is_invalid.append(fragments.item(idx, "index"))
-
-        # Return only valid fragments
-        return fragments.filter(~pl.col("index").is_in(is_invalid))

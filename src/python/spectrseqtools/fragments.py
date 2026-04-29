@@ -17,59 +17,9 @@ from spectrseqtools.prediction.composition_inference import (
     CompositionInferrer,
     is_valid_mass,
 )
+from spectrseqtools.prediction.sequence_inference import LinearProgramInstance
 
 MAX_VARIANCE = 1
-
-
-@dataclass
-class PredictedFragments:
-    """Class for predicted fragments."""
-
-    fragments: pl.DataFrame
-
-    @classmethod
-    def from_file(cls, input_path: Path) -> Self:
-        """
-        Initialize predicted fragments from file.
-
-        Parameters
-        ----------
-        input_path : Path
-            Path to input file in TSV format.
-
-        """
-        return cls(fragments=pl.read_csv(input_path, separator="\t"))
-
-    @classmethod
-    def default(cls) -> Self:
-        """Return empty fragments dataframe."""
-        return cls(
-            fragments=pl.DataFrame(
-                schema={
-                    "left": pl.Int64,
-                    "right": pl.Int64,
-                    "observed_mass": pl.Float64,
-                    "standard_unit_mass": pl.Float64,
-                    "predicted_mass": pl.Float64,
-                    "predicted_diff": pl.Float64,
-                    "predicted_seq": pl.String,
-                    "orig_index": pl.UInt32,
-                    "intensity": pl.Float64,
-                }
-            ),
-        )
-
-    def save(self, output_path) -> None:
-        """
-        Save predicted fragments to file.
-
-        Parameters
-        ----------
-        output_path : Path
-            Path to output file in TSV format.
-
-        """
-        self.fragments.write_csv(output_path, separator="\t")
 
 
 @dataclass
@@ -475,6 +425,69 @@ class StandardUnitFragments:
                 end += 1
 
         return compositions
+
+    def print_warning(self) -> None:
+        """Print warning if no directional terminal fragments are present."""
+        if len(self.start) == 0:
+            logger.warning(
+                "No start fragments provided, this will likely lead to suboptimal results."
+            )
+
+        if len(self.end) == 0:
+            logger.warning(
+                "No end fragments provided, this will likely lead to suboptimal results."
+            )
+
+    def filter_by_index_list(self, invalid_indices: list) -> None:
+        """Filter out fragments whose index is in given list."""
+        self.fragments = self.fragments.filter(~pl.col("index").is_in(invalid_indices))
+
+    def filter_with_linear_optimization(
+        self,
+        inferrer: CompositionInferrer,
+        skeleton_seq: List[Set[str]],
+        solver_params,
+    ) -> None:
+        """
+        Filter out fragments that the LP cannot individually fit into sequence.
+
+        Parameters
+        ----------
+        inferrer : CompositionInferrer
+            Composition inferrer.
+        skeleton_seq : List[Set[str]]
+            Skeleton sequence.
+        solver_params : SolverParameters
+            Solver parameter.
+
+        """
+        is_invalid = []
+        for fragment in self.fragments.rows(named=True):
+            # TODO: Add terminal-fragment filter based on LP output of
+            #  sequence-length estimation and reuse the below (for speed-up)
+            # # Skip terminal (i.e. non-internal) fragments
+            # if (
+            #     "START" in fragment["fragmentation"]
+            #     or "END" in fragment["fragmentation"]
+            # ):
+            #     continue
+
+            # Initialize LP instance for a singular fragment
+            filter_instance = LinearProgramInstance(
+                fragments=pl.DataFrame(fragment),
+                inferrer=inferrer,
+                skeleton_seq=skeleton_seq,
+            )
+
+            # Check whether fragment can feasibly be aligned to skeleton
+            if (
+                filter_instance.minimize_error(solver_params=solver_params)
+                > inferrer.tolerance * fragment["observed_mass"]
+            ):
+                is_invalid.append(fragment["index"])
+
+        # Return only valid fragments
+        self.filter_by_index_list(invalid_indices=is_invalid)
 
 
 @dataclass
