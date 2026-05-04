@@ -3,8 +3,10 @@ from typing import List, Self, Set, Tuple
 
 import numpy as np
 
+from spectrseqtools.masses import MAX_VARIANCE
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 from spectrseqtools.prediction.traceback_matrix import TracebackMatrix
+from spectrseqtools.sequence import SkeletonSequence
 
 
 @dataclass
@@ -51,6 +53,31 @@ class SequenceInformation:
     su_mass: float
     obs_mass: float
     modification_rate: float
+
+    def validate_sequence(self, seq: SkeletonSequence, nuc_masses: dict) -> bool:
+        """
+        Validate sequence length by mass.
+
+        Parameters
+        ----------
+        seq : SkeletonSequence
+            Skeleton sequence.
+        nuc_masses : dict
+            Dictionary assigning masses to each representative in alphabet.
+
+        Returns
+        -------
+        bool
+            Flag whether sequence length is valid.
+
+        """
+        # Check whether mass interval defined by skeleton contains sequence mass
+        # Use MAX_VARIANCE to accommodate for uncertainty in sequence mass selection
+        return (
+            seq.min_mass(nuc_masses=nuc_masses) - MAX_VARIANCE
+            <= self.su_mass
+            <= seq.max_mass(nuc_masses=nuc_masses) + MAX_VARIANCE
+        )
 
 
 @dataclass

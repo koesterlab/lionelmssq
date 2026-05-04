@@ -13,6 +13,8 @@ DEFAULT_INTENSITY_CUTOFF = 115000
 # Set fragmentation dict modus (full vs only c/y)
 FULL_FRAGMENTATION_DICT = False
 
+# Maximum variance for intact mass
+MAX_VARIANCE = 1
 
 # Set number of binary-compressed masses per integer cell in traceback matrix
 COMPRESSION_RATE = 32

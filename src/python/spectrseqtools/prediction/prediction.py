@@ -61,9 +61,8 @@ class Predictor:
         print("Number of fragments before skeleton-based reduction:", len(fragments))
 
         # Reduce nucleotide alphabet based on skeleton
-        nucleotides = {nuc for skeleton_pos in skeleton_seq for nuc in skeleton_pos}
         fragments = self._reduce_alphabet(
-            nucleotide_list=nucleotides, fragments=fragments
+            nucleotide_list=skeleton_seq.nucleotides, fragments=fragments
         )
 
         print("Number of fragments after skeleton-based reduction:", len(fragments))

@@ -12,14 +12,13 @@ from spectrseqtools.common import (
     calculate_compositions,
     calculate_error_threshold,
 )
-from spectrseqtools.masses import PRECISION
+from spectrseqtools.masses import MAX_VARIANCE, PRECISION
 from spectrseqtools.prediction.composition_inference import (
     CompositionInferrer,
     is_valid_mass,
 )
 from spectrseqtools.prediction.sequence_inference import LinearProgramInstance
-
-MAX_VARIANCE = 1
+from spectrseqtools.sequence import SkeletonSequence
 
 
 @dataclass
@@ -186,7 +185,7 @@ class StandardUnitFragments:
             )
         )
 
-    def filter_by_intact_mass(self, intact_mass) -> None:
+    def filter_by_intact_mass(self, intact_mass: float) -> None:
         """
         Filter SU-fragments by intact mass.
 
@@ -214,7 +213,7 @@ class StandardUnitFragments:
             )
         )
 
-    def filter_with_traceback_matrix(self, inferrer) -> None:
+    def filter_with_traceback_matrix(self, inferrer: CompositionInferrer) -> None:
         """
         Filter out all fragments with no valid composition
 
@@ -445,7 +444,7 @@ class StandardUnitFragments:
     def filter_with_linear_optimization(
         self,
         inferrer: CompositionInferrer,
-        skeleton_seq: List[Set[str]],
+        skeleton_seq: SkeletonSequence,
         solver_params,
     ) -> None:
         """

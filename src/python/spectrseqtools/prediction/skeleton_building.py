@@ -2,7 +2,6 @@
 """Building of sequence skeletons."""
 
 from dataclasses import dataclass
-from itertools import chain, groupby
 from typing import List, Optional, Set, Tuple
 
 import numpy as np
@@ -13,12 +12,13 @@ from spectrseqtools.common import (
     calculate_error_threshold,
 )
 from spectrseqtools.dataclasses import SolverParameters
-from spectrseqtools.fragments import MAX_VARIANCE, StandardUnitFragments
+from spectrseqtools.fragments import StandardUnitFragments
 from spectrseqtools.prediction.composition_inference import (
     CompositionInferrer,
     compute_sequence_length_bound,
 )
 from spectrseqtools.prediction.sequence_inference import LinearProgramInstance
+from spectrseqtools.sequence import SkeletonSequence
 
 
 @dataclass
@@ -30,7 +30,7 @@ class SkeletonBuilder:
 
     def build_skeleton(
         self, fragments: StandardUnitFragments, solver_params: SolverParameters
-    ) -> Tuple[List[Set[str]], StandardUnitFragments]:
+    ) -> Tuple[SkeletonSequence, StandardUnitFragments]:
         """
         Build skeleton from given fragments.
 
@@ -43,7 +43,7 @@ class SkeletonBuilder:
 
         Returns
         -------
-        List[Set[str]]
+        SkeletonSequence
             Skeleton sequence.
         StandardUnitFragments
             SU-fragments after skeleton building.
@@ -52,16 +52,16 @@ class SkeletonBuilder:
         # Build skeleton sequence from 5'-end
         start_skeleton, start_fragments = self._predict_skeleton(
             fragments=fragments.start,
-            skeleton_seq=[set() for _ in range(self.inferrer.seq.max_len)],
+            skeleton_seq=SkeletonSequence.empty(seq_len=self.inferrer.seq.max_len),
         )
         print("Skeleton sequence (5'-end)\t= ", start_skeleton)
 
         # Build skeleton sequence from 3'-end and reverse it
         end_skeleton, end_fragments = self._predict_skeleton(
             fragments=fragments.end,
-            skeleton_seq=[set() for _ in range(self.inferrer.seq.max_len)],
+            skeleton_seq=SkeletonSequence.empty(seq_len=self.inferrer.seq.max_len),
         )
-        end_skeleton = end_skeleton[::-1]
+        end_skeleton = end_skeleton.reverse
         print("Skeleton sequence (3'-end)\t= ", end_skeleton)
 
         # Select best sequence length with LP
@@ -80,11 +80,7 @@ class SkeletonBuilder:
             )
 
         # Combine both skeleton sequences
-        skeleton_seq = combine_skeleton_sequences(
-            seq_len=seq_len,
-            start_skeleton=start_skeleton,
-            end_skeleton=end_skeleton,
-        )
+        skeleton_seq = start_skeleton.merge(other=end_skeleton, seq_len=seq_len)
         print("Skeleton sequence (combined)\t= ", skeleton_seq)
 
         # Combine all fragments into one list
@@ -101,8 +97,8 @@ class SkeletonBuilder:
     def _predict_skeleton(
         self,
         fragments: StandardUnitFragments,
-        skeleton_seq: Optional[List[Set[str]]] = None,
-    ) -> Tuple[List[Set[str]], StandardUnitFragments]:
+        skeleton_seq: Optional[SkeletonSequence] = None,
+    ) -> Tuple[SkeletonSequence, StandardUnitFragments]:
         """
         Predict directional skeleton from given fragments.
 
@@ -110,12 +106,12 @@ class SkeletonBuilder:
         ----------
         fragments : StandardUnitFragments
             SU-fragments to build skeleton.
-        skeleton_seq : List[Set[str]]
+        skeleton_seq : SkeletonSequence
             Skeleton sequence.
 
         Returns
         -------
-        List[Set[str]]
+        SkeletonSequence
             Directional skeleton sequence.
         StandardUnitFragments
             Terminal SU-fragments used for skeleton building.
@@ -123,7 +119,7 @@ class SkeletonBuilder:
         """
         # Initialize skeleton sequence (if not already given)
         if skeleton_seq is None:
-            skeleton_seq = [set() for _ in range(self.inferrer.seq.max_len)]
+            skeleton_seq = SkeletonSequence.empty(seq_len=self.inferrer.seq.max_len)
 
         # METHOD: Reject fragments which are not explained well by mass
         # differences. While iterating through the fragments, bin them
@@ -154,16 +150,12 @@ class SkeletonBuilder:
                 invalid_list += current_bin.invalidate()
             else:
                 # Continue skeleton building
-                pos, skeleton_seq = self.update_skeleton_for_given_compositions(
-                    compositions=compositions,
-                    pos=pos,
-                    skeleton_seq=skeleton_seq,
-                )
+                pos = skeleton_seq.update_with_compositions(compositions, pos)
 
                 # Update information on end index
                 current_bin.update_end_indices(pos=pos)
 
-                # Update information for previous bin
+                # Update information on last valid bin
                 last_valid_bin = current_bin
 
         return skeleton_seq, StandardUnitFragments.from_bins(
@@ -172,8 +164,8 @@ class SkeletonBuilder:
 
     def select_sequence_length_with_lp(
         self,
-        start_skeleton: List[Set[str]],
-        end_skeleton: List[Set[str]],
+        start_skeleton: SkeletonSequence,
+        end_skeleton: SkeletonSequence,
         start_fragments: StandardUnitFragments,
         end_fragments: StandardUnitFragments,
         solver_params: SolverParameters,
@@ -183,9 +175,9 @@ class SkeletonBuilder:
 
         Parameters
         ----------
-        start_skeleton : List[Set[str]]
+        start_skeleton : SkeletonSequence
             Skeleton in 5'-direction.
-        end_skeleton : List[Set[str]]
+        end_skeleton : SkeletonSequence
             Skeleton in 3'-direction.
         start_fragments : StandardUnitFragments
             List of terminal fragments in 5'-direction.
@@ -201,32 +193,29 @@ class SkeletonBuilder:
 
         """
         # Reduce nucleotide alphabet based on skeleton parts
-        nucleotides = {
-            nuc
-            for skeleton_pos in start_skeleton + end_skeleton
-            for nuc in skeleton_pos
-        }
         self.inferrer.adapt_individual_modification_rates_by_alphabet_reduction(
-            nucleotides
+            alphabet=start_skeleton.nucleotides.union(end_skeleton.nucleotides)
         )
-
-        # Initialize nucleotide mass dict
-        nucleotide_masses = self.inferrer.alphabet.to_dict()
-
-        # Determine lower and upper bound
-        min_len = compute_sequence_length_bound(inferrer=self.inferrer, dir="lower")
-        max_len = compute_sequence_length_bound(inferrer=self.inferrer, dir="upper")
 
         # Determine sequence length with the best LP score
         best_len = -1
         best_val = np.inf
-        for len_cand in range(min_len, max_len + 1):
-            seq = combine_skeleton_sequences(
-                seq_len=len_cand,
-                start_skeleton=start_skeleton,
-                end_skeleton=end_skeleton,
-            )
+        for len_cand in range(
+            compute_sequence_length_bound(inferrer=self.inferrer, dir="lower"),
+            compute_sequence_length_bound(inferrer=self.inferrer, dir="upper") + 1,
+        ):
+            # Skip candidates resulting in invalid sequences
+            # TODO: Use merged sequence for additional tightening of bounds
+            if not self.inferrer.seq.validate_sequence(
+                seq=start_skeleton.combine(other=end_skeleton, seq_len=len_cand),
+                nuc_masses=self.inferrer.alphabet.to_dict(),
+            ):
+                continue
 
+            # Merge directional skeletons
+            seq = start_skeleton.merge(other=end_skeleton, seq_len=len_cand)
+
+            # Combine directional terminal-fragment lists
             fragments = StandardUnitFragments.from_terminals(
                 start_fragments=start_fragments,
                 end_fragments=end_fragments,
@@ -241,11 +230,7 @@ class SkeletonBuilder:
             )
 
             # Update best found sequence length if needed
-            if value < best_val and self.validate_sequence_length_by_mass(
-                start_skeleton=start_skeleton[:len_cand],
-                end_skeleton=end_skeleton[len(end_skeleton) - len_cand :],
-                nuc_masses=nucleotide_masses,
-            ):
+            if value < best_val:
                 best_val = value
                 best_len = len_cand
 
@@ -254,7 +239,7 @@ class SkeletonBuilder:
     def determine_lp_score(
         self,
         terminal_fragments: StandardUnitFragments,
-        skeleton_seq: list,
+        skeleton_seq: SkeletonSequence,
         solver_params: SolverParameters,
     ) -> float:
         """
@@ -263,7 +248,7 @@ class SkeletonBuilder:
         ----------
         terminal_fragments : StandardUnitFragments
             Terminal SU-fragments.
-        skeleton_seq : list
+        skeleton_seq : SkeletonSequence
             Skeleton sequence.
         solver_params : SolverParameters
             Solver parameter.
@@ -287,59 +272,17 @@ class SkeletonBuilder:
         # Return minimum error when fragments can feasibly be aligned to skeleton
         return lp_instance.minimize_error(solver_params=solver_params)
 
-    def validate_sequence_length_by_mass(
-        self,
-        start_skeleton: List[Set[str]],
-        end_skeleton: List[Set[str]],
-        nuc_masses: dict,
-    ) -> bool:
-        """
-        Validate sequence length by mass.
-
-        Parameters
-        ----------
-        start_skeleton : List[Set[str]]
-            Skeleton in 5'-direction.
-        end_skeleton : List[Set[str]]
-            Skeleton in 3'-direction.
-        nuc_masses : dict
-            Dictionary assigning masses to each representative in alphabet.
-
-        Returns
-        -------
-        bool
-            Flag whether sequence length is valid.
-
-        """
-        min_mass = 0
-        max_mass = 0
-        for start_nucs, end_nucs in zip(start_skeleton, end_skeleton):
-            min_mass += min(
-                (nuc_masses[nuc] for nuc in (start_nucs | end_nucs)), default=0
-            )
-            max_mass += max(
-                (nuc_masses[nuc] for nuc in (start_nucs | end_nucs)), default=0
-            )
-
-        # Check whether mass interval defined by skeleton contains sequence mass
-        # Use MAX_VARIANCE to accommodate for uncertainty in sequence mass selection
-        return (
-            min_mass - MAX_VARIANCE
-            <= self.inferrer.seq.su_mass
-            <= max_mass + MAX_VARIANCE
-        )
-
     def select_sequence_length_with_jaccard(
-        self, start_skeleton: List[Set[str]], end_skeleton: List[Set[str]]
+        self, start_skeleton: SkeletonSequence, end_skeleton: SkeletonSequence
     ) -> int:
         """
         Select sequence length based on Jaccard index.
 
         Parameters
         ----------
-        start_skeleton : List[Set[str]]
+        start_skeleton : SkeletonSequence
             Skeleton in 5'-direction.
-        end_skeleton : List[Set[str]]
+        end_skeleton : SkeletonSequence
             Skeleton in 3'-direction.
 
         Returns
@@ -349,17 +292,9 @@ class SkeletonBuilder:
 
         """
         # Reduce nucleotide alphabet based on skeleton parts
-        nucleotides = {
-            nuc
-            for skeleton_pos in start_skeleton + end_skeleton
-            for nuc in skeleton_pos
-        }
         self.inferrer.adapt_individual_modification_rates_by_alphabet_reduction(
-            nucleotides
+            alphabet=start_skeleton.nucleotides.union(end_skeleton.nucleotides)
         )
-
-        # Initialize nucleotide mass dict
-        nucleoside_masses = self.inferrer.alphabet.to_dict()
 
         # Determine lower and upper bound
         min_len = compute_sequence_length_bound(inferrer=self.inferrer, dir="lower")
@@ -369,14 +304,21 @@ class SkeletonBuilder:
         best_len = min_len
         best_val = -1
         for len_cand in range(min_len, max_len + 1):
+            # Skip candidates resulting in invalid sequences
+            if not self.inferrer.seq.validate_sequence(
+                seq=start_skeleton.combine(other=end_skeleton, seq_len=len_cand),
+                nuc_masses=self.inferrer.alphabet.to_dict(),
+            ):
+                continue
+
             # Determine normalized sum of Jaccard similarity in each position
             value = (
                 sum(
                     map(
                         jaccard_index,
                         zip(
-                            start_skeleton[:len_cand],
-                            end_skeleton[len(end_skeleton) - len_cand :],
+                            start_skeleton.sequence[:len_cand],
+                            end_skeleton.sequence[len(end_skeleton) - len_cand :],
                         ),
                     )
                 )
@@ -384,11 +326,7 @@ class SkeletonBuilder:
             )
 
             # Update best found sequence length if needed
-            if value > best_val and self.validate_sequence_length_by_mass(
-                start_skeleton=start_skeleton[:len_cand],
-                end_skeleton=end_skeleton[len(end_skeleton) - len_cand :],
-                nuc_masses=nucleoside_masses,
-            ):
+            if value > best_val:
                 best_val = value
                 best_len = len_cand
 
@@ -504,68 +442,6 @@ class SkeletonBuilder:
             self.inferrer,
         )
 
-    def update_skeleton_for_given_compositions(
-        self,
-        compositions: List[Composition],
-        pos: Set[int],
-        skeleton_seq: List[Set[str]],
-    ) -> Tuple[Set[int], List[Set[str]]]:
-        """
-        Update skeleton for given compositions.
-
-        Parameters
-        ----------
-        compositions : List[Composition]
-            List of compositions.
-        pos : Set[int]
-            Set of possible follow-up indices.
-        skeleton_seq : List[Set[str]]
-            Skeleton sequence.
-
-        Returns
-        -------
-        Set[int]
-            Updated set of follow-up indices.
-        List[Set[str]]
-            Updated skeleton sequence.
-
-        """
-        next_pos = set()
-        for p in pos:
-            # Group compositions by length in dict
-            alphabet_per_len = {
-                comp_len: set(chain(*comps))
-                for comp_len, comps in groupby(
-                    [
-                        comp
-                        for comp in compositions
-                        if 0 <= p + len(comp) - 1 < self.inferrer.seq.max_len
-                    ],
-                    len,
-                )
-            }
-
-            # Constrain current sets in range of compositions by the new nucleotides
-            for comp_len, alphabet in alphabet_per_len.items():
-                for i in range(comp_len):
-                    possible_nucleotides = skeleton_seq[p + i]
-
-                    # Clear nucleotide set if the new composition sharpens it
-                    if possible_nucleotides.issuperset(alphabet):
-                        possible_nucleotides.clear()
-
-                    # Add all nucleotides in current composition to set
-                    for j in alphabet:
-                        possible_nucleotides.add(j)
-                        # TODO: We need to do this better.
-                        #  Instead of adding just the letters, we somehow
-                        #  need to keep a track of the possibilities to be
-                        #  able to constrain the LP!
-
-            # Update possible follow-up positions
-            next_pos.update(p + comp_len for comp_len in alphabet_per_len)
-        return next_pos, skeleton_seq
-
 
 def jaccard_index(input_tuple: Tuple[Set[str], Set[str]]) -> float:
     """
@@ -590,46 +466,3 @@ def jaccard_index(input_tuple: Tuple[Set[str], Set[str]]) -> float:
     return len(input_tuple[0].intersection(input_tuple[1])) / len(
         input_tuple[0].union(input_tuple[1])
     )
-
-
-def combine_skeleton_sequences(
-    seq_len: int,
-    start_skeleton: List[Set[str]],
-    end_skeleton: List[Set[str]],
-) -> List[Set[str]]:
-    """
-    Combine directional skeleton sequences into final one.
-
-    Parameters
-    ----------
-    seq_len : int
-        Sequence length.
-    start_skeleton : List[Set[str]]
-        Skeleton in 5'-direction.
-    end_skeleton : List[Set[str]]
-        Skeleton in 3'-direction.
-
-    Returns
-    -------
-    List[Set[str]]
-        Skeleton sequence.
-
-    """
-    # Adapt directed skeleton parts to have correct length
-    start_skeleton = start_skeleton[:seq_len]
-    end_skeleton = end_skeleton[len(end_skeleton) - seq_len :]
-
-    skeleton_seq = [set() for _ in range(seq_len)]
-    for i in range(seq_len):
-        # Preferentially consider nucleotides where start and end agree
-        skeleton_seq[i] = start_skeleton[i].intersection(end_skeleton[i])
-
-        # If the intersection is empty, use the union instead
-        if not skeleton_seq[i]:
-            skeleton_seq[i] = start_skeleton[i].union(end_skeleton[i])
-
-    # TODO: Its more complicated, since if two positions are ambiguous,
-    #  they are not independent. If one nucleotide is selected this way,
-    #  then the same nucleotide cannot be selected in the other position!
-
-    return skeleton_seq
