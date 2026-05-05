@@ -21,7 +21,7 @@ class Composition:
         return len(self.nucleosides)
 
     def __repr__(self):
-        return f"{{{','.join(self.nucleosides)}}}"
+        return f"{{{','.join(str(nuc) for nuc in self.nucleosides)}}}"
 
     def __eq__(self, other):
         return self.nucleosides == other

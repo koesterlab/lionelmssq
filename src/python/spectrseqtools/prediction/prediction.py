@@ -61,9 +61,10 @@ class Predictor:
         print("Number of fragments before skeleton-based reduction:", len(fragments))
 
         # Reduce nucleotide alphabet based on skeleton
-        fragments = self._reduce_alphabet(
+        fragments, mapping = self._reduce_alphabet(
             nucleotide_list=skeleton_seq.nucleotides, fragments=fragments
         )
+        skeleton_seq.update_indexing(mapping=mapping)
 
         print("Number of fragments after skeleton-based reduction:", len(fragments))
         print()
@@ -130,8 +131,8 @@ class Predictor:
         singleton_compositions = fragments.collect_singleton_compositions(
             inferrer=self.inferrer
         )
-        while old_alphabet_size != self.inferrer.alphabet.size:
-            old_alphabet_size = self.inferrer.alphabet.size
+        while old_alphabet_size != len(self.inferrer.alphabet):
+            old_alphabet_size = len(self.inferrer.alphabet)
 
             # Roughly infer compositions for mass differences (to reduce the alphabet)
             # Note there may be faulty mass fragments leading to not truly existent values
@@ -157,7 +158,7 @@ class Predictor:
             observed_nucleotides = {
                 nuc for comp in compositions.values() for nuc in comp.nucleotides
             }
-            fragments = self._reduce_alphabet(observed_nucleotides, fragments)
+            fragments, _ = self._reduce_alphabet(observed_nucleotides, fragments)
 
         print("Alphabet after composition-based reduction:")
         self.inferrer.print_alphabet()
@@ -167,7 +168,7 @@ class Predictor:
 
     def _reduce_alphabet(
         self, nucleotide_list: Set[str], fragments: StandardUnitFragments
-    ) -> StandardUnitFragments:
+    ) -> Tuple[StandardUnitFragments, dict]:
         """
         Reduce nucleotide alphabet (and fragments) by list of valid nucleotides.
 
@@ -182,14 +183,18 @@ class Predictor:
         -------
         fragments : StandardUnitFragments
             SU-fragments after reduction.
+        mapping : dict
+            Mapping between old and new indexing.
 
         """
         # Reduce nucleotide alphabet
-        self.inferrer.adapt_individual_modification_rates_by_alphabet_reduction(
-            nucleotide_list
+        mapping = (
+            self.inferrer.adapt_individual_modification_rates_by_alphabet_reduction(
+                nucleotide_list
+            )
         )
 
         # Filter out all fragments with no valid composition
         fragments.filter_with_traceback_matrix(inferrer=self.inferrer)
 
-        return fragments
+        return fragments, mapping

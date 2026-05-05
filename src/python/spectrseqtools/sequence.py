@@ -6,13 +6,14 @@ from itertools import chain
 from typing import List, Self, Set
 
 from spectrseqtools.compositions import CompositionList
+from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 
 
 @dataclass
 class SkeletonSequence:
     """Class for skeleton sequence."""
 
-    sequence: List[Set[str]]
+    sequence: List[Set[int]]
 
     def __iter__(self):
         return self.sequence.__iter__()
@@ -38,18 +39,22 @@ class SkeletonSequence:
         """Return set of nucleotides found at any position in skeleton sequence."""
         return set(chain(*self.sequence))
 
-    def min_mass(self, nuc_masses: dict) -> float:
+    def update_indexing(self, mapping: dict) -> None:
+        """Update indexing of nucleotides in sequence."""
+        self.sequence = [{mapping[nuc] for nuc in seq_pos} for seq_pos in self.sequence]
+
+    def min_mass(self, alphabet: NucleotideAlphabet) -> float:
         """Return minimum mass a sequence from the skeleton could possibly have."""
         total_mass = 0
         for nucs in self.sequence:
-            total_mass += min((nuc_masses[nuc] for nuc in nucs), default=0)
+            total_mass += min((alphabet.get_nuc_mass(nuc) for nuc in nucs), default=0)
         return total_mass
 
-    def max_mass(self, nuc_masses: dict) -> float:
-        """Return maximum mass a sequence from the skeleton could possibly have."""
+    def max_mass(self, alphabet: NucleotideAlphabet) -> float:
+        """Return minimum mass a sequence from the skeleton could possibly have."""
         total_mass = 0
         for nucs in self.sequence:
-            total_mass += max((nuc_masses[nuc] for nuc in nucs), default=0)
+            total_mass += max((alphabet.get_nuc_mass(nuc) for nuc in nucs), default=0)
         return total_mass
 
     def update_with_compositions(

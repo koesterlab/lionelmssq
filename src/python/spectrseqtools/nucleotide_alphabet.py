@@ -203,8 +203,7 @@ class NucleotideAlphabet:
         ]
         return cls(alphabet=new_nucs, precision=precision)
 
-    @property
-    def size(self) -> int:
+    def __len__(self) -> int:
         """Return alphabet size."""
         return len(self.alphabet)
 
@@ -220,7 +219,7 @@ class NucleotideAlphabet:
 
     @property
     def min_mz(self) -> float:
-        """Return lowest sigleton m/z in alphabet."""
+        """Return lowest singleton m/z in alphabet."""
         return min(mass.singleton_mz for mass in self.alphabet[1:])
 
     @property
@@ -236,6 +235,10 @@ class NucleotideAlphabet:
     def get_mass(self, idx: int) -> int:
         """Return mass at index in alphabet."""
         return self.alphabet[idx].mass
+
+    def get_nuc_mass(self, idx: int) -> float:
+        """Return nucleotide mass at index in alphabet."""
+        return self.alphabet[idx].mass * self.precision
 
     def get_rep(self, idx: int) -> str:
         """Return representative nucleotide at index in alphabet."""
@@ -256,17 +259,12 @@ class NucleotideAlphabet:
                 return nuc.fmt()
         return ""
 
-    def names(self) -> List[str]:
-        """Return list of all nucleotide names in alphabet."""
-        return list(name for mass in self.alphabet for name in mass.names)
-
-    def reps(self) -> List[str]:
-        """Return list of all representative names in alphabet."""
-        return list(mass.names[0] for mass in self.alphabet[1:])
-
-    def to_dict(self) -> dict:
-        """Return dictionary assigning masses to each representative."""
-        return {mass.names[0]: mass.mass * self.precision for mass in self.alphabet[1:]}
+    def get_idx(self, rep: str) -> int:
+        """Return nucleotide index by representative in alphabet."""
+        for idx, nuc in enumerate(self.alphabet[1:]):
+            if rep == nuc.names[0]:
+                return idx + 1
+        return -1
 
     def set_threshold(self, value: float) -> int:
         """Return precision-adapted inference threshold."""
@@ -299,14 +297,13 @@ class NucleotideAlphabet:
 
         # Select nucleotide names for all singletons
         singleton_names = set(singletons.get_column("id").to_list())
-        print(singleton_names)
 
         # Select only bases found in singletons
         for nuc in self.alphabet:
             if len(set(nuc.names) & singleton_names) == 0 and nuc.is_modification:
                 nuc.modification_rate = 0.0
 
-    def adapt_individual_modification_rates_by_alphabet(self, alphabet: List) -> None:
+    def adapt_individual_modification_rates_by_alphabet(self, alphabet: List) -> dict:
         """
         Set individual modification rate to 0 if nucleotide not in new alphabet.
 
@@ -315,12 +312,22 @@ class NucleotideAlphabet:
         alphabet : List
             List of nucleotide names in new alphabet.
 
+        Returns
+        -------
+        dict
+            Mapping between old and new indexing.
+
         """
-        for nucleotide_mass in self.alphabet:
-            if not nucleotide_mass.is_modification:
-                continue
-            if all(name not in alphabet for name in nucleotide_mass.names):
+        mapping = {idx: idx for idx in range(1, len(self))}
+        for idx, nucleotide_mass in enumerate(self.alphabet):
+            if nucleotide_mass.is_modification and idx not in alphabet:
+                mapping = {
+                    key: value - 1 if idx < key else value
+                    for (key, value) in (mapping.items())
+                    if key != idx
+                }
                 nucleotide_mass.modification_rate = 0.0
+        return mapping
 
     def get_seq_weight(self, seq: tuple) -> float:
         """

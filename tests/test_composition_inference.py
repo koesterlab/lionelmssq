@@ -50,7 +50,7 @@ def test_infer_composition_with_recursion(seq, tolerance):
     )
 
     assert len(compositions) != 0
-    assert Composition(*seq) in compositions
+    assert Composition(*tuple(alphabet.get_idx(nuc) for nuc in seq)) in compositions
 
 
 @pytest.mark.parametrize("seq", TEST_SEQ)
@@ -83,4 +83,4 @@ def test_infer_composition_with_matrix(seq, compression, tolerance, memo):
     )
 
     assert len(compositions) != 0
-    assert Composition(*seq) in compositions
+    assert Composition(*tuple(alphabet.get_idx(nuc) for nuc in seq)) in compositions

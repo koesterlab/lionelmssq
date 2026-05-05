@@ -52,7 +52,6 @@ class SkeletonBuilder:
             fragments=fragments.start,
             skeleton_seq=SkeletonSequence.empty(seq_len=self.inferrer.seq.max_len),
         )
-        print("Skeleton sequence (5'-end)\t= ", start_skeleton)
 
         # Build skeleton sequence from 3'-end and reverse it
         end_skeleton, end_fragments = self._predict_skeleton(
@@ -60,6 +59,17 @@ class SkeletonBuilder:
             skeleton_seq=SkeletonSequence.empty(seq_len=self.inferrer.seq.max_len),
         )
         end_skeleton = end_skeleton.reverse
+
+        # Reduce nucleotide alphabet based on skeleton parts
+        mapping = (
+            self.inferrer.adapt_individual_modification_rates_by_alphabet_reduction(
+                alphabet=start_skeleton.nucleotides.union(end_skeleton.nucleotides)
+            )
+        )
+        start_skeleton.update_indexing(mapping=mapping)
+        end_skeleton.update_indexing(mapping=mapping)
+
+        print("Skeleton sequence (5'-end)\t= ", start_skeleton)
         print("Skeleton sequence (3'-end)\t= ", end_skeleton)
 
         # Select best sequence length with LP
@@ -190,11 +200,6 @@ class SkeletonBuilder:
             Selected sequence length.
 
         """
-        # Reduce nucleotide alphabet based on skeleton parts
-        self.inferrer.adapt_individual_modification_rates_by_alphabet_reduction(
-            alphabet=start_skeleton.nucleotides.union(end_skeleton.nucleotides)
-        )
-
         # Determine sequence length with the best LP score
         best_len = -1
         best_val = np.inf
@@ -206,7 +211,7 @@ class SkeletonBuilder:
             # TODO: Use merged sequence for additional tightening of bounds
             if not self.inferrer.seq.validate_sequence(
                 seq=start_skeleton.combine(other=end_skeleton, seq_len=len_cand),
-                nuc_masses=self.inferrer.alphabet.to_dict(),
+                alphabet=self.inferrer.alphabet,
             ):
                 continue
 
@@ -289,11 +294,6 @@ class SkeletonBuilder:
             Selected sequence length.
 
         """
-        # Reduce nucleotide alphabet based on skeleton parts
-        self.inferrer.adapt_individual_modification_rates_by_alphabet_reduction(
-            alphabet=start_skeleton.nucleotides.union(end_skeleton.nucleotides)
-        )
-
         # Determine lower and upper bound
         min_len = compute_sequence_length_bound(inferrer=self.inferrer, dir="lower")
         max_len = compute_sequence_length_bound(inferrer=self.inferrer, dir="upper")
@@ -305,7 +305,7 @@ class SkeletonBuilder:
             # Skip candidates resulting in invalid sequences
             if not self.inferrer.seq.validate_sequence(
                 seq=start_skeleton.combine(other=end_skeleton, seq_len=len_cand),
-                nuc_masses=self.inferrer.alphabet.to_dict(),
+                alphabet=self.inferrer.alphabet,
             ):
                 continue
 

@@ -17,7 +17,9 @@ class SequenceInformation:
     obs_mass: float
     modification_rate: float
 
-    def validate_sequence(self, seq: SkeletonSequence, nuc_masses: dict) -> bool:
+    def validate_sequence(
+        self, seq: SkeletonSequence, alphabet: NucleotideAlphabet
+    ) -> bool:
         """
         Validate sequence length by mass.
 
@@ -25,8 +27,8 @@ class SequenceInformation:
         ----------
         seq : SkeletonSequence
             Skeleton sequence.
-        nuc_masses : dict
-            Dictionary assigning masses to each representative in alphabet.
+        alphabet : NucleotideAlphabet
+            Nucleotide alphabet.
 
         Returns
         -------
@@ -37,9 +39,9 @@ class SequenceInformation:
         # Check whether mass interval defined by skeleton contains sequence mass
         # Use MAX_VARIANCE to accommodate for uncertainty in sequence mass selection
         return (
-            seq.min_mass(nuc_masses=nuc_masses) - MAX_VARIANCE
+            seq.min_mass(alphabet=alphabet) - MAX_VARIANCE
             <= self.su_mass
-            <= seq.max_mass(nuc_masses=nuc_masses) + MAX_VARIANCE
+            <= seq.max_mass(alphabet=alphabet) + MAX_VARIANCE
         )
 
 
@@ -71,18 +73,21 @@ class CompositionInferrer:
             )
 
     def adapt_individual_modification_rates_by_alphabet_reduction(self, alphabet):
-        self.alphabet.adapt_individual_modification_rates_by_alphabet(alphabet=alphabet)
+        mapping = self.alphabet.adapt_individual_modification_rates_by_alphabet(
+            alphabet=alphabet
+        )
         self._reduce_nucleotide_alphabet()
+        return mapping
 
     def _reduce_nucleotide_alphabet(self, compression_rate: int = None):
         # Get current alphabet size
-        alphabet_size = self.alphabet.size
+        alphabet_size = len(self.alphabet)
 
         # Reduce nucleotide alphabet (if possible)
         self.alphabet.reduce()
 
         # Return if alphabet was not reduced
-        if self.alphabet.size == alphabet_size:
+        if len(self.alphabet) == alphabet_size:
             return
 
         if self.matrix is not None:
@@ -219,7 +224,7 @@ def compute_sequence_length_bound(inferrer: CompositionInferrer, dir: str) -> in
         solutions.append(
             backtrack(
                 value,
-                inferrer.alphabet.size - 1,
+                len(inferrer.alphabet) - 1,
                 max_modifications,
                 round(inferrer.seq.max_len * inferrer.alphabet.get_rate(-1)),
             )
@@ -354,12 +359,12 @@ def infer_compositions_with_matrix(
     for value in range(target - threshold, target + threshold + 1):
         solutions += backtrack(
             value,
-            inferrer.alphabet.size - 1,
+            len(inferrer.alphabet) - 1,
             max_modifications,
             round(inferrer.seq.max_len * inferrer.alphabet.get_rate(-1)),
         )
 
-    return CompositionList.from_indices(solutions=solutions, alphabet=inferrer.alphabet)
+    return CompositionList.from_list(compositions=list(solutions))
 
 
 def infer_compositions_with_recursion(
@@ -399,7 +404,7 @@ def infer_compositions_with_recursion(
         compositions = []
 
         # Try each mass starting from the current position to avoid duplicates
-        for idx in range(current_idx, inferrer.alphabet.size):
+        for idx in range(current_idx, len(inferrer.alphabet)):
             current_mass = inferrer.alphabet.get_mass(idx=idx)
             is_mod = inferrer.alphabet.is_mod(idx=idx)
 
@@ -424,4 +429,4 @@ def infer_compositions_with_recursion(
     # Compute all solutions for the full target and all allowed masses (except 0.0)
     solutions = backtrack(target, 1, 0, 0)
 
-    return CompositionList.from_indices(solutions=solutions, alphabet=inferrer.alphabet)
+    return CompositionList.from_list(compositions=list(solutions))

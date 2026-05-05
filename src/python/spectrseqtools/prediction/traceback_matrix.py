@@ -76,11 +76,11 @@ class TracebackMatrix:
         max_mass = alphabet.max_integer * MAX_SEQ_LENGTH
 
         # Initialize matrix as numpy table
-        matrix = np.zeros((alphabet.size, max_mass + 1), dtype=np.uint8)
+        matrix = np.zeros((len(alphabet), max_mass + 1), dtype=np.uint8)
         matrix[0, 0] = 3.0
 
         # Fill traceback matrix row-wise
-        for i in range(1, alphabet.size):
+        for i in range(1, len(alphabet)):
             # Case: Start new row (i.e. move on to new nucleoside) by initializing
             # reachable cells from before
             matrix[i] = [int(val != 0.0) for val in matrix[i - 1]]
@@ -119,11 +119,11 @@ class TracebackMatrix:
 
         # Initialize bit-representation matrix as numpy table
         max_col = int(np.ceil((max_mass + 1) / compression_rate))
-        matrix = np.zeros((alphabet.size, max_col), dtype=settings["type"])
+        matrix = np.zeros((len(alphabet), max_col), dtype=settings["type"])
         matrix[0, 0] = settings["init"]
 
         # Fill traceback matrix row-wise
-        for i in range(1, alphabet.size):
+        for i in range(1, len(alphabet)):
             # Case: Start new row (i.e. move on to new nucleotide)
             # by initializing reachable cells from before
             matrix[i] = [
