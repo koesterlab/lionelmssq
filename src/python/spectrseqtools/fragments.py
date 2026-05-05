@@ -8,13 +8,11 @@ from typing import List, Self, Set
 import polars as pl
 from loguru import logger
 
-from spectrseqtools.common import (
-    calculate_compositions,
-    calculate_error_threshold,
-)
+from spectrseqtools.common import calculate_error_threshold
 from spectrseqtools.masses import MAX_VARIANCE, PRECISION
 from spectrseqtools.prediction.composition_inference import (
     CompositionInferrer,
+    infer_compositions_with_matrix,
     is_valid_mass,
 )
 from spectrseqtools.prediction.sequence_inference import LinearProgramInstance
@@ -284,10 +282,13 @@ class StandardUnitFragments:
         compositions = {}
         for frag in fragments.rows(named=True):
             # Compute mass compositions
-            comps = calculate_compositions(
-                diff=frag["standard_unit_mass"],
-                threshold=inferrer.tolerance * frag["observed_mass"],
+            comps = infer_compositions_with_matrix(
+                mass=frag["standard_unit_mass"],
                 inferrer=inferrer,
+                max_modifications=round(
+                    inferrer.seq.modification_rate * inferrer.seq.max_len
+                ),
+                threshold=inferrer.tolerance * frag["observed_mass"],
             )
 
             # Ensure mass corresponds to true singleton
@@ -411,10 +412,13 @@ class StandardUnitFragments:
                 observed_masses[end],
                 inferrer.tolerance,
             )
-            comp = calculate_compositions(
-                diff=diff,
-                threshold=diff_error,
+            comp = infer_compositions_with_matrix(
+                mass=diff,
                 inferrer=inferrer,
+                max_modifications=round(
+                    inferrer.seq.modification_rate * inferrer.seq.max_len
+                ),
+                threshold=diff_error,
             )
             if len(comp) > 0:
                 compositions[diff] = comp

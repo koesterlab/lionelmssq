@@ -1,4 +1,5 @@
 import pytest
+from spectrseqtools.compositions import Composition
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 from spectrseqtools.prediction.composition_inference import (
     CompositionInferrer,
@@ -42,17 +43,14 @@ def test_infer_composition_with_recursion(seq, tolerance):
         seq=seq_info,
     )
 
-    predicted_compositions = infer_compositions_with_recursion(
+    compositions = infer_compositions_with_recursion(
         seq_weight,
         inferrer=inferrer,
         max_modifications=round(MOD_RATE * len(seq)),
-    ).compositions
+    )
 
-    assert predicted_compositions is not None
-
-    compositions = [tuple(comp) for comp in predicted_compositions]
-
-    assert tuple(seq) in compositions
+    assert len(compositions) != 0
+    assert Composition(*seq) in compositions
 
 
 @pytest.mark.parametrize("seq", TEST_SEQ)
@@ -77,15 +75,12 @@ def test_infer_composition_with_matrix(seq, compression, tolerance, memo):
         seq=seq_info,
     )
 
-    predicted_compositions = infer_compositions_with_matrix(
+    compositions = infer_compositions_with_matrix(
         seq_weight,
         inferrer=inferrer,
         max_modifications=round(MOD_RATE * len(seq)),
         with_memo=memo,
-    ).compositions
+    )
 
-    assert predicted_compositions is not None
-
-    compositions = [tuple(comp) for comp in predicted_compositions]
-
-    assert tuple(seq) in compositions
+    assert len(compositions) != 0
+    assert Composition(*seq) in compositions

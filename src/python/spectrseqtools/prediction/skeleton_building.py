@@ -6,16 +6,14 @@ from typing import Optional, Set, Tuple
 
 import numpy as np
 
-from spectrseqtools.common import (
-    calculate_compositions,
-    calculate_error_threshold,
-)
+from spectrseqtools.common import calculate_error_threshold
 from spectrseqtools.compositions import CompositionList
 from spectrseqtools.dataclasses import SolverParameters
 from spectrseqtools.fragments import StandardUnitFragments
 from spectrseqtools.prediction.composition_inference import (
     CompositionInferrer,
     compute_sequence_length_bound,
+    infer_compositions_with_matrix,
 )
 from spectrseqtools.prediction.sequence_inference import LinearProgramInstance
 from spectrseqtools.sequence import SkeletonSequence
@@ -362,21 +360,21 @@ class SkeletonBuilder:
         current_bin = current_bin.fragments
         if prev_bin is None:
             return sum(
-                [
+                (
                     self.infer_compositions_for_mass_difference(
                         diff=row["standard_unit_mass"],
                         prev_mass=0.0,
                         current_mass=row["observed_mass"],
                     )
                     for row in current_bin.rows(named=True)
-                ],
+                ),
                 start=CompositionList(),
             )
 
         # Collect compositions between previous and current bin
         prev_bin = prev_bin.fragments
         return sum(
-            [
+            (
                 self.infer_compositions_for_mass_difference(
                     diff=current_row["standard_unit_mass"]
                     - prev_row["standard_unit_mass"],
@@ -385,7 +383,7 @@ class SkeletonBuilder:
                 )
                 for prev_row in prev_bin.rows(named=True)
                 for current_row in current_bin.rows(named=True)
-            ],
+            ),
             start=CompositionList(),
         )
 
@@ -421,10 +419,13 @@ class SkeletonBuilder:
             current_mass,
             self.inferrer.tolerance,
         )
-        return calculate_compositions(
-            diff,
-            threshold,
-            self.inferrer,
+        return infer_compositions_with_matrix(
+            mass=diff,
+            inferrer=self.inferrer,
+            max_modifications=round(
+                self.inferrer.seq.modification_rate * self.inferrer.seq.max_len
+            ),
+            threshold=threshold,
         )
 
 

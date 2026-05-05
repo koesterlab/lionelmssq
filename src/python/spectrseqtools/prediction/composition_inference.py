@@ -1,50 +1,13 @@
 from dataclasses import dataclass
-from typing import List, Self, Set, Tuple
+from typing import Tuple
 
 import numpy as np
 
+from spectrseqtools.compositions import CompositionList
 from spectrseqtools.masses import MAX_VARIANCE
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 from spectrseqtools.prediction.traceback_matrix import TracebackMatrix
 from spectrseqtools.sequence import SkeletonSequence
-
-
-@dataclass
-class MassCompositions:
-    """Class for set of compositions to explain a given mass."""
-
-    compositions: Set[Tuple[str]] = None
-
-    @classmethod
-    def from_indices(
-        cls, solutions: List[List[int]], alphabet: NucleotideAlphabet
-    ) -> Self:
-        """
-        Initialize composition list from index lists.
-
-        Parameters
-        ----------
-        solutions : List[List[int]]
-            List of nucleotide index lists (representing compositions).
-        alphabet : NucleotideAlphabet
-            Alphabet of considered nucleotides.
-
-        """
-        # Return default if no composition is found
-        if len(solutions) == 0:
-            return MassCompositions()
-
-        # Store the representative tuples for the given indices in a set
-        solution_names = set()
-
-        # Convert the masses to their respective representative
-        for solution in solutions:
-            if len(solution) == 0:
-                continue
-            solution_names.update([(alphabet.get_rep(entry) for entry in solution)])
-
-        # Return composition set
-        return cls(solution_names)
 
 
 @dataclass
@@ -312,7 +275,7 @@ def infer_compositions_with_matrix(
     max_modifications=np.inf,
     threshold=None,
     with_memo=True,
-) -> MassCompositions:
+) -> CompositionList:
     """
     Return all possible nucleotide compositions that could sum up to the given mass.
     """
@@ -396,9 +359,7 @@ def infer_compositions_with_matrix(
             round(inferrer.seq.max_len * inferrer.alphabet.get_rate(-1)),
         )
 
-    return MassCompositions.from_indices(
-        solutions=solutions, alphabet=inferrer.alphabet
-    )
+    return CompositionList.from_indices(solutions=solutions, alphabet=inferrer.alphabet)
 
 
 def infer_compositions_with_recursion(
@@ -406,7 +367,7 @@ def infer_compositions_with_recursion(
     inferrer: CompositionInferrer,
     max_modifications=np.inf,
     threshold=None,
-) -> MassCompositions:
+) -> CompositionList:
     """
     Returns all possible nucleotide compositions that could sum up to the given mass.
     """
@@ -463,6 +424,4 @@ def infer_compositions_with_recursion(
     # Compute all solutions for the full target and all allowed masses (except 0.0)
     solutions = backtrack(target, 1, 0, 0)
 
-    return MassCompositions.from_indices(
-        solutions=solutions, alphabet=inferrer.alphabet
-    )
+    return CompositionList.from_indices(solutions=solutions, alphabet=inferrer.alphabet)

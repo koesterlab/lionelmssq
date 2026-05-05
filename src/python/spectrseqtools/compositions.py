@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from itertools import chain, groupby
 from typing import Any, List, Self, Set, Tuple
 
+from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
+
 
 class Composition:
     """Class for compositions."""
@@ -31,6 +33,9 @@ class CompositionList:
 
     compositions: List[Composition] = field(default_factory=list)
 
+    def __iter__(self):
+        return self.compositions.__iter__()
+
     def __len__(self) -> int:
         return len(self.compositions)
 
@@ -45,7 +50,38 @@ class CompositionList:
         )
 
     @classmethod
-    def from_list(cls, compositions: List[Tuple[str]]) -> Self:
+    def from_indices(
+        cls, solutions: List[List[int]], alphabet: NucleotideAlphabet
+    ) -> Self:
+        """
+        Initialize composition list from index lists.
+
+        Parameters
+        ----------
+        solutions : List[List[int]]
+            List of nucleotide index lists (representing compositions).
+        alphabet : NucleotideAlphabet
+            Alphabet of considered nucleotides.
+
+        """
+        # Return default if no composition is found
+        if len(solutions) == 0:
+            return cls()
+
+        # Store the representative tuples for the given indices in a set
+        solution_names = set()
+
+        # Convert the masses to their respective representative
+        for solution in solutions:
+            if len(solution) == 0:
+                continue
+            solution_names.update([(alphabet.get_rep(entry) for entry in solution)])
+
+        # Return composition set
+        return cls.from_list(solution_names)
+
+    @classmethod
+    def from_list(cls, compositions: Set[Tuple[str]]) -> Self:
         """Initialize composition list from list of unsorted values."""
         return cls(compositions=[Composition(*comp) for comp in list(compositions)])
 
