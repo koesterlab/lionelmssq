@@ -1,6 +1,7 @@
 from pathlib import Path
-from typing import List, Tuple
+from typing import Tuple
 
+from spectrseqtools.compositions import CompositionList
 from spectrseqtools.prediction.composition_inference import (
     CompositionInferrer,
     infer_compositions_with_matrix,
@@ -17,23 +18,6 @@ def set_output_path(input_path: Path, output_dir: Path) -> Tuple[Path, str]:
     return path_dir, path_prefix
 
 
-class Composition:
-    def __init__(self, *nucleosides):
-        self.nucleosides = tuple(sorted(nucleosides))
-
-    def __iter__(self):
-        yield from self.nucleosides
-
-    def __len__(self):
-        return len(self.nucleosides)
-
-    def __repr__(self):
-        return f"{{{','.join(self.nucleosides)}}}"
-
-    def __eq__(self, other):
-        return self.nucleosides == other
-
-
 def calculate_error_threshold(mass1: float, mass2: float, threshold: float) -> float:
     match ERROR_METHOD:
         case "l1_norm":
@@ -48,7 +32,7 @@ def calculate_compositions(
     diff: float,
     threshold: float,
     inferrer: CompositionInferrer,
-) -> List[Composition]:
+) -> CompositionList:
     composition_list = infer_compositions_with_matrix(
         diff,
         inferrer=inferrer,
@@ -58,8 +42,7 @@ def calculate_compositions(
 
     # Return None if no composition was found
     if composition_list is None:
-        return None
+        return CompositionList()
 
     # Return all found compositions
-    composition_list = list(composition_list)
-    return [Composition(*composition_list[i]) for i in range(len(composition_list))]
+    return CompositionList.from_list(compositions=composition_list)

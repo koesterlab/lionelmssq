@@ -2,15 +2,15 @@
 """Building of sequence skeletons."""
 
 from dataclasses import dataclass
-from typing import List, Optional, Set, Tuple
+from typing import Optional, Set, Tuple
 
 import numpy as np
 
 from spectrseqtools.common import (
-    Composition,
     calculate_compositions,
     calculate_error_threshold,
 )
+from spectrseqtools.compositions import CompositionList
 from spectrseqtools.dataclasses import SolverParameters
 from spectrseqtools.fragments import StandardUnitFragments
 from spectrseqtools.prediction.composition_inference import (
@@ -146,7 +146,7 @@ class SkeletonBuilder:
             )
 
             # Skip bins with no valid compositions
-            if compositions is None:
+            if len(compositions) == 0:
                 invalid_list += current_bin.invalidate()
             else:
                 # Continue skeleton building
@@ -341,7 +341,7 @@ class SkeletonBuilder:
         self,
         prev_bin: StandardUnitFragments,
         current_bin: StandardUnitFragments,
-    ) -> List[Composition]:
+    ) -> CompositionList:
         """
         Infer compositions between two bins.
 
@@ -354,26 +354,29 @@ class SkeletonBuilder:
 
         Returns
         -------
-        List[Composition]
+        CompositionList
             List of compositions.
 
         """
-        current_bin = current_bin.fragments
         # Collect compositions for first bin
+        current_bin = current_bin.fragments
         if prev_bin is None:
-            compositions = [
-                self.infer_compositions_for_mass_difference(
-                    diff=row["standard_unit_mass"],
-                    prev_mass=0.0,
-                    current_mass=row["observed_mass"],
-                )
-                for row in current_bin.rows(named=True)
-            ]
+            return sum(
+                [
+                    self.infer_compositions_for_mass_difference(
+                        diff=row["standard_unit_mass"],
+                        prev_mass=0.0,
+                        current_mass=row["observed_mass"],
+                    )
+                    for row in current_bin.rows(named=True)
+                ],
+                start=CompositionList(),
+            )
 
         # Collect compositions between previous and current bin
-        else:
-            prev_bin = prev_bin.fragments
-            compositions = [
+        prev_bin = prev_bin.fragments
+        return sum(
+            [
                 self.infer_compositions_for_mass_difference(
                     diff=current_row["standard_unit_mass"]
                     - prev_row["standard_unit_mass"],
@@ -382,35 +385,16 @@ class SkeletonBuilder:
                 )
                 for prev_row in prev_bin.rows(named=True)
                 for current_row in current_bin.rows(named=True)
-            ]
-
-        # If no valid composition was found, return None
-        if all(comp is None for comp in compositions):
-            return None
-
-        # Flatten composition list
-        compositions = [
-            comp
-            for comp_list in compositions
-            if comp_list is not None
-            for comp in comp_list
-            if comp is not None
-        ]
-
-        # Remove duplicates from composition list
-        unique_compositions = []
-        for comp in compositions:
-            if comp not in unique_compositions:
-                unique_compositions.append(comp)
-
-        return unique_compositions
+            ],
+            start=CompositionList(),
+        )
 
     def infer_compositions_for_mass_difference(
         self,
         diff: float,
         prev_mass: float,
         current_mass: float,
-    ) -> List[Composition]:
+    ) -> CompositionList:
         """
         Infer compositions between two masses.
 
@@ -425,12 +409,13 @@ class SkeletonBuilder:
 
         Returns
         -------
-        List[Composition]
+        CompositionList
             List of compositions.
 
         """
         if diff in self.compositions:
-            return self.compositions.get(diff, [])
+            return self.compositions.get(diff, CompositionList())
+
         threshold = calculate_error_threshold(
             prev_mass,
             current_mass,

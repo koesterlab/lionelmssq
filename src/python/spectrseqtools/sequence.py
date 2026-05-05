@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
-"""Module for sequence classes."""
+"""Module for sequence-related classes."""
 
 from dataclasses import dataclass
-from itertools import chain, groupby
+from itertools import chain
 from typing import List, Self, Set
+
+from spectrseqtools.compositions import CompositionList
 
 
 @dataclass
@@ -34,7 +36,7 @@ class SkeletonSequence:
     @property
     def nucleotides(self) -> Set:
         """Return set of nucleotides found at any position in skeleton sequence."""
-        return {nuc for seq_pos in self.sequence for nuc in seq_pos}
+        return set(chain(*self.sequence))
 
     def min_mass(self, nuc_masses: dict) -> float:
         """Return minimum mass a sequence from the skeleton could possibly have."""
@@ -52,7 +54,7 @@ class SkeletonSequence:
 
     def update_with_compositions(
         self,
-        compositions,
+        compositions: CompositionList,
         pos: Set[int],
     ) -> Set[int]:
         """
@@ -60,7 +62,7 @@ class SkeletonSequence:
 
         Parameters
         ----------
-        compositions : List[Composition]
+        compositions : CompositionList
             List of compositions.
         pos : Set[int]
             Set of possible follow-up indices.
@@ -71,23 +73,15 @@ class SkeletonSequence:
             Updated set of follow-up indices.
 
         """
+        # Group compositions by length in dict
+        alphabet_per_len = compositions.group_by_len()
+
         next_pos = set()
         for p in pos:
-            # Group compositions by length in dict
-            alphabet_per_len = {
-                comp_len: set(chain(*comps))
-                for comp_len, comps in groupby(
-                    [
-                        comp
-                        for comp in compositions
-                        if 0 <= p + len(comp) - 1 < len(self.sequence)
-                    ],
-                    len,
-                )
-            }
-
             # Constrain current sets in range of compositions by the new nucleotides
             for comp_len, alphabet in alphabet_per_len.items():
+                if not 0 <= p + comp_len - 1 < len(self.sequence):
+                    continue
                 for i in range(comp_len):
                     # Clear nucleotide set if the new composition sharpens it
                     if self.sequence[p + i].issuperset(alphabet):

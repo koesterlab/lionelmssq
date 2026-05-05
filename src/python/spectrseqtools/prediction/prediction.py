@@ -155,11 +155,7 @@ class Predictor:
 
             # Reduce nucleotide alphabet based on fragments
             observed_nucleotides = {
-                nuc
-                for comps in compositions.values()
-                if comps is not None
-                for comp in comps
-                for nuc in comp
+                nuc for comp in compositions.values() for nuc in comp.nucleotides
             }
             fragments = self._reduce_alphabet(observed_nucleotides, fragments)
 

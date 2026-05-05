@@ -291,7 +291,7 @@ class StandardUnitFragments:
             )
 
             # Ensure mass corresponds to true singleton
-            if comps is not None and any(len(comp) == 1 for comp in comps):
+            if comps.contains_singleton():
                 compositions[frag["standard_unit_mass"]] = comps
 
         return compositions
@@ -416,7 +416,7 @@ class StandardUnitFragments:
                 threshold=diff_error,
                 inferrer=inferrer,
             )
-            if comp is not None and len(comp) >= 1:
+            if len(comp) > 0:
                 compositions[diff] = comp
             if end == len(self) - 1:
                 start += 1
@@ -454,7 +454,7 @@ class StandardUnitFragments:
         ----------
         inferrer : CompositionInferrer
             Composition inferrer.
-        skeleton_seq : List[Set[str]]
+        skeleton_seq : SkeletonSequence
             Skeleton sequence.
         solver_params : SolverParameters
             Solver parameter.
