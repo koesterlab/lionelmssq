@@ -115,7 +115,7 @@ class LinearProgramInstance:
                 LpVariable(f"y_{i},{k}", lowBound=0, upBound=1, cat=LpInteger)
                 for k in range(self.seq_len)
             ]
-            for i in range(len(self.alphabet) - 1)
+            for i in range(len(self.alphabet))
         ]
 
         # Use skeleton sequence to fix nucleotides
@@ -123,16 +123,16 @@ class LinearProgramInstance:
             if not nucs:
                 # Do not constrain if nothing is known
                 continue
-            for i in range(1, len(self.alphabet)):
+            for i in range(len(self.alphabet)):
                 # Do not allow nucleotides that are not observed in the skeleton
                 if i not in nucs:
-                    y[i - 1][k].setInitialValue(0)
-                    y[i - 1][k].fixValue()
+                    y[i][k].setInitialValue(0)
+                    y[i][k].fixValue()
                 # If only one nucleotide is possible, fix the value already
                 if len(nucs) == 1:
                     if i == get_singleton_set_item(nucs):
-                        y[i - 1][k].setInitialValue(1)
-                        y[i - 1][k].fixValue()
+                        y[i][k].setInitialValue(1)
+                        y[i][k].fixValue()
 
         return y
 
@@ -145,7 +145,7 @@ class LinearProgramInstance:
                 ]
                 for j in valid_fragment_range
             ]
-            for i in range(len(self.alphabet) - 1)
+            for i in range(len(self.alphabet))
         ]
         return z
 
@@ -154,8 +154,8 @@ class LinearProgramInstance:
             fragment_masses[j]
             - lpSum(
                 [
-                    self.z[i][j][k] * self.alphabet.get_nuc_mass(i + 1)
-                    for i in range(len(self.alphabet) - 1)
+                    self.z[i][j][k] * self.alphabet.get_nuc_mass(i)
+                    for i in range(len(self.alphabet))
                     for k in range(self.seq_len)
                 ]
             )
@@ -176,15 +176,15 @@ class LinearProgramInstance:
 
         # Select one nucleotide per position
         for k in range(self.seq_len):
-            problem += lpSum([self.y[i][k] for i in range(len(self.alphabet) - 1)]) == 1
+            problem += lpSum([self.y[i][k] for i in range(len(self.alphabet))]) == 1
 
         # Enforce universal modification rate
         problem += lpSum(
             [
                 self.y[i][k]
                 for k in range(self.seq_len)
-                for i in range(len(self.alphabet) - 1)
-                if self.alphabet.is_mod(i + 1)
+                for i in range(len(self.alphabet))
+                if self.alphabet.is_mod(i)
             ]
         ) <= np.ceil(inferrer.seq.modification_rate * self.seq_len)
 
@@ -197,7 +197,7 @@ class LinearProgramInstance:
         # Fill z with the product of binary variables x and y
         for k in range(self.seq_len):
             for j in valid_fragment_range:
-                for i in range(len(self.alphabet) - 1):
+                for i in range(len(self.alphabet)):
                     problem += self.z[i][j][k] <= self.x[j][k]
                     problem += self.z[i][j][k] <= self.y[i][k]
                     problem += self.z[i][j][k] >= self.x[j][k] + self.y[i][k] - 1
@@ -251,9 +251,9 @@ class LinearProgramInstance:
         )
 
     def _get_sequence_nucleotide(self, k):
-        for i in range(len(self.alphabet) - 1):
+        for i in range(len(self.alphabet)):
             if milp_is_one(self.y[i][k]):
-                return i + 1
+                return i
         return None
 
     def _get_fragments(self) -> PredictedFragments:
@@ -313,9 +313,9 @@ class LinearProgramInstance:
         return PredictedFragments(fragments=fragment_predictions.sort("orig_index"))
 
     def _get_fragment_nucleotide(self, j, k):
-        for i in range(len(self.alphabet) - 1):
+        for i in range(len(self.alphabet)):
             if milp_is_one(self.z[i][j][k]):
-                return i + 1
+                return i
         return None
 
     def _get_leftmost_position(self, j):

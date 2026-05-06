@@ -198,10 +198,10 @@ class NucleotideAlphabet:
                 .otherwise(pl.col("modification_rate"))
             )
         )
-        new_nucs = [NucleotideMass()] + [
-            NucleotideMass(**row) for row in new_df.rows(named=True)
-        ]
-        return cls(alphabet=new_nucs, precision=precision)
+        return cls(
+            alphabet=[NucleotideMass(**row) for row in new_df.rows(named=True)],
+            precision=precision,
+        )
 
     def __len__(self) -> int:
         """Return alphabet size."""
@@ -210,27 +210,27 @@ class NucleotideAlphabet:
     @property
     def min(self) -> float:
         """Return lowest nucleotide mass in alphabet."""
-        return min(mass.nucleotide_mass for mass in self.alphabet[1:])
+        return min(mass.nucleotide_mass for mass in self.alphabet)
 
     @property
     def max(self) -> float:
         """Return highest nucleotide mass in alphabet."""
-        return max(mass.nucleotide_mass for mass in self.alphabet[1:])
+        return max(mass.nucleotide_mass for mass in self.alphabet)
 
     @property
     def min_mz(self) -> float:
         """Return lowest singleton m/z in alphabet."""
-        return min(mass.singleton_mz for mass in self.alphabet[1:])
+        return min(mass.singleton_mz for mass in self.alphabet)
 
     @property
     def max_mz(self) -> float:
         """Return highest singleton m/z in alphabet."""
-        return max(mass.singleton_mz for mass in self.alphabet[1:])
+        return max(mass.singleton_mz for mass in self.alphabet)
 
     @property
     def max_integer(self) -> int:
         """Return highest integer mass in alphabet."""
-        return max(mass.mass for mass in self.alphabet[1:])
+        return max(mass.mass for mass in self.alphabet)
 
     def get_mass(self, idx: int) -> int:
         """Return mass at index in alphabet."""
@@ -254,16 +254,16 @@ class NucleotideAlphabet:
 
     def fmt(self, rep: str) -> str:
         """Return formatted nucleotide by representative in alphabet."""
-        for nuc in self.alphabet[1:]:
+        for nuc in self.alphabet:
             if rep == nuc.names[0]:
                 return nuc.fmt()
         return ""
 
     def get_idx(self, rep: str) -> int:
         """Return nucleotide index by representative in alphabet."""
-        for idx, nuc in enumerate(self.alphabet[1:]):
+        for idx, nuc in enumerate(self.alphabet):
             if rep == nuc.names[0]:
-                return idx + 1
+                return idx
         return -1
 
     def set_threshold(self, value: float) -> int:
@@ -318,7 +318,7 @@ class NucleotideAlphabet:
             Mapping between old and new indexing.
 
         """
-        mapping = {idx: idx for idx in range(1, len(self))}
+        mapping = {idx: idx for idx in range(len(self))}
         for idx, nucleotide_mass in enumerate(self.alphabet):
             if nucleotide_mass.is_modification and idx not in alphabet:
                 mapping = {
@@ -352,17 +352,13 @@ class NucleotideAlphabet:
 
     def reduce(self) -> None:
         """Reduce alphabet by removing nucleotides that cannot be in sequence."""
-        self.alphabet = [
-            mass
-            for mass in self.alphabet
-            if mass.mass == 0.0 or mass.modification_rate > 0.0
-        ]
+        self.alphabet = [mass for mass in self.alphabet if mass.modification_rate > 0.0]
 
     def to_dataframe(self) -> pl.DataFrame:
         """Return nucleotide alphabet as Polars dataframe."""
         return pl.DataFrame(
             {
-                col: [mass.__dict__[col] for mass in self.alphabet[1:]]
+                col: [mass.__dict__[col] for mass in self.alphabet]
                 for col in _ALPHABET_COLS
             }
         )

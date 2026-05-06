@@ -51,7 +51,7 @@ class SkeletonSequence:
         return total_mass
 
     def max_mass(self, alphabet: NucleotideAlphabet) -> float:
-        """Return minimum mass a sequence from the skeleton could possibly have."""
+        """Return maximum mass a sequence from the skeleton could possibly have."""
         total_mass = 0
         for nucs in self.sequence:
             total_mass += max((alphabet.get_nuc_mass(nuc) for nuc in nucs), default=0)

@@ -145,7 +145,7 @@ def compute_sequence_length_bound(inferrer: CompositionInferrer, dir: str) -> in
             return memo[(total_mass, current_idx)]
 
         # Return default value for cells outside of matrix
-        if total_mass < 0:
+        if total_mass < 0 or current_idx < 0:
             return default_bound
 
         # Initialize new counter for valid start in matrix
@@ -297,7 +297,7 @@ def infer_compositions_with_matrix(
             return memo[(target_mass, current_idx)]
 
         # Return empty list for cells outside of matrix
-        if target_mass < 0:
+        if target_mass < 0 or current_idx < 0:
             return []
 
         # Initialize a new composition for a valid start in matrix
@@ -426,7 +426,7 @@ def infer_compositions_with_recursion(
 
         return compositions
 
-    # Compute all solutions for the full target and all allowed masses (except 0.0)
-    solutions = backtrack(target, 1, 0, 0)
+    # Compute all solutions for the full target and all allowed masses
+    solutions = backtrack(target, 0, 0, 0)
 
     return CompositionList.from_list(compositions=list(solutions))

@@ -13,7 +13,7 @@ from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 
 # Set OS-independent cache directory for traceback matrix
 MATRIX_DIR = user_cache_dir(
-    appname="spectrseqtools/traceback_matrix", version="1.0", ensure_exists=True
+    appname="spectrseqtools/traceback_matrix", version="1.1", ensure_exists=True
 )
 
 # Set maximum sequence length to be represented in traceback matrix
@@ -56,10 +56,15 @@ class TracebackMatrix:
                 if compression_rate == 1
                 else cls.set_up_bit_matrix(alphabet, compression_rate)
             )
-            np.save(path, matrix)
+            matrix.save(file_path=path)
+            return matrix
 
         # Read traceback matrix
         return cls(matrix=np.load(f"{path}.npy"), compression_rate=compression_rate)
+
+    def save(self, file_path: Path) -> None:
+        """Save matrix in given file path."""
+        np.save(file=file_path, arr=self.matrix)
 
     @classmethod
     def set_up_matrix(cls, alphabet: NucleotideAlphabet) -> Self:
@@ -75,12 +80,12 @@ class TracebackMatrix:
         # Select maximum integer mass for which matrix should be built
         max_mass = alphabet.max_integer * MAX_SEQ_LENGTH
 
-        # Initialize matrix as numpy table
-        matrix = np.zeros((len(alphabet), max_mass + 1), dtype=np.uint8)
+        # Initialize matrix as numpy table (+ additional first row for easier indexing)
+        matrix = np.zeros((len(alphabet) + 1, max_mass + 1), dtype=np.uint8)
         matrix[0, 0] = 3.0
 
         # Fill traceback matrix row-wise
-        for i in range(1, len(alphabet)):
+        for i in range(1, len(alphabet) + 1):
             # Case: Start new row (i.e. move on to new nucleoside) by initializing
             # reachable cells from before
             matrix[i] = [int(val != 0.0) for val in matrix[i - 1]]
@@ -92,10 +97,11 @@ class TracebackMatrix:
                     continue
 
                 # Add another nucleoside if possible
-                if alphabet.get_mass(i) + j <= max_mass:
-                    matrix[i, j + alphabet.get_mass(i)] += 2.0
+                if alphabet.get_mass(i - 1) + j <= max_mass:
+                    matrix[i, j + alphabet.get_mass(i - 1)] += 2.0
 
-        return cls(matrix=matrix, compression_rate=1)
+        # Remove first row (as it is no longer needed)
+        return cls(matrix=np.delete(matrix, 0, axis=0), compression_rate=1)
 
     @classmethod
     def set_up_bit_matrix(
@@ -117,13 +123,14 @@ class TracebackMatrix:
         # Select maximum integer mass for which matrix should be built
         max_mass = alphabet.max_integer * MAX_SEQ_LENGTH
 
-        # Initialize bit-representation matrix as numpy table
+        # Initialize bit-representation matrix as numpy table (+ additional first row
+        # for easier indexing)
         max_col = int(np.ceil((max_mass + 1) / compression_rate))
-        matrix = np.zeros((len(alphabet), max_col), dtype=settings["type"])
+        matrix = np.zeros((len(alphabet) + 1, max_col), dtype=settings["type"])
         matrix[0, 0] = settings["init"]
 
         # Fill traceback matrix row-wise
-        for i in range(1, len(alphabet)):
+        for i in range(1, len(alphabet) + 1):
             # Case: Start new row (i.e. move on to new nucleotide)
             # by initializing reachable cells from before
             matrix[i] = [
@@ -131,8 +138,8 @@ class TracebackMatrix:
             ]
 
             # Define number of cells to move (step) and bit shift in a cell (shift)
-            step = int(alphabet.get_mass(i) / compression_rate)
-            shift = alphabet.get_mass(i) % compression_rate
+            step = int(alphabet.get_mass(i - 1) / compression_rate)
+            shift = alphabet.get_mass(i - 1) % compression_rate
 
             # Case: Add more of current nucleotide
             for j in range(max_col):
@@ -153,7 +160,10 @@ class TracebackMatrix:
         # Adjust last column for unused cells
         matrix[:, -1] &= settings["full"] << 2 * (max_col - (max_mass + 1) % max_col)
 
-        return cls(matrix=matrix, compression_rate=compression_rate)
+        # Remove first row (as it is no longer needed)
+        return cls(
+            matrix=np.delete(matrix, 0, axis=0), compression_rate=compression_rate
+        )
 
     def assert_in_matrix(self, mass: int) -> None:
         """
