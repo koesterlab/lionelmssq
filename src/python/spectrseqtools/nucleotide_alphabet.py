@@ -10,12 +10,11 @@ from typing import List, Self
 import numpy as np
 import polars as pl
 
-from spectrseqtools.masses import (
-    DECIMAL_PLACES,
-    ELEMENT_MASSES,
-    PRECISION,
-    UNMODIFIED_BASES,
-)
+from spectrseqtools.masses import DECIMAL_PLACES, ELEMENT_MASSES, PRECISION
+
+# TODO: Currently, the list of unmodified bases is only defined for RNA;
+#  make it universally applicable
+UNMODIFIED_BASES = ["A", "C", "G", "U"]
 
 _DF_COLS = [
     "id",
@@ -24,8 +23,6 @@ _DF_COLS = [
     "modification_rate",
     "encoding",
 ]
-
-
 _ALPHABET_COLS = [
     "integer_mass",
     "nucleoside_mass",

@@ -4,17 +4,25 @@ from spectrseqtools.common import set_output_path
 from spectrseqtools.dataclasses import SequenceInformation, SolverParameters
 from spectrseqtools.enums import SolverType
 from spectrseqtools.fragments import RawFragments
-from spectrseqtools.masses import (
-    COMPRESSION_RATE,
-    DEFAULT_INTENSITY_CUTOFF,
-    TOLERANCE,
-)
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 from spectrseqtools.parsers import Options, PredictionOptions
 from spectrseqtools.prediction.composition_inference import CompositionInferrer
 from spectrseqtools.prediction.fragment_classification import classify_fragments
 from spectrseqtools.prediction.prediction import Predictor
 from spectrseqtools.preprocessing.preprocessing import Preprocessor
+
+# Set default value for intensity cutoff
+DEFAULT_INTENSITY_CUTOFF = 115000
+
+# Set relative tolerance such that we consider
+# abs(sum(masses)/target_mass - 1) < TOLERANCE for matching
+# Note that the error is on the higher side than would be for a good
+# calibrated machine (10 ppm), but in the absence of an experimental
+# measurement of this error, this conservative value works well
+TOLERANCE = 10e-6
+
+# Set number of binary-compressed masses per integer cell in traceback matrix
+COMPRESSION_RATE = 32
 
 
 def main():
