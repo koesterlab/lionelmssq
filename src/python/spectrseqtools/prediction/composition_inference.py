@@ -4,45 +4,9 @@ from typing import Tuple
 import numpy as np
 
 from spectrseqtools.compositions import CompositionList
-from spectrseqtools.masses import MAX_VARIANCE
+from spectrseqtools.dataclasses import SequenceInformation
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 from spectrseqtools.prediction.traceback_matrix import TracebackMatrix
-from spectrseqtools.sequence import SkeletonSequence
-
-
-@dataclass
-class SequenceInformation:
-    max_len: int
-    su_mass: float
-    obs_mass: float
-    modification_rate: float
-
-    def validate_sequence(
-        self, seq: SkeletonSequence, alphabet: NucleotideAlphabet
-    ) -> bool:
-        """
-        Validate sequence length by mass.
-
-        Parameters
-        ----------
-        seq : SkeletonSequence
-            Skeleton sequence.
-        alphabet : NucleotideAlphabet
-            Nucleotide alphabet.
-
-        Returns
-        -------
-        bool
-            Flag whether sequence length is valid.
-
-        """
-        # Check whether mass interval defined by skeleton contains sequence mass
-        # Use MAX_VARIANCE to accommodate for uncertainty in sequence mass selection
-        return (
-            seq.min_mass(alphabet=alphabet) - MAX_VARIANCE
-            <= self.su_mass
-            <= seq.max_mass(alphabet=alphabet) + MAX_VARIANCE
-        )
 
 
 @dataclass

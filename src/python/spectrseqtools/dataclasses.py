@@ -9,7 +9,9 @@ from typing import List, Self
 
 import polars as pl
 
+from spectrseqtools.masses import MAX_VARIANCE
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
+from spectrseqtools.sequence import SkeletonSequence
 
 _NUCLEOSIDE_RE = re.compile(r"\d*[ACGU]")
 MASSES = pl.read_csv(
@@ -54,6 +56,43 @@ class SolverParameters:
             params.pop("time_limit_short")
 
         return params
+
+
+@dataclass
+class SequenceInformation:
+    """Class for general information related to the sequence."""
+
+    max_len: int
+    su_mass: float
+    obs_mass: float
+    modification_rate: float
+
+    def validate_sequence(
+        self, seq: SkeletonSequence, alphabet: NucleotideAlphabet
+    ) -> bool:
+        """
+        Validate sequence length by mass.
+
+        Parameters
+        ----------
+        seq : SkeletonSequence
+            Skeleton sequence.
+        alphabet : NucleotideAlphabet
+            Nucleotide alphabet.
+
+        Returns
+        -------
+        bool
+            Flag whether sequence length is valid.
+
+        """
+        # Check whether mass interval defined by skeleton contains sequence mass
+        # Use MAX_VARIANCE to accommodate for uncertainty in sequence mass selection
+        return (
+            seq.min_mass(alphabet=alphabet) - MAX_VARIANCE
+            <= self.su_mass
+            <= seq.max_mass(alphabet=alphabet) + MAX_VARIANCE
+        )
 
 
 @dataclass
