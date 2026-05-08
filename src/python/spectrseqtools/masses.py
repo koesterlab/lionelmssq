@@ -1,5 +1,4 @@
 import importlib.resources
-from itertools import product
 
 import polars as pl
 
@@ -9,9 +8,6 @@ UNMODIFIED_BASES = ["A", "C", "G", "U"]
 
 # Set default value for intensity cutoff
 DEFAULT_INTENSITY_CUTOFF = 115000
-
-# Set fragmentation dict modus (full vs only c/y)
-FULL_FRAGMENTATION_DICT = False
 
 # Maximum variance for intact mass
 MAX_VARIANCE = 1
@@ -43,61 +39,3 @@ ELEMENT_MASSES = {
     row[elements.get_column_index("symbol")]: row[elements.get_column_index("mass")]
     for row in elements.iter_rows()
 }
-
-
-# METHOD: Precompute all weight changes caused by fragmentation and adapt the
-# target masses accordingly while finding compositions explaining it.
-# We consider tags at the 5'- or 3'-end to be possible fragmentation options.
-
-
-def build_fragmentation_dict(start_tag, end_tag):
-    element_masses = ELEMENT_MASSES
-
-    # Initialize dict with masses for 5'-end of fragments
-    start_dict = {
-        # Remove O from SU and add START tag (without H)
-        "START": start_tag - element_masses["O"] - element_masses["H+"],
-        # Add H to SU to achieve neutral charge
-        "c/y": element_masses["H+"],
-    }
-
-    # Initialize dict with masses for 3'-end of fragments
-    end_dict = {
-        # Remove PO3H from SU and add END tag (without H)
-        "END": end_tag
-        - element_masses["P"]
-        - 3 * element_masses["O"]
-        - 2 * element_masses["H+"],
-        # Remove H from SU to achieve neutral charge
-        "c/y": -element_masses["H+"],
-    }
-
-    # Add a/w-, b/x-, and d/z-fragmentation for full dict version
-    if FULL_FRAGMENTATION_DICT:
-        # Add PO3H2 to SU to achieve neutral charge
-        start_dict["a/w"] = (
-            element_masses["P"] + 3 * element_masses["O"] + 2 * element_masses["H+"]
-        )
-        # Add P2O to SU to achieve neutral charge
-        start_dict["b/x"] = element_masses["P"] + 2 * element_masses["O"]
-        # Remove OH from SU to achieve neutral charge
-        start_dict["d/z"] = -(element_masses["O"] + element_masses["H+"])
-
-        # Remove PO3H2 from SU to achieve neutral charge
-        end_dict["a/w"] = -(
-            element_masses["P"] + 3 * element_masses["O"] + 2 * element_masses["H+"]
-        )
-        # Remove P2O from SU to achieve neutral charge
-        end_dict["b/x"] = -(element_masses["P"] + 2 * element_masses["O"])
-        # Add OH to SU to achieve neutral charge
-        end_dict["d/z"] = element_masses["O"] + element_masses["H+"]
-
-    # Collect all unique fragmentation-related mass combinations in dict
-    fragmentation_dict = {}
-    for start, end in list(product(start_dict, end_dict)):
-        val = int((start_dict[start] + end_dict[end]) / PRECISION)
-        if val not in fragmentation_dict:
-            fragmentation_dict[val] = []
-        fragmentation_dict[val] += [f"{start}_{end}"]
-
-    return fragmentation_dict

@@ -1,22 +1,17 @@
 import yaml
 
 from spectrseqtools.common import set_output_path
-from spectrseqtools.dataclasses import SolverParameters
+from spectrseqtools.dataclasses import SequenceInformation, SolverParameters
 from spectrseqtools.enums import SolverType
 from spectrseqtools.fragments import RawFragments
 from spectrseqtools.masses import (
     COMPRESSION_RATE,
     DEFAULT_INTENSITY_CUTOFF,
-    PRECISION,
     TOLERANCE,
-    build_fragmentation_dict,
 )
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 from spectrseqtools.parsers import Options, PredictionOptions
-from spectrseqtools.prediction.composition_inference import (
-    CompositionInferrer,
-    SequenceInformation,
-)
+from spectrseqtools.prediction.composition_inference import CompositionInferrer
 from spectrseqtools.prediction.fragment_classification import classify_fragments
 from spectrseqtools.prediction.prediction import Predictor
 from spectrseqtools.preprocessing.preprocessing import Preprocessor
@@ -51,36 +46,18 @@ def predict(options: PredictionOptions):
     with open(options.meta, "r") as f:
         meta = yaml.safe_load(f)
 
+    intensity_cutoff = meta.setdefault("intensity_cutoff", DEFAULT_INTENSITY_CUTOFF)
+
     # Initialize nucleotide alphabet
     alphabet = NucleotideAlphabet.from_file(modification_rate=options.modification_rate)
     max_weight = alphabet.max
     alphabet.filter_by_singletons(singleton_path=options.singletons)
 
-    # Read additional parameter from meta file
-    intensity_cutoff = meta.setdefault("intensity_cutoff", DEFAULT_INTENSITY_CUTOFF)
-    start_tag = meta.setdefault("5_prime_tag", 555.1294)
-    end_tag = meta.setdefault("3_prime_tag", 455.1491)
-
-    # Build fragmentation dict
-    fragmentation_dict = build_fragmentation_dict(start_tag=start_tag, end_tag=end_tag)
-
-    # Standardize intact sequence mass by removing START_END fragmentation to gain SU mass
-    seq_mass_obs = meta["intact_mass"]
-    seq_mass_su = (
-        seq_mass_obs
-        - [
-            mass * PRECISION
-            for mass in fragmentation_dict
-            if "START_END" in fragmentation_dict[mass]
-        ][0]
-    )
-
     # Initialize SequenceInformation class
-    seq_info = SequenceInformation(
-        max_len=int(seq_mass_su / alphabet.min),
-        su_mass=seq_mass_su,
-        obs_mass=seq_mass_obs,
+    seq_info = SequenceInformation.from_file(
+        file_path=options.meta,
         modification_rate=options.modification_rate,
+        alphabet=alphabet,
     )
 
     # Initialize CompositionInferrer class
@@ -102,7 +79,7 @@ def predict(options: PredictionOptions):
     # Classify raw fragments into SU-fragments
     fragments = classify_fragments(
         fragments=fragments,
-        fragmentation_dict=fragmentation_dict,
+        fragmentation_dict=seq_info.fragmentation,
     )
 
     fragments.filter_by_intact_mass(intact_mass=inferrer.seq.su_mass)

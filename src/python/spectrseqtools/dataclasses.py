@@ -4,12 +4,15 @@
 import importlib.resources
 import re
 from dataclasses import dataclass
+from itertools import product
 from pathlib import Path
 from typing import List, Self
 
+import numpy as np
 import polars as pl
+import yaml
 
-from spectrseqtools.masses import MAX_VARIANCE
+from spectrseqtools.masses import ELEMENT_MASSES, MAX_VARIANCE, PRECISION
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 from spectrseqtools.sequence import SkeletonSequence
 
@@ -18,6 +21,9 @@ MASSES = pl.read_csv(
     (importlib.resources.files(__package__) / "assets" / "masses.tsv"),
     separator="\t",
 )
+
+# Set fragmentation dict mode (full vs only c/y)
+REDUCED_FRAGMENTATION_DICT = True
 
 
 @dataclass
@@ -66,6 +72,61 @@ class SequenceInformation:
     su_mass: float
     obs_mass: float
     modification_rate: float
+    fragmentation: dict
+
+    @classmethod
+    def from_file(
+        cls,
+        file_path: Path,
+        modification_rate: float,
+        alphabet: NucleotideAlphabet,
+        reduced_fragmentation: bool = REDUCED_FRAGMENTATION_DICT,
+    ) -> Self:
+        """
+        Initialize sequence information from meta file.
+
+        Parameters
+        ----------
+        file_path : Path
+            Path to meta file.
+        modification_rate : float
+            Maximum percentage of modification in sequence.
+        alphabet : NucleotideAlphabet
+            Alphabet of considered nucleotides.
+        reduced_fragmentation : bool
+            Flag whether to use a reduced fragmentation dict (i.e. only c/y).
+
+        """
+        with open(file_path, "r", encoding="utf-8") as f:
+            meta = yaml.safe_load(f)
+
+        # Read additional parameter from meta file
+        start_tag = meta.setdefault("5_prime_tag", 555.1294)
+        end_tag = meta.setdefault("3_prime_tag", 455.1491)
+
+        # Build fragmentation dict
+        fragmentation_dict = build_fragmentation_dict(
+            start_tag=start_tag, end_tag=end_tag, reduced=reduced_fragmentation
+        )
+
+        # Standardize intact sequence mass by removing START_END fragmentation to gain SU mass
+        seq_mass_obs = meta["intact_mass"]
+        seq_mass_su = (
+            seq_mass_obs
+            - [
+                mass * PRECISION
+                for mass in fragmentation_dict
+                if "START_END" in fragmentation_dict[mass]
+            ][0]
+        )
+
+        return cls(
+            max_len=int(seq_mass_su / alphabet.min),
+            su_mass=seq_mass_su,
+            obs_mass=seq_mass_obs,
+            modification_rate=modification_rate,
+            fragmentation=fragmentation_dict,
+        )
 
     def validate_sequence(
         self, seq: SkeletonSequence, alphabet: NucleotideAlphabet
@@ -300,3 +361,63 @@ class Prediction:
             sequence_name=sequence_name,
             alphabet=alphabet,
         )
+
+
+# METHOD: Precompute all weight changes caused by fragmentation and adapt the
+# target masses accordingly while finding compositions explaining it.
+# We consider tags at the 5'- or 3'-end to be possible fragmentation options.
+
+
+def build_fragmentation_dict(
+    start_tag: float, end_tag: float, reduced: bool
+) -> dict:
+    element_masses = ELEMENT_MASSES
+
+    # Initialize dict with masses for 5'-end of fragments
+    start_dict = {
+        # Remove O from SU and add START tag (without H)
+        "START": start_tag - element_masses["O"] - element_masses["H+"],
+        # Add H to SU to achieve neutral charge
+        "c/y": element_masses["H+"],
+    }
+
+    # Initialize dict with masses for 3'-end of fragments
+    end_dict = {
+        # Remove PO3H from SU and add END tag (without H)
+        "END": end_tag
+        - element_masses["P"]
+        - 3 * element_masses["O"]
+        - 2 * element_masses["H+"],
+        # Remove H from SU to achieve neutral charge
+        "c/y": -element_masses["H+"],
+    }
+
+    # Add a/w-, b/x-, and d/z-fragmentation for full dict version
+    if not reduced:
+        # Add PO3H2 to SU to achieve neutral charge
+        start_dict["a/w"] = (
+            element_masses["P"] + 3 * element_masses["O"] + 2 * element_masses["H+"]
+        )
+        # Add P2O to SU to achieve neutral charge
+        start_dict["b/x"] = element_masses["P"] + 2 * element_masses["O"]
+        # Remove OH from SU to achieve neutral charge
+        start_dict["d/z"] = -(element_masses["O"] + element_masses["H+"])
+
+        # Remove PO3H2 from SU to achieve neutral charge
+        end_dict["a/w"] = -(
+            element_masses["P"] + 3 * element_masses["O"] + 2 * element_masses["H+"]
+        )
+        # Remove P2O from SU to achieve neutral charge
+        end_dict["b/x"] = -(element_masses["P"] + 2 * element_masses["O"])
+        # Add OH to SU to achieve neutral charge
+        end_dict["d/z"] = element_masses["O"] + element_masses["H+"]
+
+    # Collect all unique fragmentation-related mass combinations in dict
+    fragmentation_dict = {}
+    for start, end in list(product(start_dict, end_dict)):
+        val = int((start_dict[start] + end_dict[end]) / PRECISION)
+        if val not in fragmentation_dict:
+            fragmentation_dict[val] = []
+        fragmentation_dict[val] += [f"{start}_{end}"]
+
+    return fragmentation_dict
