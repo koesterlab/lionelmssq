@@ -422,9 +422,6 @@ class SkeletonBuilder:
         return infer_compositions_with_matrix(
             mass=diff,
             inferrer=self.inferrer,
-            max_modifications=round(
-                self.inferrer.seq.modification_rate * self.inferrer.seq.max_len
-            ),
             threshold=threshold,
         )
 

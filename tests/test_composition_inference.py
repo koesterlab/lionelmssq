@@ -47,7 +47,6 @@ def test_infer_composition_with_recursion(seq, tolerance):
     compositions = infer_compositions_with_recursion(
         seq_weight,
         inferrer=inferrer,
-        max_modifications=round(MOD_RATE * len(seq)),
     )
 
     assert len(compositions) != 0
@@ -80,7 +79,6 @@ def test_infer_composition_with_matrix(seq, compression, tolerance, memo):
     compositions = infer_compositions_with_matrix(
         seq_weight,
         inferrer=inferrer,
-        max_modifications=round(MOD_RATE * len(seq)),
         with_memo=memo,
     )
 

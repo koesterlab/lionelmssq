@@ -285,9 +285,6 @@ class StandardUnitFragments:
             comps = infer_compositions_with_matrix(
                 mass=frag["standard_unit_mass"],
                 inferrer=inferrer,
-                max_modifications=round(
-                    inferrer.seq.modification_rate * inferrer.seq.max_len
-                ),
                 threshold=inferrer.tolerance * frag["observed_mass"],
             )
 
@@ -415,9 +412,6 @@ class StandardUnitFragments:
             comp = infer_compositions_with_matrix(
                 mass=diff,
                 inferrer=inferrer,
-                max_modifications=round(
-                    inferrer.seq.modification_rate * inferrer.seq.max_len
-                ),
                 threshold=diff_error,
             )
             if len(comp) > 0:

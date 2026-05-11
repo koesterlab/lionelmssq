@@ -128,6 +128,11 @@ class SequenceInformation:
             fragmentation=fragmentation_dict,
         )
 
+    @property
+    def max_modifications(self) -> int:
+        """Return maximum number of modifications."""
+        return np.ceil(self.modification_rate * self.max_len)
+
     def validate_sequence(
         self, seq: SkeletonSequence, alphabet: NucleotideAlphabet
     ) -> bool:

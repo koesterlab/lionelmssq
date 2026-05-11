@@ -1,8 +1,6 @@
 from dataclasses import dataclass
 from typing import Tuple
 
-import numpy as np
-
 from spectrseqtools.compositions import CompositionList
 from spectrseqtools.dataclasses import SequenceInformation
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
@@ -85,7 +83,7 @@ def compute_sequence_length_bound(inferrer: CompositionInferrer, dir: str) -> in
     Return bound on length for any sequence that could explain the given mass.
     """
     # Set maximum number of modifications
-    max_modifications = round(inferrer.seq.modification_rate * inferrer.seq.max_len)
+    max_modifications = inferrer.seq.max_modifications
 
     target, threshold = inferrer.set_target(
         mass=inferrer.seq.su_mass, threshold=inferrer.tolerance * inferrer.seq.obs_mass
@@ -241,13 +239,15 @@ def is_valid_mass(
 def infer_compositions_with_matrix(
     mass: float,
     inferrer: CompositionInferrer,
-    max_modifications=np.inf,
     threshold=None,
     with_memo=True,
 ) -> CompositionList:
     """
     Return all possible nucleotide compositions that could sum up to the given mass.
     """
+    # Set maximum number of modifications
+    max_modifications = inferrer.seq.max_modifications
+
     target, threshold = inferrer.set_target(mass=mass, threshold=threshold)
 
     # Memoization dictionary to store results for a given target
@@ -334,12 +334,14 @@ def infer_compositions_with_matrix(
 def infer_compositions_with_recursion(
     mass: float,
     inferrer: CompositionInferrer,
-    max_modifications=np.inf,
     threshold=None,
 ) -> CompositionList:
     """
     Returns all possible nucleotide compositions that could sum up to the given mass.
     """
+    # Set maximum number of modifications
+    max_modifications = inferrer.seq.max_modifications
+
     target, threshold = inferrer.set_target(mass=mass, threshold=threshold)
 
     # Memoization dictionary to store results for a given target
