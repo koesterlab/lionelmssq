@@ -7,7 +7,7 @@ from spectrseqtools.fragments import RawFragments
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 from spectrseqtools.parsers import Options, PredictionOptions
 from spectrseqtools.prediction.composition_inference import CompositionInferrer
-from spectrseqtools.prediction.fragment_classification import classify_fragments
+from spectrseqtools.prediction.fragment_classification import FragmentClassifier
 from spectrseqtools.prediction.prediction import Predictor
 from spectrseqtools.preprocessing.preprocessing import Preprocessor
 
@@ -51,6 +51,9 @@ def predict(options: PredictionOptions):
         input_path=options.fragments, output_dir=options.output_dir
     )
 
+    # Initialize fragment classifier
+    classifier = FragmentClassifier(file_path=options.meta)
+
     with open(options.meta, "r") as f:
         meta = yaml.safe_load(f)
 
@@ -61,11 +64,16 @@ def predict(options: PredictionOptions):
     max_weight = alphabet.max
     alphabet.filter_by_singletons(singleton_path=options.singletons)
 
+    # Standardize intact sequence mass by removing START_END fragmentation to gain SU mass
+    seq_mass_obs = meta["intact_mass"]
+    seq_mass_su = seq_mass_obs - classifier.start_end_fragmentation * alphabet.precision
+
     # Initialize SequenceInformation class
-    seq_info = SequenceInformation.from_file(
-        file_path=options.meta,
+    seq_info = SequenceInformation(
+        max_len=int(seq_mass_su / alphabet.min),
+        su_mass=seq_mass_su,
+        obs_mass=seq_mass_obs,
         modification_rate=options.modification_rate,
-        alphabet=alphabet,
     )
 
     # Initialize CompositionInferrer class
@@ -85,10 +93,7 @@ def predict(options: PredictionOptions):
     fragments.filter_by_intensity(cutoff=intensity_cutoff)
 
     # Classify raw fragments into SU-fragments
-    fragments = classify_fragments(
-        fragments=fragments,
-        fragmentation_dict=seq_info.fragmentation,
-    )
+    fragments = classifier.classify(fragments=fragments)
 
     fragments.filter_by_intact_mass(intact_mass=inferrer.seq.su_mass)
     fragments.filter_with_traceback_matrix(inferrer=inferrer)

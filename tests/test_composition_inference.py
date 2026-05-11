@@ -34,7 +34,6 @@ def test_infer_composition_with_recursion(seq, tolerance):
         su_mass=seq_weight,
         obs_mass=seq_weight,
         modification_rate=MOD_RATE,
-        fragmentation={},
     )
 
     inferrer = CompositionInferrer(
@@ -66,7 +65,6 @@ def test_infer_composition_with_matrix(seq, compression, tolerance, memo):
         su_mass=seq_weight,
         obs_mass=seq_weight,
         modification_rate=MOD_RATE,
-        fragmentation={},
     )
 
     inferrer = CompositionInferrer(
