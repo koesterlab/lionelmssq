@@ -205,49 +205,18 @@ class NucleotideAlphabet:
         return len(self.alphabet)
 
     @property
-    def min(self) -> float:
-        """Return lowest nucleotide mass in alphabet."""
-        return min(mass.nucleotide_mass for mass in self.alphabet)
+    def min(self) -> NucleotideMass:
+        """Return lightest nucleotide in alphabet."""
+        return self.alphabet[0]
 
     @property
-    def max(self) -> float:
-        """Return highest nucleotide mass in alphabet."""
-        return max(mass.nucleotide_mass for mass in self.alphabet)
+    def max(self) -> NucleotideMass:
+        """Return heaviest nucleotide in alphabet."""
+        return self.alphabet[-1]
 
-    @property
-    def min_mz(self) -> float:
-        """Return lowest singleton m/z in alphabet."""
-        return min(mass.singleton_mz for mass in self.alphabet)
-
-    @property
-    def max_mz(self) -> float:
-        """Return highest singleton m/z in alphabet."""
-        return max(mass.singleton_mz for mass in self.alphabet)
-
-    @property
-    def max_integer(self) -> int:
-        """Return highest integer mass in alphabet."""
-        return max(mass.mass for mass in self.alphabet)
-
-    def get_mass(self, idx: int) -> int:
-        """Return mass at index in alphabet."""
-        return self.alphabet[idx].mass
-
-    def get_nuc_mass(self, idx: int) -> float:
-        """Return nucleotide mass at index in alphabet."""
-        return self.alphabet[idx].mass * self.precision
-
-    def get_rep(self, idx: int) -> str:
-        """Return representative nucleotide at index in alphabet."""
-        return self.alphabet[idx].representative
-
-    def get_rate(self, idx: int) -> float:
-        """Return modification rate at index in alphabet."""
-        return self.alphabet[idx].modification_rate
-
-    def is_mod(self, idx: int) -> bool:
-        """Return whether nucleotide at index in alphabet is modification."""
-        return self.alphabet[idx].is_modification
+    def get(self, idx: int) -> NucleotideMass:
+        """Return nucleotide at index in alphabet."""
+        return self.alphabet[idx]
 
     def fmt(self, rep: str) -> str:
         """Return formatted nucleotide by representative in alphabet."""

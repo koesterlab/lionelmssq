@@ -154,7 +154,9 @@ class LinearProgramInstance:
             fragment_masses[j]
             - lpSum(
                 [
-                    self.z[i][j][k] * self.alphabet.get_nuc_mass(i)
+                    self.z[i][j][k]
+                    * self.alphabet.get(i).mass
+                    * self.alphabet.precision
                     for i in range(len(self.alphabet))
                     for k in range(self.seq_len)
                 ]
@@ -184,7 +186,7 @@ class LinearProgramInstance:
                 self.y[i][k]
                 for k in range(self.seq_len)
                 for i in range(len(self.alphabet))
-                if self.alphabet.is_mod(i)
+                if self.alphabet.get(i).is_modification
             ]
         ) <= np.ceil(inferrer.seq.modification_rate * self.seq_len)
 
@@ -245,7 +247,7 @@ class LinearProgramInstance:
     def _get_sequence(self) -> Sequence:
         return Sequence(
             sequence=[
-                self.alphabet.get_rep(self._get_sequence_nucleotide(k))
+                self.alphabet.get(self._get_sequence_nucleotide(k)).representative
                 for k in range(self.seq_len)
             ]
         )
@@ -263,7 +265,9 @@ class LinearProgramInstance:
         fragment_seq = [
             "".join(
                 [
-                    self.alphabet.get_rep(self._get_fragment_nucleotide(j, k))
+                    self.alphabet.get(
+                        self._get_fragment_nucleotide(j, k)
+                    ).representative
                     for k in range(self.seq_len)
                     if self._get_fragment_nucleotide(j, k) is not None
                 ]
@@ -275,7 +279,8 @@ class LinearProgramInstance:
         predicted_fragment_mass = [
             sum(
                 (
-                    self.alphabet.get_nuc_mass(self._get_fragment_nucleotide(j, k))
+                    self.alphabet.get(self._get_fragment_nucleotide(j, k)).mass
+                    * self.alphabet.precision
                     for k in range(self.seq_len)
                     if self._get_fragment_nucleotide(j, k) is not None
                 )

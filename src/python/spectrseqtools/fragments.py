@@ -276,7 +276,7 @@ class StandardUnitFragments:
         """
         # Determine all fragments that may be singletons
         fragments = self.fragments.filter(
-            pl.col("standard_unit_mass") <= 1.1 * inferrer.alphabet.max
+            pl.col("standard_unit_mass") <= 1.1 * inferrer.alphabet.max.nucleotide_mass
         )
 
         # Collect singleton masses

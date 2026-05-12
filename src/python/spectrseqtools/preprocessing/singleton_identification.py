@@ -38,8 +38,8 @@ class SingletonBoundaries:
     ) -> Self:
         """Set singleton boundaries based on nucleotide alphabet."""
         return SingletonBoundaries(
-            min_mz=alphabet.min_mz * (1 - boundary_factor * tolerance),
-            max_mz=alphabet.max_mz * (1 + boundary_factor * tolerance),
+            min_mz=alphabet.min.singleton_mz * (1 - boundary_factor * tolerance),
+            max_mz=alphabet.max.singleton_mz * (1 + boundary_factor * tolerance),
         )
 
 

@@ -61,7 +61,7 @@ def predict(options: PredictionOptions):
 
     # Initialize nucleotide alphabet
     alphabet = NucleotideAlphabet.from_file(modification_rate=options.modification_rate)
-    max_weight = alphabet.max
+    max_weight = alphabet.max.nucleotide_mass
     alphabet.filter_by_singletons(singleton_path=options.singletons)
 
     # Standardize intact sequence mass by removing START_END fragmentation to gain SU mass
@@ -70,7 +70,7 @@ def predict(options: PredictionOptions):
 
     # Initialize SequenceInformation class
     seq_info = SequenceInformation(
-        max_len=int(seq_mass_su / alphabet.min),
+        max_len=int(seq_mass_su / alphabet.min.nucleotide_mass),
         su_mass=seq_mass_su,
         obs_mass=seq_mass_obs,
         modification_rate=options.modification_rate,

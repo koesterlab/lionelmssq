@@ -30,7 +30,7 @@ def test_infer_composition_with_recursion(seq, tolerance):
     seq_weight = alphabet.get_seq_weight(seq)
 
     seq_info = SequenceInformation(
-        max_len=int(seq_weight / alphabet.min),
+        max_len=int(seq_weight / alphabet.min.nucleotide_mass),
         su_mass=seq_weight,
         obs_mass=seq_weight,
         modification_rate=MOD_RATE,
@@ -61,7 +61,7 @@ def test_infer_composition_with_matrix(seq, compression, tolerance, memo):
     seq_weight = alphabet.get_seq_weight(seq)
 
     seq_info = SequenceInformation(
-        max_len=int(seq_weight / alphabet.min),
+        max_len=int(seq_weight / alphabet.min.nucleotide_mass),
         su_mass=seq_weight,
         obs_mass=seq_weight,
         modification_rate=MOD_RATE,

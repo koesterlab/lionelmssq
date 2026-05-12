@@ -78,7 +78,7 @@ class TracebackMatrix:
 
         """
         # Select maximum integer mass for which matrix should be built
-        max_mass = alphabet.max_integer * MAX_SEQ_LENGTH
+        max_mass = alphabet.max.integer_mass * MAX_SEQ_LENGTH
 
         # Initialize matrix as numpy table (+ additional first row for easier indexing)
         matrix = np.zeros((len(alphabet) + 1, max_mass + 1), dtype=np.uint8)
@@ -97,8 +97,8 @@ class TracebackMatrix:
                     continue
 
                 # Add another nucleoside if possible
-                if alphabet.get_mass(i - 1) + j <= max_mass:
-                    matrix[i, j + alphabet.get_mass(i - 1)] += 2.0
+                if alphabet.get(i - 1).mass + j <= max_mass:
+                    matrix[i, j + alphabet.get(i - 1).mass] += 2.0
 
         # Remove first row (as it is no longer needed)
         return cls(matrix=np.delete(matrix, 0, axis=0), compression_rate=1)
@@ -121,7 +121,7 @@ class TracebackMatrix:
         settings = select_matrix_building_settings(compression_rate)
 
         # Select maximum integer mass for which matrix should be built
-        max_mass = alphabet.max_integer * MAX_SEQ_LENGTH
+        max_mass = alphabet.max.integer_mass * MAX_SEQ_LENGTH
 
         # Initialize bit-representation matrix as numpy table (+ additional first row
         # for easier indexing)
@@ -138,8 +138,8 @@ class TracebackMatrix:
             ]
 
             # Define number of cells to move (step) and bit shift in a cell (shift)
-            step = int(alphabet.get_mass(i - 1) / compression_rate)
-            shift = alphabet.get_mass(i - 1) % compression_rate
+            step = int(alphabet.get(i - 1).mass / compression_rate)
+            shift = alphabet.get(i - 1).mass % compression_rate
 
             # Case: Add more of current nucleotide
             for j in range(max_col):

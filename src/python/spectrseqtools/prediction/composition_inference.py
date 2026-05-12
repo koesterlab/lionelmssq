@@ -136,24 +136,26 @@ def compute_sequence_length_bound(inferrer: CompositionInferrer, dir: str) -> in
                     max_mods_all,
                     round(
                         inferrer.seq.max_len
-                        * inferrer.alphabet.get_rate(current_idx - 1)
+                        * inferrer.alphabet.get(current_idx - 1).modification_rate
                     ),
                 )
             )
 
         # Backtrack to the next left-side column if possible
         if (current_value >> 1) % 2 == 1:
-            if not inferrer.alphabet.is_mod(current_idx) or (
+            current_nuc = inferrer.alphabet.get(current_idx)
+
+            if not current_nuc.is_modification or (
                 max_mods_all > 0 and max_mods_ind > 0
             ):
                 # Adjust number of still allowed modifications if necessary
-                if inferrer.alphabet.is_mod(current_idx):
+                if current_nuc.is_modification:
                     max_mods_all -= 1
                     max_mods_ind -= 1
 
                 bounds.append(
                     backtrack(
-                        total_mass - inferrer.alphabet.get_mass(current_idx),
+                        total_mass - current_nuc.mass,
                         current_idx,
                         max_mods_all,
                         max_mods_ind,
@@ -188,7 +190,9 @@ def compute_sequence_length_bound(inferrer: CompositionInferrer, dir: str) -> in
                 value,
                 len(inferrer.alphabet) - 1,
                 max_modifications,
-                round(inferrer.seq.max_len * inferrer.alphabet.get_rate(-1)),
+                round(
+                    inferrer.seq.max_len * inferrer.alphabet.get(-1).modification_rate
+                ),
             )
         )
 
@@ -254,8 +258,6 @@ def infer_compositions_with_matrix(
     memo = {}
 
     def backtrack(target_mass, current_idx, max_mods_all, max_mods_ind):
-        current_mass = inferrer.alphabet.get_mass(current_idx)
-
         # If the result for this state is already computed, return it
         if with_memo and (target_mass, current_idx) in memo:
             return memo[(target_mass, current_idx)]
@@ -288,24 +290,27 @@ def infer_compositions_with_matrix(
                 current_idx - 1,
                 max_mods_all,
                 round(
-                    inferrer.seq.max_len * inferrer.alphabet.get_rate(current_idx - 1)
+                    inferrer.seq.max_len
+                    * inferrer.alphabet.get(current_idx - 1).modification_rate
                 ),
             )
 
         # Backtrack to the next left-side column if possible
         if (current_value >> 1) % 2 == 1:
-            if not inferrer.alphabet.is_mod(current_idx) or (
+            current_nuc = inferrer.alphabet.get(current_idx)
+
+            if not current_nuc.is_modification or (
                 max_mods_all > 0 and max_mods_ind > 0
             ):
                 # Adjust number of still allowed modifications if necessary
-                if inferrer.alphabet.is_mod(current_idx):
+                if current_nuc.is_modification:
                     max_mods_all -= 1
                     max_mods_ind -= 1
 
                 compositions += [
                     entry + [current_idx]
                     for entry in backtrack(
-                        target_mass - current_mass,
+                        target_mass - current_nuc.mass,
                         current_idx,
                         max_mods_all,
                         max_mods_ind,
@@ -325,7 +330,7 @@ def infer_compositions_with_matrix(
             value,
             len(inferrer.alphabet) - 1,
             max_modifications,
-            round(inferrer.seq.max_len * inferrer.alphabet.get_rate(-1)),
+            round(inferrer.seq.max_len * inferrer.alphabet.get(-1).modification_rate),
         )
 
     return CompositionList.from_list(compositions=list(solutions))
@@ -350,7 +355,7 @@ def infer_compositions_with_recursion(
     def backtrack(target_mass, current_idx, used_mods_all, used_mods_ind):
         # If too many modifications are used, return empty list
         if used_mods_all > max_modifications or used_mods_ind > round(
-            inferrer.seq.max_len * inferrer.alphabet.get_rate(current_idx)
+            inferrer.seq.max_len * inferrer.alphabet.get(current_idx).modification_rate
         ):
             return []
 
@@ -371,19 +376,22 @@ def infer_compositions_with_recursion(
 
         # Try each mass starting from the current position to avoid duplicates
         for idx in range(current_idx, len(inferrer.alphabet)):
-            current_mass = inferrer.alphabet.get_mass(idx=idx)
-            is_mod = inferrer.alphabet.is_mod(idx=idx)
+            current_nuc = inferrer.alphabet.get(idx=idx)
 
             # Add compositions for recursion with reduced target and current mass
             compositions += [
                 [idx] + entry
                 for entry in backtrack(
-                    target_mass - current_mass,
+                    target_mass - current_nuc.mass,
                     idx,
-                    used_mods_all + 1 if is_mod else used_mods_all,
+                    used_mods_all + 1 if current_nuc.is_modification else used_mods_all,
                     0
                     if idx != current_idx
-                    else (used_mods_ind + 1 if is_mod else used_mods_ind),
+                    else (
+                        used_mods_ind + 1
+                        if current_nuc.is_modification
+                        else used_mods_ind
+                    ),
                 )
             ]
 

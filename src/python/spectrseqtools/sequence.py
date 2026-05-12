@@ -47,14 +47,18 @@ class SkeletonSequence:
         """Return minimum mass a sequence from the skeleton could possibly have."""
         total_mass = 0
         for nucs in self.sequence:
-            total_mass += min((alphabet.get_nuc_mass(nuc) for nuc in nucs), default=0)
+            total_mass += min(
+                (alphabet.get(nuc).mass * alphabet.precision for nuc in nucs), default=0
+            )
         return total_mass
 
     def max_mass(self, alphabet: NucleotideAlphabet) -> float:
         """Return maximum mass a sequence from the skeleton could possibly have."""
         total_mass = 0
         for nucs in self.sequence:
-            total_mass += max((alphabet.get_nuc_mass(nuc) for nuc in nucs), default=0)
+            total_mass += max(
+                (alphabet.get(nuc).mass * alphabet.precision for nuc in nucs), default=0
+            )
         return total_mass
 
     def update_with_compositions(
