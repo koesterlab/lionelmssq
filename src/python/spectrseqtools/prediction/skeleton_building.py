@@ -10,11 +10,7 @@ from spectrseqtools.common import calculate_error_threshold
 from spectrseqtools.compositions import CompositionList
 from spectrseqtools.dataclasses import SolverParameters
 from spectrseqtools.fragments import StandardUnitFragments
-from spectrseqtools.prediction.composition_inference import (
-    CompositionInferrer,
-    compute_sequence_length_bound,
-    infer_compositions_with_matrix,
-)
+from spectrseqtools.prediction.composition_inference import CompositionInferrer
 from spectrseqtools.prediction.sequence_inference import LinearProgramInstance
 from spectrseqtools.sequence import SkeletonSequence
 
@@ -204,8 +200,8 @@ class SkeletonBuilder:
         best_len = -1
         best_val = np.inf
         for len_cand in range(
-            compute_sequence_length_bound(inferrer=self.inferrer, dir="lower"),
-            compute_sequence_length_bound(inferrer=self.inferrer, dir="upper") + 1,
+            self.inferrer.infer_length_bound(direction="lower"),
+            self.inferrer.infer_length_bound(direction="upper") + 1,
         ):
             # Skip candidates resulting in invalid sequences
             # TODO: Use merged sequence for additional tightening of bounds
@@ -295,8 +291,8 @@ class SkeletonBuilder:
 
         """
         # Determine lower and upper bound
-        min_len = compute_sequence_length_bound(inferrer=self.inferrer, dir="lower")
-        max_len = compute_sequence_length_bound(inferrer=self.inferrer, dir="upper")
+        min_len = self.inferrer.infer_length_bound(direction="lower")
+        max_len = self.inferrer.infer_length_bound(direction="upper")
 
         # Determine sequence length with the highest similarity between skeleton parts
         best_len = min_len
@@ -419,11 +415,7 @@ class SkeletonBuilder:
             current_mass,
             self.inferrer.tolerance,
         )
-        return infer_compositions_with_matrix(
-            mass=diff,
-            inferrer=self.inferrer,
-            threshold=threshold,
-        )
+        return self.inferrer.infer_compositions(mass=diff, threshold=threshold)
 
 
 def jaccard_index(input_tuple: Tuple[Set[str], Set[str]]) -> float:

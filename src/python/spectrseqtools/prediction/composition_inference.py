@@ -1,3 +1,6 @@
+# -*- coding: utf-8 -*-
+"""Module for composition inference."""
+
 from dataclasses import dataclass
 from typing import Tuple
 
@@ -9,6 +12,8 @@ from spectrseqtools.prediction.traceback_matrix import TracebackMatrix
 
 @dataclass
 class CompositionInferrer:
+    """Class to infer compositions."""
+
     matrix: TracebackMatrix
     tolerance: float
     seq: SequenceInformation
@@ -35,6 +40,7 @@ class CompositionInferrer:
             )
 
     def adapt_individual_modification_rates_by_alphabet_reduction(self, alphabet):
+        """Adapt modification rates for each nucleotide based on new alphabet."""
         mapping = self.alphabet.adapt_individual_modification_rates_by_alphabet(
             alphabet=alphabet
         )
@@ -42,6 +48,7 @@ class CompositionInferrer:
         return mapping
 
     def _reduce_nucleotide_alphabet(self, compression_rate: int = None):
+        """Reduce alphabet by removing nucleotides that can never occur."""
         # Get current alphabet size
         alphabet_size = len(self.alphabet)
 
@@ -62,9 +69,28 @@ class CompositionInferrer:
         )
 
     def print_alphabet(self) -> None:
+        """Print alphabet."""
         print(self.alphabet)
 
     def set_target(self, mass: float, threshold: float = None) -> Tuple[int, int]:
+        """
+        Return precision-adjusted target and threshold (as integers).
+
+        Parameters
+        ----------
+        mass : float
+            Given target mass.
+        threshold : float
+            Given threshold.
+
+        Returns
+        -------
+        mass : int
+            Precision-adapted inference target.
+        threshold : int
+            Precision-adapted inference threshold.
+
+        """
         # Convert the target to an integer for easy operations
         target = self.alphabet.set_target(value=mass)
 
@@ -77,263 +103,304 @@ class CompositionInferrer:
 
         return target, threshold
 
+    def infer_length_bound(self, direction: str) -> int:
+        """
+        Return bound on length for any composition of the given mass.
 
-def compute_sequence_length_bound(inferrer: CompositionInferrer, dir: str) -> int:
-    """
-    Return bound on length for any sequence that could explain the given mass.
-    """
-    # Set maximum number of modifications
-    max_modifications = inferrer.seq.max_modifications
+        Parameters
+        ----------
+        direction : str
+            Bound direction.
 
-    target, threshold = inferrer.set_target(
-        mass=inferrer.seq.su_mass, threshold=inferrer.tolerance * inferrer.seq.obs_mass
-    )
+        Returns
+        -------
+        opt_len : int
+            Tightest bound on composition length in given direction.
 
-    # Initialize memorization dict
-    memo = {}
+        """
+        # Set maximum number of modifications
+        max_modifications = self.seq.max_modifications
 
-    # Select default value based on desired bound
-    match dir:
-        case "lower":
-            default_bound = inferrer.seq.max_len + 1
-        case "upper":
-            default_bound = -1
-        case _:
-            raise NotImplementedError(f"Support for '{dir}' is currently not given.")
+        target, threshold = self.set_target(
+            mass=self.seq.su_mass, threshold=self.tolerance * self.seq.obs_mass
+        )
 
-    def backtrack(total_mass, current_idx, max_mods_all, max_mods_ind):
-        # If the result for this state is already computed, return it
-        if (total_mass, current_idx) in memo:
-            return memo[(total_mass, current_idx)]
+        # Initialize memorization dict
+        memo = {}
 
-        # Return default value for cells outside of matrix
-        if total_mass < 0 or current_idx < 0:
-            return default_bound
+        # Select default value based on desired bound
+        match direction:
+            case "lower":
+                default_bound = self.seq.max_len + 1
+            case "upper":
+                default_bound = -1
+            case _:
+                raise NotImplementedError(
+                    f"Support for '{direction}' is currently not given."
+                )
 
-        # Initialize new counter for valid start in matrix
-        if total_mass == 0:
-            return 0
+        def backtrack(total_mass, current_idx, max_mods_all, max_mods_ind):
+            # If the result for this state is already computed, return it
+            if (total_mass, current_idx) in memo:
+                return memo[(total_mass, current_idx)]
 
-        # Assert that total mass is in matrix
-        inferrer.matrix.assert_in_matrix(mass=total_mass)
+            # Return default value for cells outside of matrix
+            if total_mass < 0 or current_idx < 0:
+                return default_bound
 
-        # Get current value
-        current_value = inferrer.matrix.get_entry(mass=total_mass, nuc_idx=current_idx)
+            # Initialize new counter for valid start in matrix
+            if total_mass == 0:
+                return 0
 
-        # Return default value for unreachable cells
-        if inferrer.matrix.is_unreachable(value):
-            return default_bound
+            # Assert that total mass is in matrix
+            self.matrix.assert_in_matrix(mass=total_mass)
 
-        # Initialize list of possible bounds
-        bounds = [default_bound]
+            # Get current value
+            current_value = self.matrix.get_entry(mass=total_mass, nuc_idx=current_idx)
 
-        # Backtrack to the next row above if possible
-        if current_value % 2 == 1:
-            bounds.append(
+            # Return default value for unreachable cells
+            if self.matrix.is_unreachable(value):
+                return default_bound
+
+            # Initialize list of possible bounds
+            bounds = [default_bound]
+
+            # Backtrack to the next row above if possible
+            if current_value % 2 == 1:
+                bounds.append(
+                    backtrack(
+                        total_mass,
+                        current_idx - 1,
+                        max_mods_all,
+                        round(
+                            self.seq.max_len
+                            * self.alphabet.get(current_idx - 1).modification_rate
+                        ),
+                    )
+                )
+
+            # Backtrack to the next left-side column if possible
+            if (current_value >> 1) % 2 == 1:
+                current_nuc = self.alphabet.get(current_idx)
+
+                if not current_nuc.is_modification or (
+                    max_mods_all > 0 and max_mods_ind > 0
+                ):
+                    # Adjust number of still allowed modifications if necessary
+                    if current_nuc.is_modification:
+                        max_mods_all -= 1
+                        max_mods_ind -= 1
+
+                    bounds.append(
+                        backtrack(
+                            total_mass - current_nuc.mass,
+                            current_idx,
+                            max_mods_all,
+                            max_mods_ind,
+                        )
+                        + 1
+                    )
+
+            # Select result based on desired bound
+            match direction:
+                case "lower":
+                    result = min(bounds)
+                case "upper":
+                    result = max(bounds)
+                case _:
+                    raise NotImplementedError(
+                        f"Support for '{direction}' is currently not given."
+                    )
+
+            # Store result in memo
+            memo[(total_mass, current_idx)] = result
+
+            return result
+
+        # Compute bounds for all masses within the threshold interval
+        solutions = []
+        for value in range(
+            target - threshold,
+            target + threshold + 1,
+        ):
+            solutions.append(
                 backtrack(
-                    total_mass,
+                    value,
+                    len(self.alphabet) - 1,
+                    max_modifications,
+                    round(self.seq.max_len * self.alphabet.get(-1).modification_rate),
+                )
+            )
+
+        # Return solution based on desired bound and replace default value if selected
+        match direction:
+            case "lower":
+                opt_len = min(solutions)
+                if opt_len == default_bound:
+                    opt_len = 1
+            case "upper":
+                opt_len = max(solutions)
+                if opt_len == default_bound:
+                    opt_len = self.seq.max_len
+            case _:
+                raise NotImplementedError(
+                    f"Support for '{direction}' is currently not given."
+                )
+
+        return opt_len
+
+    def is_valid_mass(
+        self,
+        mass: float,
+        threshold: float = None,
+    ) -> bool:
+        """
+        Check whether a given mass has any valid composition.
+
+        Parameters
+        ----------
+        mass : float
+            Given mass.
+        threshold : float
+            Given threshold.
+
+        Returns
+        -------
+        bool
+            Flag whether a valid composition exists.
+
+        """
+        target, threshold = self.set_target(mass=mass, threshold=threshold)
+
+        for value in range(target - threshold, target + threshold + 1):
+            # Skip non-positive masses
+            if value <= 0:
+                continue
+
+            # Assert that value is in matrix
+            self.matrix.assert_in_matrix(mass=value)
+
+            # Get current value
+            current_value = self.matrix.get_entry(mass=value, nuc_idx=-1)
+
+            # Skip unreachable cells
+            if self.matrix.is_unreachable(value=current_value):
+                continue
+
+            # Return True when mass corresponds to valid entry in matrix
+            if current_value % 2 == 1 or (current_value >> 1) % 2 == 1:
+                return True
+        return False
+
+    def infer_compositions(
+        self,
+        mass: float,
+        threshold: float = None,
+        with_memo: bool = True,
+    ) -> CompositionList:
+        """
+        Return all possible nucleotide compositions that could sum up to the given mass.
+
+        Parameters
+        ----------
+        mass : float
+            Given mass.
+        threshold : float
+            Given threshold.
+        with_memo : bool
+            Flag whether memorization is used.
+
+        Returns
+        -------
+        compositions : CompositionList
+            List of valid composition of the given mass.
+
+        """
+        # Set maximum number of modifications
+        max_modifications = self.seq.max_modifications
+
+        target, threshold = self.set_target(mass=mass, threshold=threshold)
+
+        # Memoization dictionary to store results for a given target
+        memo = {}
+
+        def backtrack(target_mass, current_idx, max_mods_all, max_mods_ind):
+            # If the result for this state is already computed, return it
+            if with_memo and (target_mass, current_idx) in memo:
+                return memo[(target_mass, current_idx)]
+
+            # Return empty list for cells outside of matrix
+            if target_mass < 0 or current_idx < 0:
+                return []
+
+            # Initialize a new composition for a valid start in matrix
+            if target_mass == 0:
+                return [[]]
+
+            # Assert that target mass is in matrix
+            self.matrix.assert_in_matrix(mass=target_mass)
+
+            # Get current value
+            current_value = self.matrix.get_entry(mass=target_mass, nuc_idx=current_idx)
+
+            # Return empty list for unreachable cells
+            if self.matrix.is_unreachable(value=current_value):
+                return []
+
+            # Initialize list to store all compositions for this state
+            compositions = []
+
+            # Backtrack to the next row above if possible
+            if current_value % 2 == 1:
+                compositions += backtrack(
+                    target_mass,
                     current_idx - 1,
                     max_mods_all,
                     round(
-                        inferrer.seq.max_len
-                        * inferrer.alphabet.get(current_idx - 1).modification_rate
+                        self.seq.max_len
+                        * self.alphabet.get(current_idx - 1).modification_rate
                     ),
                 )
-            )
 
-        # Backtrack to the next left-side column if possible
-        if (current_value >> 1) % 2 == 1:
-            current_nuc = inferrer.alphabet.get(current_idx)
+            # Backtrack to the next left-side column if possible
+            if (current_value >> 1) % 2 == 1:
+                current_nuc = self.alphabet.get(current_idx)
 
-            if not current_nuc.is_modification or (
-                max_mods_all > 0 and max_mods_ind > 0
-            ):
-                # Adjust number of still allowed modifications if necessary
-                if current_nuc.is_modification:
-                    max_mods_all -= 1
-                    max_mods_ind -= 1
+                if not current_nuc.is_modification or (
+                    max_mods_all > 0 and max_mods_ind > 0
+                ):
+                    # Adjust number of still allowed modifications if necessary
+                    if current_nuc.is_modification:
+                        max_mods_all -= 1
+                        max_mods_ind -= 1
 
-                bounds.append(
-                    backtrack(
-                        total_mass - current_nuc.mass,
-                        current_idx,
-                        max_mods_all,
-                        max_mods_ind,
-                    )
-                    + 1
-                )
+                    compositions += [
+                        entry + [current_idx]
+                        for entry in backtrack(
+                            target_mass - current_nuc.mass,
+                            current_idx,
+                            max_mods_all,
+                            max_mods_ind,
+                        )
+                    ]
 
-        # Select result based on desired bound
-        match dir:
-            case "lower":
-                result = min(bounds)
-            case "upper":
-                result = max(bounds)
-            case _:
-                raise NotImplementedError(
-                    f"Support for '{dir}' is currently not given."
-                )
+            # Store result in memo
+            if with_memo:
+                memo[(target_mass, current_idx)] = compositions
 
-        # Store result in memo
-        memo[(total_mass, current_idx)] = result
+            return compositions
 
-        return result
-
-    # Compute bounds for all masses within the threshold interval
-    solutions = []
-    for value in range(
-        target - threshold,
-        target + threshold + 1,
-    ):
-        solutions.append(
-            backtrack(
+        # Compute all valid solutions within the threshold interval
+        solutions = []
+        for value in range(target - threshold, target + threshold + 1):
+            solutions += backtrack(
                 value,
-                len(inferrer.alphabet) - 1,
+                len(self.alphabet) - 1,
                 max_modifications,
-                round(
-                    inferrer.seq.max_len * inferrer.alphabet.get(-1).modification_rate
-                ),
-            )
-        )
-
-    # Return solution based on desired bound and replace default value if selected
-    match dir:
-        case "lower":
-            opt_len = min(solutions)
-            if opt_len == default_bound:
-                opt_len = 1
-        case "upper":
-            opt_len = max(solutions)
-            if opt_len == default_bound:
-                opt_len = inferrer.seq.max_len
-        case _:
-            raise NotImplementedError(f"Support for '{dir}' is currently not given.")
-
-    return opt_len
-
-
-def is_valid_mass(
-    mass: float,
-    inferrer: CompositionInferrer,
-    threshold: float = None,
-) -> bool:
-    target, threshold = inferrer.set_target(mass=mass, threshold=threshold)
-
-    for value in range(target - threshold, target + threshold + 1):
-        # Skip non-positive masses
-        if value <= 0:
-            continue
-
-        # Assert that value is in matrix
-        inferrer.matrix.assert_in_matrix(mass=value)
-
-        # Get current value
-        current_value = inferrer.matrix.get_entry(mass=value, nuc_idx=-1)
-
-        # Skip unreachable cells
-        if inferrer.matrix.is_unreachable(value=current_value):
-            continue
-
-        # Return True when mass corresponds to valid entry in matrix
-        if current_value % 2 == 1 or (current_value >> 1) % 2 == 1:
-            return True
-    return False
-
-
-def infer_compositions_with_matrix(
-    mass: float,
-    inferrer: CompositionInferrer,
-    threshold=None,
-    with_memo=True,
-) -> CompositionList:
-    """
-    Return all possible nucleotide compositions that could sum up to the given mass.
-    """
-    # Set maximum number of modifications
-    max_modifications = inferrer.seq.max_modifications
-
-    target, threshold = inferrer.set_target(mass=mass, threshold=threshold)
-
-    # Memoization dictionary to store results for a given target
-    memo = {}
-
-    def backtrack(target_mass, current_idx, max_mods_all, max_mods_ind):
-        # If the result for this state is already computed, return it
-        if with_memo and (target_mass, current_idx) in memo:
-            return memo[(target_mass, current_idx)]
-
-        # Return empty list for cells outside of matrix
-        if target_mass < 0 or current_idx < 0:
-            return []
-
-        # Initialize a new composition for a valid start in matrix
-        if target_mass == 0:
-            return [[]]
-
-        # Assert that target mass is in matrix
-        inferrer.matrix.assert_in_matrix(mass=target_mass)
-
-        # Get current value
-        current_value = inferrer.matrix.get_entry(mass=target_mass, nuc_idx=current_idx)
-
-        # Return empty list for unreachable cells
-        if inferrer.matrix.is_unreachable(value=current_value):
-            return []
-
-        # Initialize list to store all compositions for this state
-        compositions = []
-
-        # Backtrack to the next row above if possible
-        if current_value % 2 == 1:
-            compositions += backtrack(
-                target_mass,
-                current_idx - 1,
-                max_mods_all,
-                round(
-                    inferrer.seq.max_len
-                    * inferrer.alphabet.get(current_idx - 1).modification_rate
-                ),
+                round(self.seq.max_len * self.alphabet.get(-1).modification_rate),
             )
 
-        # Backtrack to the next left-side column if possible
-        if (current_value >> 1) % 2 == 1:
-            current_nuc = inferrer.alphabet.get(current_idx)
-
-            if not current_nuc.is_modification or (
-                max_mods_all > 0 and max_mods_ind > 0
-            ):
-                # Adjust number of still allowed modifications if necessary
-                if current_nuc.is_modification:
-                    max_mods_all -= 1
-                    max_mods_ind -= 1
-
-                compositions += [
-                    entry + [current_idx]
-                    for entry in backtrack(
-                        target_mass - current_nuc.mass,
-                        current_idx,
-                        max_mods_all,
-                        max_mods_ind,
-                    )
-                ]
-
-        # Store result in memo
-        if with_memo:
-            memo[(target_mass, current_idx)] = compositions
-
-        return compositions
-
-    # Compute all valid solutions within the threshold interval
-    solutions = []
-    for value in range(target - threshold, target + threshold + 1):
-        solutions += backtrack(
-            value,
-            len(inferrer.alphabet) - 1,
-            max_modifications,
-            round(inferrer.seq.max_len * inferrer.alphabet.get(-1).modification_rate),
-        )
-
-    return CompositionList.from_list(compositions=list(solutions))
+        return CompositionList.from_list(compositions=list(solutions))
 
 
 def infer_compositions_with_recursion(
@@ -342,7 +409,22 @@ def infer_compositions_with_recursion(
     threshold=None,
 ) -> CompositionList:
     """
-    Returns all possible nucleotide compositions that could sum up to the given mass.
+    Return all possible nucleotide compositions that could sum up to the given mass.
+
+    Parameters
+    ----------
+    mass : float
+        Given mass.
+    inferrer : CompositionInferrer
+        CompositionInferrer.
+    threshold : float
+        Given threshold.
+
+    Returns
+    -------
+    compositions : CompositionList
+        List of valid composition of the given mass.
+
     """
     # Set maximum number of modifications
     max_modifications = inferrer.seq.max_modifications

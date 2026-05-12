@@ -11,11 +11,7 @@ from loguru import logger
 from spectrseqtools.common import calculate_error_threshold
 from spectrseqtools.dataclasses import SequenceInformation
 from spectrseqtools.masses import PRECISION
-from spectrseqtools.prediction.composition_inference import (
-    CompositionInferrer,
-    infer_compositions_with_matrix,
-    is_valid_mass,
-)
+from spectrseqtools.prediction.composition_inference import CompositionInferrer
 from spectrseqtools.prediction.sequence_inference import LinearProgramInstance
 from spectrseqtools.sequence import SkeletonSequence
 
@@ -226,9 +222,8 @@ class StandardUnitFragments:
             self.fragments.with_columns(
                 pl.struct("observed_mass", "standard_unit_mass")
                 .map_elements(
-                    lambda x: is_valid_mass(
+                    lambda x: inferrer.is_valid_mass(
                         mass=x["standard_unit_mass"],
-                        inferrer=inferrer,
                         threshold=inferrer.tolerance * x["observed_mass"],
                     ),
                     return_dtype=bool,
@@ -283,9 +278,8 @@ class StandardUnitFragments:
         compositions = {}
         for frag in fragments.rows(named=True):
             # Compute mass compositions
-            comps = infer_compositions_with_matrix(
+            comps = inferrer.infer_compositions(
                 mass=frag["standard_unit_mass"],
-                inferrer=inferrer,
                 threshold=inferrer.tolerance * frag["observed_mass"],
             )
 
@@ -410,11 +404,7 @@ class StandardUnitFragments:
                 observed_masses[end],
                 inferrer.tolerance,
             )
-            comp = infer_compositions_with_matrix(
-                mass=diff,
-                inferrer=inferrer,
-                threshold=diff_error,
-            )
+            comp = inferrer.infer_compositions(mass=diff, threshold=diff_error)
             if len(comp) > 0:
                 compositions[diff] = comp
             if end == len(self) - 1:
