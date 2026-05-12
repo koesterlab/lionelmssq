@@ -5,9 +5,6 @@ import importlib.resources
 
 import polars as pl
 
-# Maximum variance for intact mass
-MAX_VARIANCE = 1
-
 # Set the number of decimal places up to which to consider nucleoside masses
 DECIMAL_PLACES = 3
 

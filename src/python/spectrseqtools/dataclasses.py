@@ -10,7 +10,6 @@ from typing import List, Self
 import numpy as np
 import polars as pl
 
-from spectrseqtools.masses import MAX_VARIANCE
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 from spectrseqtools.sequence import SkeletonSequence
 
@@ -19,6 +18,9 @@ MASSES = pl.read_csv(
     (importlib.resources.files(__package__) / "assets" / "masses.tsv"),
     separator="\t",
 )
+
+# Maximum variance for intact mass
+MAX_VARIANCE = 1
 
 
 @dataclass
@@ -67,11 +69,22 @@ class SequenceInformation:
     su_mass: float
     obs_mass: float
     modification_rate: float
+    max_variance: int = MAX_VARIANCE
 
     @property
     def max_modifications(self) -> int:
         """Return maximum number of modifications."""
         return np.ceil(self.modification_rate * self.max_len)
+
+    @property
+    def lower_intact_mass_bound(self) -> float:
+        """Return lower bound for valid intact mass."""
+        return self.su_mass - self.max_variance
+
+    @property
+    def upper_intact_mass_bound(self) -> float:
+        """Return upper bound for valid intact mass."""
+        return self.su_mass + self.max_variance
 
     def validate_sequence(
         self, seq: SkeletonSequence, alphabet: NucleotideAlphabet
@@ -93,11 +106,11 @@ class SequenceInformation:
 
         """
         # Check whether mass interval defined by skeleton contains sequence mass
-        # Use MAX_VARIANCE to accommodate for uncertainty in sequence mass selection
+        # Use maximum variance to accommodate for uncertainty in sequence mass selection
         return (
-            seq.min_mass(alphabet=alphabet) - MAX_VARIANCE
+            seq.min_mass(alphabet=alphabet) - self.max_variance
             <= self.su_mass
-            <= seq.max_mass(alphabet=alphabet) + MAX_VARIANCE
+            <= seq.max_mass(alphabet=alphabet) + self.max_variance
         )
 
 

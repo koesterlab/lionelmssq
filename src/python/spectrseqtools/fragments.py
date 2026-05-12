@@ -9,7 +9,8 @@ import polars as pl
 from loguru import logger
 
 from spectrseqtools.common import calculate_error_threshold
-from spectrseqtools.masses import MAX_VARIANCE, PRECISION
+from spectrseqtools.dataclasses import SequenceInformation
+from spectrseqtools.masses import PRECISION
 from spectrseqtools.prediction.composition_inference import (
     CompositionInferrer,
     infer_compositions_with_matrix,
@@ -183,7 +184,7 @@ class StandardUnitFragments:
             )
         )
 
-    def filter_by_intact_mass(self, intact_mass: float) -> None:
+    def filter_by_intact_mass(self, seq_info: SequenceInformation) -> None:
         """
         Filter SU-fragments by intact mass.
 
@@ -193,18 +194,18 @@ class StandardUnitFragments:
 
         Parameters
         ----------
-        intact_mass : float
-            Intact sequence mass.
+        seq_info : SequenceInformation
+            General sequence information.
 
         """
         # Filter out fragments that have a too high SU mass (within variance)
         self.fragments = self.fragments.filter(
-            pl.col("standard_unit_mass") < intact_mass + MAX_VARIANCE
+            pl.col("standard_unit_mass") < seq_info.upper_intact_mass_bound
         )
 
         # Filter out all intact fragments with a too low SU mass (within variance)
         self.fragments = self.fragments.filter(
-            (pl.col("standard_unit_mass") > intact_mass - MAX_VARIANCE)
+            (pl.col("standard_unit_mass") > seq_info.lower_intact_mass_bound)
             | ~(
                 pl.col("fragmentation").str.contains("START")
                 & pl.col("fragmentation").str.contains("END")

@@ -95,7 +95,7 @@ def predict(options: PredictionOptions):
     # Classify raw fragments into SU-fragments
     fragments = classifier.classify(fragments=fragments)
 
-    fragments.filter_by_intact_mass(intact_mass=inferrer.seq.su_mass)
+    fragments.filter_by_intact_mass(seq_info=seq_info)
     fragments.filter_with_traceback_matrix(inferrer=inferrer)
 
     # Save SU-fragments
