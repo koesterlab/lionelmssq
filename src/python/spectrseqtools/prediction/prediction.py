@@ -99,7 +99,8 @@ class Predictor:
         try:
             lp_instance = LinearProgramInstance(
                 fragments=fragments.fragments,
-                inferrer=self.inferrer,
+                alphabet=self.inferrer.alphabet,
+                seq=self.inferrer.seq,
                 skeleton_seq=skeleton_seq,
             )
 

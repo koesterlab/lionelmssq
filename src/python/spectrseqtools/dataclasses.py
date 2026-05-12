@@ -66,10 +66,11 @@ class SolverParameters:
 class SequenceInformation:
     """Class for general information related to the sequence."""
 
-    max_len: int
+    modification_rate: float
     su_mass: float
     obs_mass: float
-    modification_rate: float
+    max_len: int
+    min_len: int = 0
     max_variance: int = MAX_VARIANCE
 
     @property

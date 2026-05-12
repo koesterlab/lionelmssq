@@ -8,11 +8,7 @@ import numpy as np
 
 from spectrseqtools.common import calculate_error_threshold
 from spectrseqtools.compositions import CompositionList
-from spectrseqtools.dataclasses import (
-    LowerLengthBound,
-    SolverParameters,
-    UpperLengthBound,
-)
+from spectrseqtools.dataclasses import SolverParameters
 from spectrseqtools.fragments import StandardUnitFragments
 from spectrseqtools.prediction.composition_inference import CompositionInferrer
 from spectrseqtools.prediction.sequence_inference import LinearProgramInstance
@@ -66,6 +62,7 @@ class SkeletonBuilder:
                 alphabet=start_skeleton.nucleotides.union(end_skeleton.nucleotides)
             )
         )
+        self.inferrer.update_sequence_length()
         start_skeleton.update_indexing(mapping=mapping)
         end_skeleton.update_indexing(mapping=mapping)
 
@@ -89,6 +86,7 @@ class SkeletonBuilder:
 
         # Combine both skeleton sequences
         skeleton_seq = start_skeleton.merge(other=end_skeleton, seq_len=seq_len)
+        self.inferrer.update_sequence_length(seq_len=len(skeleton_seq))
         print("Skeleton sequence (combined)\t= ", skeleton_seq)
 
         # Combine all fragments into one list
@@ -203,15 +201,7 @@ class SkeletonBuilder:
         # Determine sequence length with the best LP score
         best_len = -1
         best_val = np.inf
-        for len_cand in range(
-            self.inferrer.infer_length_bound(
-                bound=LowerLengthBound(max_len=self.inferrer.seq.max_len)
-            ),
-            self.inferrer.infer_length_bound(
-                bound=UpperLengthBound(max_len=self.inferrer.seq.max_len)
-            )
-            + 1,
-        ):
+        for len_cand in range(self.inferrer.seq.min_len, self.inferrer.seq.max_len + 1):
             # Skip candidates resulting in invalid sequences
             # TODO: Use merged sequence for additional tightening of bounds
             if not self.inferrer.seq.validate_sequence(
@@ -271,7 +261,8 @@ class SkeletonBuilder:
         try:
             lp_instance = LinearProgramInstance(
                 fragments=terminal_fragments.fragments,
-                inferrer=self.inferrer,
+                alphabet=self.inferrer.alphabet,
+                seq=self.inferrer.seq,
                 skeleton_seq=skeleton_seq,
             )
         except Exception:
@@ -299,18 +290,10 @@ class SkeletonBuilder:
             Selected sequence length.
 
         """
-        # Determine lower and upper bound
-        min_len = self.inferrer.infer_length_bound(
-            bound=LowerLengthBound(max_len=self.inferrer.seq.max_len)
-        )
-        max_len = self.inferrer.infer_length_bound(
-            bound=UpperLengthBound(max_len=self.inferrer.seq.max_len)
-        )
-
         # Determine sequence length with the highest similarity between skeleton parts
-        best_len = min_len
+        best_len = self.inferrer.seq.min_len
         best_val = -1
-        for len_cand in range(min_len, max_len + 1):
+        for len_cand in range(self.inferrer.seq.min_len, self.inferrer.seq.max_len + 1):
             # Skip candidates resulting in invalid sequences
             if not self.inferrer.seq.validate_sequence(
                 seq=start_skeleton.combine(other=end_skeleton, seq_len=len_cand),

@@ -1,3 +1,6 @@
+# -*- coding: utf-8 -*-
+"""Module for sequence inference."""
+
 from itertools import combinations
 from typing import Any, Set
 
@@ -17,14 +20,17 @@ from spectrseqtools.dataclasses import (
     PredictedFragments,
     Prediction,
     Sequence,
+    SequenceInformation,
     SolverParameters,
 )
-from spectrseqtools.prediction.composition_inference import CompositionInferrer
+from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
+from spectrseqtools.sequence import SkeletonSequence
 
 MILP_QUASI_ONE_THRESHOLD = 0.9
 
 
 def milp_is_one(var, threshold=MILP_QUASI_ONE_THRESHOLD):
+    """Return whether variable is over threshold."""
     # Due to the LP relaxation, the LP sometimes does not exactly output
     # probabilities of 1 for one nucleotide or one position.
     # Hence, we need to set a threshold for the LP relaxation.
@@ -39,67 +45,69 @@ def get_singleton_set_item(set_: Set[Any]) -> Any:
 
 
 class LinearProgramInstance:
-    def __init__(self, fragments, inferrer: CompositionInferrer, skeleton_seq):
+    """Class for linear program instance."""
+
+    def __init__(
+        self,
+        fragments,
+        alphabet: NucleotideAlphabet,
+        seq: SequenceInformation,
+        skeleton_seq: SkeletonSequence,
+    ):
         # i = 1,...,N: (modified) nucleotides
         # j = 1,...,M: fragments
         # k = 1,...,S: positions in the sequence
         self.fragments = fragments
-        self.seq_len = len(skeleton_seq)
-        self.alphabet = inferrer.alphabet
-
-        fragment_masses = self.fragments.get_column("standard_unit_mass").to_list()
-        valid_fragment_range = list(range(len(fragment_masses)))
+        self.seq = seq
+        self.alphabet = alphabet
 
         # x: binary variables indicating fragment j presence at position k
-        self.x = self._set_x(valid_fragment_range, fragments)
+        self.x = self._set_x()
         # y: binary variables indicating nucleotide i at position k
         self.y = self._set_y(skeleton_seq)
         # z: binary variables indicating product of x and y
-        self.z = self._set_z(valid_fragment_range)
+        self.z = self._set_z()
 
         # predicted_mass_diff: difference between a fragment's SU-mass
         # and the sum of nucleotide masses assigned by the MILP prediction
-        self.predicted_mass_diff = self._set_predicted_mass_difference(
-            fragment_masses, valid_fragment_range
-        )
+        self.predicted_mass_diff = self._set_predicted_mass_difference()
 
-        self.problem = self._define_lp_problem(valid_fragment_range, inferrer)
-
-    def _set_x(self, valid_fragment_range, fragments):
+    def _set_x(self):
+        """Return binary variables indicating fragment j presence at position k."""
         x = [
             [
                 LpVariable(f"x_{j},{k}", lowBound=0, upBound=1, cat=LpInteger)
-                for k in range(self.seq_len)
+                for k in range(self.seq.max_len)
             ]
-            for j in valid_fragment_range
+            for j in range(len(self.fragments))
         ]
 
-        for j in range(len(fragments)):
+        for j in range(len(self.fragments)):
             # Ensure intact fragments are aligned at the whole sequence
-            if fragments.item(j, "fragmentation") == "START_END":
-                for k in range(self.seq_len):
+            if self.fragments.item(j, "fragmentation") == "START_END":
+                for k in range(self.seq.max_len):
                     x[j][k].setInitialValue(1)
                     x[j][k].fixValue()
                 continue
 
             # Ensure START fragments are aligned at the beginning of the sequence
-            if "START" in fragments.item(j, "fragmentation"):
+            if "START" in self.fragments.item(j, "fragmentation"):
                 # min_end is exclusive
-                for k in range(fragments.item(j, "min_end") + 1):
+                for k in range(self.fragments.item(j, "min_end") + 1):
                     x[j][k].setInitialValue(1)
                     x[j][k].fixValue()
-                for k in range(fragments.item(j, "max_end") + 1, self.seq_len):
+                for k in range(self.fragments.item(j, "max_end") + 1, self.seq.max_len):
                     x[j][k].setInitialValue(0)
                     x[j][k].fixValue()
                 continue
 
             # Ensure END fragments are aligned at the end of the sequence
-            if "END" in fragments.item(j, "fragmentation"):
+            if "END" in self.fragments.item(j, "fragmentation"):
                 # min_end is exclusive
-                for k in range(fragments.item(j, "max_end")):
+                for k in range(self.fragments.item(j, "max_end")):
                     x[j][k].setInitialValue(0)
                     x[j][k].fixValue()
-                for k in range(fragments.item(j, "min_end"), self.seq_len):
+                for k in range(self.fragments.item(j, "min_end"), self.seq.max_len):
                     x[j][k].setInitialValue(1)
                     x[j][k].fixValue()
                 continue
@@ -110,10 +118,11 @@ class LinearProgramInstance:
         return x
 
     def _set_y(self, skeleton_seq):
+        """Return binary variables indicating nucleotide i at position k."""
         y = [
             [
                 LpVariable(f"y_{i},{k}", lowBound=0, upBound=1, cat=LpInteger)
-                for k in range(self.seq_len)
+                for k in range(self.seq.max_len)
             ]
             for i in range(len(self.alphabet))
         ]
@@ -136,20 +145,23 @@ class LinearProgramInstance:
 
         return y
 
-    def _set_z(self, valid_fragment_range):
+    def _set_z(self):
+        """Return binary variables indicating product of x and y."""
         z = [
             [
                 [
                     LpVariable(f"z_{i},{j},{k}", lowBound=0, upBound=1, cat=LpInteger)
-                    for k in range(self.seq_len)
+                    for k in range(self.seq.max_len)
                 ]
-                for j in valid_fragment_range
+                for j in range(len(self.fragments))
             ]
             for i in range(len(self.alphabet))
         ]
         return z
 
-    def _set_predicted_mass_difference(self, fragment_masses, valid_fragment_range):
+    def _set_predicted_mass_difference(self):
+        """Return variables indicating predicted mass difference."""
+        fragment_masses = self.fragments.get_column("standard_unit_mass").to_list()
         return [
             fragment_masses[j]
             - lpSum(
@@ -158,47 +170,53 @@ class LinearProgramInstance:
                     * self.alphabet.get(i).mass
                     * self.alphabet.precision
                     for i in range(len(self.alphabet))
-                    for k in range(self.seq_len)
+                    for k in range(self.seq.max_len)
                 ]
             )
-            for j in valid_fragment_range
+            for j in range(len(self.fragments))
         ]
 
-    def _define_lp_problem(self, valid_fragment_range, inferrer):
+    def _define_lp_problem(self):
+        """Return linear-problem instance."""
         problem = LpProblem("fragment_filter", LpMinimize)
 
         # predicted_mass_diff_abs: absolute value of predicted_mass_diff
         predicted_mass_diff_abs = [
             LpVariable(f"predicted_mass_diff_abs_{j}", lowBound=0, cat=LpContinuous)
-            for j in valid_fragment_range
+            for j in range(len(self.fragments))
         ]
 
         # Set optimization function
-        problem += lpSum([predicted_mass_diff_abs[j] for j in valid_fragment_range])
+        problem += lpSum(
+            [predicted_mass_diff_abs[j] for j in range(len(self.fragments))]
+        )
 
         # Select one nucleotide per position
-        for k in range(self.seq_len):
+        for k in range(self.seq.max_len):
             problem += lpSum([self.y[i][k] for i in range(len(self.alphabet))]) == 1
 
         # Enforce universal modification rate
-        problem += lpSum(
-            [
-                self.y[i][k]
-                for k in range(self.seq_len)
-                for i in range(len(self.alphabet))
-                if self.alphabet.get(i).is_modification
-            ]
-        ) <= np.ceil(inferrer.seq.modification_rate * self.seq_len)
+        problem += (
+            lpSum(
+                [
+                    self.y[i][k]
+                    for k in range(self.seq.max_len)
+                    for i in range(len(self.alphabet))
+                    if self.alphabet.get(i).is_modification
+                ]
+            )
+            <= self.seq.max_modifications
+        )
 
         # Enforce individual modification rates
-        for i, mass in enumerate(inferrer.alphabet.alphabet[1:]):
-            problem += lpSum([self.y[i][k] for k in range(self.seq_len)]) <= np.ceil(
-                mass.modification_rate * self.seq_len
-            )
+        for i, mass in enumerate(self.alphabet.alphabet):
+            problem += lpSum(
+                [self.y[i][k] for k in range(self.seq.max_len)]
+            ) <= np.ceil(mass.modification_rate * self.seq.max_len)
 
         # Fill z with the product of binary variables x and y
-        for k in range(self.seq_len):
-            for j in valid_fragment_range:
+        for k in range(self.seq.max_len):
+            for j in range(len(self.fragments)):
                 for i in range(len(self.alphabet)):
                     problem += self.z[i][j][k] <= self.x[j][k]
                     problem += self.z[i][j][k] <= self.y[i][k]
@@ -206,8 +224,8 @@ class LinearProgramInstance:
 
         # Ensure that fragments are aligned continuously (i.e. no gaps:
         # if x[j, k1] = 1 and x[j, k2] = 1, then x[j, k_between] = 1)
-        for j in valid_fragment_range:
-            for k1, k2 in combinations(range(self.seq_len), 2):
+        for j in range(len(self.fragments)):
+            for k1, k2 in combinations(range(self.seq.max_len), 2):
                 # k1 and k2 are inclusive
                 assert k2 > k1
                 if k2 - k1 > 1:
@@ -218,26 +236,56 @@ class LinearProgramInstance:
                     )
 
         # Constrain predicted_mass_diff_abs to be the absolute value of predicted_mass_diff
-        for j in valid_fragment_range:
+        for j in range(len(self.fragments)):
             problem += predicted_mass_diff_abs[j] >= self.predicted_mass_diff[j]
             problem += predicted_mass_diff_abs[j] >= -1 * self.predicted_mass_diff[j]
 
         return problem
 
     def minimize_error(self, solver_params: SolverParameters) -> float:
+        """
+        Return minimal error.
+
+        Parameters
+        ----------
+        solver_params : SolverParameters
+            Solver parameters.
+
+        Returns
+        -------
+        float
+            Minimal error within timeframe.
+
+        """
         # Initialize solver
         solver = getSolver(**solver_params.to_dict(filter_only=True))
 
-        _ = self.problem.solve(solver)
-        score = self.problem.objective.value()
+        lp_problem = self._define_lp_problem()
+        _ = lp_problem.solve(solver)
+        score = lp_problem.objective.value()
         return np.inf if score is None else score
 
     def evaluate(self, solver_params: SolverParameters) -> Prediction:
+        """
+        Evaluate prediction.
+
+        Parameters
+        ----------
+        solver_params : SolverParameters
+            Solver parameters.
+
+        Returns
+        -------
+        Prediction
+            Best prediction result within timeframe.
+
+        """
         # Initialize solver
         solver = getSolver(**solver_params.to_dict(filter_only=False))
 
         # TODO: Make returned value resemble prediction accuracy
-        _ = self.problem.solve(solver)
+        lp_problem = self._define_lp_problem()
+        _ = lp_problem.solve(solver)
 
         # Interpret solution
         return Prediction(
@@ -248,7 +296,7 @@ class LinearProgramInstance:
         return Sequence(
             sequence=[
                 self.alphabet.get(self._get_sequence_nucleotide(k)).representative
-                for k in range(self.seq_len)
+                for k in range(self.seq.max_len)
             ]
         )
 
@@ -268,7 +316,7 @@ class LinearProgramInstance:
                     self.alphabet.get(
                         self._get_fragment_nucleotide(j, k)
                     ).representative
-                    for k in range(self.seq_len)
+                    for k in range(self.seq.max_len)
                     if self._get_fragment_nucleotide(j, k) is not None
                 ]
             )
@@ -281,7 +329,7 @@ class LinearProgramInstance:
                 (
                     self.alphabet.get(self._get_fragment_nucleotide(j, k)).mass
                     * self.alphabet.precision
-                    for k in range(self.seq_len)
+                    for k in range(self.seq.max_len)
                     if self._get_fragment_nucleotide(j, k) is not None
                 )
             )
@@ -325,14 +373,14 @@ class LinearProgramInstance:
 
     def _get_leftmost_position(self, j):
         return min(
-            (k for k in range(self.seq_len) if milp_is_one(self.x[j][k])),
+            (k for k in range(self.seq.max_len) if milp_is_one(self.x[j][k])),
             default=0,
         )
 
     def _get_rightmost_position(self, j):
         return (
             max(
-                (k for k in range(self.seq_len) if milp_is_one(self.x[j][k])),
+                (k for k in range(self.seq.max_len) if milp_is_one(self.x[j][k])),
                 default=-1,
             )
             + 1  # Right-side bound shall be exclusive, hence add 1

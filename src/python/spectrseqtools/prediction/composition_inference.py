@@ -5,7 +5,12 @@ from dataclasses import dataclass
 from typing import Tuple
 
 from spectrseqtools.compositions import CompositionList
-from spectrseqtools.dataclasses import LengthBoundary, SequenceInformation
+from spectrseqtools.dataclasses import (
+    LengthBoundary,
+    LowerLengthBound,
+    SequenceInformation,
+    UpperLengthBound,
+)
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 from spectrseqtools.prediction.traceback_matrix import TracebackMatrix
 
@@ -71,6 +76,19 @@ class CompositionInferrer:
     def print_alphabet(self) -> None:
         """Print alphabet."""
         print(self.alphabet)
+
+    def update_sequence_length(self, seq_len: int = None) -> None:
+        """Update lower and upper bound for sequence length."""
+        if seq_len is None:
+            self.seq.min_len = self.infer_length_bound(
+                bound=LowerLengthBound(max_len=self.seq.max_len)
+            )
+            self.seq.max_len = self.infer_length_bound(
+                bound=UpperLengthBound(max_len=self.seq.max_len)
+            )
+        else:
+            self.seq.min_len = seq_len
+            self.seq.max_len = seq_len
 
     def set_target(self, mass: float, threshold: float = None) -> Tuple[int, int]:
         """

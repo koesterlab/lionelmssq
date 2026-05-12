@@ -463,7 +463,8 @@ class StandardUnitFragments:
             # Initialize LP instance for a singular fragment
             filter_instance = LinearProgramInstance(
                 fragments=pl.DataFrame(fragment),
-                inferrer=inferrer,
+                alphabet=inferrer.alphabet,
+                seq=inferrer.seq,
                 skeleton_seq=skeleton_seq,
             )
 
