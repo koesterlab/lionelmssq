@@ -8,7 +8,11 @@ import numpy as np
 
 from spectrseqtools.common import calculate_error_threshold
 from spectrseqtools.compositions import CompositionList
-from spectrseqtools.dataclasses import SolverParameters
+from spectrseqtools.dataclasses import (
+    LowerLengthBound,
+    SolverParameters,
+    UpperLengthBound,
+)
 from spectrseqtools.fragments import StandardUnitFragments
 from spectrseqtools.prediction.composition_inference import CompositionInferrer
 from spectrseqtools.prediction.sequence_inference import LinearProgramInstance
@@ -200,8 +204,13 @@ class SkeletonBuilder:
         best_len = -1
         best_val = np.inf
         for len_cand in range(
-            self.inferrer.infer_length_bound(direction="lower"),
-            self.inferrer.infer_length_bound(direction="upper") + 1,
+            self.inferrer.infer_length_bound(
+                bound=LowerLengthBound(max_len=self.inferrer.seq.max_len)
+            ),
+            self.inferrer.infer_length_bound(
+                bound=UpperLengthBound(max_len=self.inferrer.seq.max_len)
+            )
+            + 1,
         ):
             # Skip candidates resulting in invalid sequences
             # TODO: Use merged sequence for additional tightening of bounds
@@ -291,8 +300,12 @@ class SkeletonBuilder:
 
         """
         # Determine lower and upper bound
-        min_len = self.inferrer.infer_length_bound(direction="lower")
-        max_len = self.inferrer.infer_length_bound(direction="upper")
+        min_len = self.inferrer.infer_length_bound(
+            bound=LowerLengthBound(max_len=self.inferrer.seq.max_len)
+        )
+        max_len = self.inferrer.infer_length_bound(
+            bound=UpperLengthBound(max_len=self.inferrer.seq.max_len)
+        )
 
         # Determine sequence length with the highest similarity between skeleton parts
         best_len = min_len

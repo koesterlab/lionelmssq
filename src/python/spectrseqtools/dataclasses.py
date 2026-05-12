@@ -3,6 +3,7 @@
 
 import importlib.resources
 import re
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Self
@@ -319,3 +320,68 @@ class Prediction:
             sequence_name=sequence_name,
             alphabet=alphabet,
         )
+
+
+@dataclass
+class LengthBoundary(ABC):
+    """Class for length boundaries."""
+
+    max_len: int
+
+    @property
+    @abstractmethod
+    def default_value(self) -> int:
+        """Return default length."""
+
+    @abstractmethod
+    def select_best(self, bounds: List[int], replace_default: bool = False) -> int:
+        """
+        Select tightest bound given in list. For final round, replace default.
+
+        Parameters
+        ----------
+        bounds : List[int]
+            List of possible length values.
+        replace_default : bool
+            Flag whether default value should be replaced.
+
+        Returns
+        -------
+        opt_len : int
+            Tightest bound from list.
+
+        """
+
+
+@dataclass
+class LowerLengthBound(LengthBoundary):
+    """Class for lower length bounds."""
+
+    @property
+    def default_value(self) -> int:
+        return self.max_len + 1
+
+    def select_best(self, bounds: List[int], replace_default: bool = False) -> int:
+        opt_len = min(bounds)
+
+        if replace_default and opt_len == self.default_value:
+            opt_len = 1
+
+        return opt_len
+
+
+@dataclass
+class UpperLengthBound(LengthBoundary):
+    """Class for upper length bounds."""
+
+    @property
+    def default_value(self) -> int:
+        return -1
+
+    def select_best(self, bounds: List[int], replace_default: bool = False) -> int:
+        opt_len = max(bounds)
+
+        if replace_default and opt_len == self.default_value:
+            opt_len = self.max_len
+
+        return opt_len

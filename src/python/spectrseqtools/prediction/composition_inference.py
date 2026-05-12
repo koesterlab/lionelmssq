@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Tuple
 
 from spectrseqtools.compositions import CompositionList
-from spectrseqtools.dataclasses import SequenceInformation
+from spectrseqtools.dataclasses import LengthBoundary, SequenceInformation
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 from spectrseqtools.prediction.traceback_matrix import TracebackMatrix
 
@@ -103,13 +103,13 @@ class CompositionInferrer:
 
         return target, threshold
 
-    def infer_length_bound(self, direction: str) -> int:
+    def infer_length_bound(self, bound: LengthBoundary) -> int:
         """
         Return bound on length for any composition of the given mass.
 
         Parameters
         ----------
-        direction : str
+        bound : LengthBoundary
             Bound direction.
 
         Returns
@@ -128,17 +128,6 @@ class CompositionInferrer:
         # Initialize memorization dict
         memo = {}
 
-        # Select default value based on desired bound
-        match direction:
-            case "lower":
-                default_bound = self.seq.max_len + 1
-            case "upper":
-                default_bound = -1
-            case _:
-                raise NotImplementedError(
-                    f"Support for '{direction}' is currently not given."
-                )
-
         def backtrack(total_mass, current_idx, max_mods_all, max_mods_ind):
             # If the result for this state is already computed, return it
             if (total_mass, current_idx) in memo:
@@ -146,7 +135,7 @@ class CompositionInferrer:
 
             # Return default value for cells outside of matrix
             if total_mass < 0 or current_idx < 0:
-                return default_bound
+                return bound.default_value
 
             # Initialize new counter for valid start in matrix
             if total_mass == 0:
@@ -160,10 +149,10 @@ class CompositionInferrer:
 
             # Return default value for unreachable cells
             if self.matrix.is_unreachable(value):
-                return default_bound
+                return bound.default_value
 
             # Initialize list of possible bounds
-            bounds = [default_bound]
+            bounds = [bound.default_value]
 
             # Backtrack to the next row above if possible
             if current_value % 2 == 1:
@@ -202,15 +191,7 @@ class CompositionInferrer:
                     )
 
             # Select result based on desired bound
-            match direction:
-                case "lower":
-                    result = min(bounds)
-                case "upper":
-                    result = max(bounds)
-                case _:
-                    raise NotImplementedError(
-                        f"Support for '{direction}' is currently not given."
-                    )
+            result = bound.select_best(bounds=bounds)
 
             # Store result in memo
             memo[(total_mass, current_idx)] = result
@@ -233,21 +214,7 @@ class CompositionInferrer:
             )
 
         # Return solution based on desired bound and replace default value if selected
-        match direction:
-            case "lower":
-                opt_len = min(solutions)
-                if opt_len == default_bound:
-                    opt_len = 1
-            case "upper":
-                opt_len = max(solutions)
-                if opt_len == default_bound:
-                    opt_len = self.seq.max_len
-            case _:
-                raise NotImplementedError(
-                    f"Support for '{direction}' is currently not given."
-                )
-
-        return opt_len
+        return bound.select_best(bounds=solutions, replace_default=True)
 
     def is_valid_mass(
         self,
