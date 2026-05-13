@@ -151,29 +151,24 @@ class CompositionInferrer:
             if (total_mass, current_idx) in memo:
                 return memo[(total_mass, current_idx)]
 
-            # Return default value for cells outside of matrix
-            if total_mass < 0 or current_idx < 0:
-                return bound.default_value
-
             # Initialize new counter for valid start in matrix
             if total_mass == 0:
                 return 0
 
-            # Assert that total mass is in matrix
-            self.matrix.assert_in_matrix(mass=total_mass)
+            # Determine possible movements
+            vertical_move, horizontal_move = self.matrix.allowed_movement(
+                mass=total_mass, nuc_idx=current_idx
+            )
 
-            # Get current value
-            current_value = self.matrix.get_entry(mass=total_mass, nuc_idx=current_idx)
-
-            # Return default value for unreachable cells
-            if self.matrix.is_unreachable(value):
+            # Return default value if no movement is possible
+            if not (vertical_move or horizontal_move):
                 return bound.default_value
 
             # Initialize list of possible bounds
             bounds = [bound.default_value]
 
             # Backtrack to the next row above if possible
-            if current_value % 2 == 1:
+            if vertical_move:
                 bounds.append(
                     backtrack(
                         total_mass,
@@ -187,7 +182,7 @@ class CompositionInferrer:
                 )
 
             # Backtrack to the next left-side column if possible
-            if (current_value >> 1) % 2 == 1:
+            if horizontal_move:
                 current_nuc = self.alphabet.get(current_idx)
 
                 if not current_nuc.is_modification or (
@@ -262,18 +257,12 @@ class CompositionInferrer:
             if value <= 0:
                 continue
 
-            # Assert that value is in matrix
-            self.matrix.assert_in_matrix(mass=value)
-
-            # Get current value
-            current_value = self.matrix.get_entry(mass=value, nuc_idx=-1)
-
-            # Skip unreachable cells
-            if self.matrix.is_unreachable(value=current_value):
-                continue
+            vertical_move, horizontal_move = self.matrix.allowed_movement(
+                mass=value, nuc_idx=len(self.matrix) - 1
+            )
 
             # Return True when mass corresponds to valid entry in matrix
-            if current_value % 2 == 1 or (current_value >> 1) % 2 == 1:
+            if vertical_move or horizontal_move:
                 return True
         return False
 
@@ -314,29 +303,23 @@ class CompositionInferrer:
             if with_memo and (target_mass, current_idx) in memo:
                 return memo[(target_mass, current_idx)]
 
-            # Return empty list for cells outside of matrix
-            if target_mass < 0 or current_idx < 0:
-                return []
-
             # Initialize a new composition for a valid start in matrix
             if target_mass == 0:
                 return [[]]
 
-            # Assert that target mass is in matrix
-            self.matrix.assert_in_matrix(mass=target_mass)
+            vertical_move, horizontal_move = self.matrix.allowed_movement(
+                mass=target_mass, nuc_idx=current_idx
+            )
 
-            # Get current value
-            current_value = self.matrix.get_entry(mass=target_mass, nuc_idx=current_idx)
-
-            # Return empty list for unreachable cells
-            if self.matrix.is_unreachable(value=current_value):
+            # Return empty list if no movement is possible
+            if not (vertical_move or horizontal_move):
                 return []
 
             # Initialize list to store all compositions for this state
             compositions = []
 
             # Backtrack to the next row above if possible
-            if current_value % 2 == 1:
+            if vertical_move:
                 compositions += backtrack(
                     target_mass,
                     current_idx - 1,
@@ -348,7 +331,7 @@ class CompositionInferrer:
                 )
 
             # Backtrack to the next left-side column if possible
-            if (current_value >> 1) % 2 == 1:
+            if horizontal_move:
                 current_nuc = self.alphabet.get(current_idx)
 
                 if not current_nuc.is_modification or (

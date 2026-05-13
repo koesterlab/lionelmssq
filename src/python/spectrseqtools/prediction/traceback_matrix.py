@@ -4,7 +4,7 @@
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Self
+from typing import Self, Tuple
 
 import numpy as np
 from platformdirs import user_cache_dir
@@ -31,6 +31,9 @@ class TracebackMatrix:
 
     matrix: np.ndarray
     compression_rate: int
+
+    def __len__(self):
+        return len(self.matrix)
 
     @classmethod
     def load(cls, alphabet: NucleotideAlphabet, compression_rate: int) -> Self:
@@ -165,14 +168,23 @@ class TracebackMatrix:
             matrix=np.delete(matrix, 0, axis=0), compression_rate=compression_rate
         )
 
-    def assert_in_matrix(self, mass: int) -> None:
+    def allowed_movement(self, mass: int, nuc_idx: int) -> Tuple[bool, bool]:
         """
-        Raise error if given mass is not in traceback matrix.
+        Return flags indicating allowed movements for the given mass and nucleotide.
 
         Parameters
         ----------
         mass : int
-            Given mass.
+            Given integer mass value (i.e column index).
+        nuc_idx : int
+            Given nucleotide index (i.e. row index).
+
+        Returns
+        -------
+        vertical_move : bool
+            Flag whether a vertical move is possible.
+        horizontal_move : bool
+            Flag whether a horizontal move is possible.
 
         """
         # Raise error if mass is not in matrix (due to its size)
@@ -182,48 +194,23 @@ class TracebackMatrix:
                 f"Extend its size if you want to compute larger masses."
             )
 
-    def get_entry(self, mass: int, nuc_idx: int) -> int:
-        """
-        Get matrix entry corresponding to given mass and nucleotide index.
+        # Allow no movement for cells outside of matrix
+        if mass < 0 or nuc_idx < 0:
+            return False, False
 
-        Parameters
-        ----------
-        mass : int
-            Given mass (i.e. column in matrix).
-        nuc_idx : int
-            Given nucleotide index (i.e. row in matrix).
-
-        Returns
-        -------
-        int
-            Corresponding entry in matrix.
-
-        """
-        return (
+        # Get current value
+        current_value = (
             self.matrix[nuc_idx, mass]
             if self.compression_rate == 1
             else self.matrix[nuc_idx, mass // self.compression_rate]
             >> 2 * (self.compression_rate - 1 - mass % self.compression_rate)
         )
 
-    def is_unreachable(self, value: int) -> bool:
-        """
-        Check whether a given entry is unreachable.
+        # Determine possible movements from current value
+        vertical_move = current_value % 2 == 1
+        horizontal_move = (current_value >> 1) % 2 == 1
 
-        Parameters
-        ----------
-        value : int
-            Given matrix entry.
-
-        Returns
-        -------
-        bool
-            Flag whether given entry is unreachable.
-
-        """
-        if self.compression_rate != 1 and value % self.compression_rate == 0.0:
-            return True
-        return False
+        return vertical_move, horizontal_move
 
 
 def set_matrix_path(precision: float, compression_rate: int) -> str:
