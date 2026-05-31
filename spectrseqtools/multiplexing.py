@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import List
 
 from spectrseqtools.preprocessing import determine_intensity_percentiles
-from spectrseqtools.masses import NUCLEOTIDE_DF, _COLS
+from spectrseqtools.masses import NUCLEOTIDE_DF, _COLS, TOLERANCE, ELEMENT_MASSES
 from spectrseqtools.common import initialize_raw_file_iterator
 from spectrseqtools.deconvolution import select_min_intensity, PREPROCESS_TOL, DeconvolutionParameters, aggregate_peaks_into_fragments, deconvolute_scan
 from spectrseqtools.singleton_identification import RawPeak, COL_TYPES_RAW, identify_singletons, process_scan
@@ -16,6 +16,7 @@ from collections import defaultdict
 from pyxdameraulevenshtein import normalized_damerau_levenshtein_distance_seqs
 import importlib.resources
 import altair as alt
+
 rt = get_mono()
 
 MIN_MS1_CHARGE_STATE = 1
@@ -47,29 +48,29 @@ COL_TYPES_MS1_CLUSTER = {
     "ms1_intensity": pl.Float64,
 }
 
-def initialize_raw_file_iterator_ungrouped(
-    file_path: str,
-) -> ms_ditp.data_source.thermo_raw_net.ThermoRawLoader:
-    """
-    Initialize iterator over scans in ThermoFisher RAW file format.
+# def initialize_raw_file_iterator_ungrouped(
+#     file_path: str,
+# ) -> ms_ditp.data_source.thermo_raw_net.ThermoRawLoader:
+#     """
+#     Initialize iterator over scans in ThermoFisher RAW file format.
 
-    Parameters
-    ----------
-    file_path : str
-        Path of RAW file from ThermoFisher.
+#     Parameters
+#     ----------
+#     file_path : str
+#         Path of RAW file from ThermoFisher.
 
-    Returns
-    -------
-    raw_file : ms_deisotope.data_source.thermo_raw_net.ThermoRawLoader
-        Iterator over scans from RAW file.
+#     Returns
+#     -------
+#     raw_file : ms_deisotope.data_source.thermo_raw_net.ThermoRawLoader
+#         Iterator over scans from RAW file.
 
-    """
-    # Read data from file
-    raw_file = ms_ditp.data_source.thermo_raw_net.ThermoRawLoader(
-        file_path, _load_metadata=True
-    )
+#     """
+#     # Read data from file
+#     raw_file = ms_ditp.data_source.thermo_raw_net.ThermoRawLoader(
+#         file_path, _load_metadata=True
+#     )
 
-    return raw_file
+#     return raw_file
 
 def charge_filter(priority_ms1_peaks, ms2_scan_list):
     new_priority_ms1_peaks = []
@@ -77,7 +78,7 @@ def charge_filter(priority_ms1_peaks, ms2_scan_list):
     new_ms2_scan_list = []
     for p in range(len(priority_ms1_peaks)):
         pcharge = 0 if not isinstance(priority_ms1_peaks[p].charge, int) else priority_ms1_peaks[p].charge 
-        if pcharge > MIN_MS1_CHARGE_STATE:
+        if pcharge >= MIN_MS1_CHARGE_STATE:
             new_priority_ms1_peaks.append(priority_ms1_peaks[p])
             new_priority_ms1_charges.append(pcharge)
             new_ms2_scan_list.append(ms2_scan_list[p])
@@ -88,7 +89,7 @@ def select_singletons_from_peaks_raw(peak_list: List[RawPeak]) -> pl.DataFrame:
     Select candidate singletons based on raw peaks.
 
     Build dataframe of raw peaks, match theoretical and observed mz,
-    cluster them, and filter the candidates based on their cluster score.
+    and return singleton candidates
 
     Parameters
     ----------
@@ -134,18 +135,17 @@ def select_singletons_from_peaks_raw(peak_list: List[RawPeak]) -> pl.DataFrame:
     if peak_df.height == 0:
         return pl.DataFrame(schema = {"id": str, "cluster_score": float, "count": int})
 
-    # Map representative nucleotide, cluster score, and count to each nucleotide group
+    # Map representative nucleotide and count to each nucleotide group
     peak_df = peak_df.group_by("id_list").map_groups(
         lambda x: pl.DataFrame(
             {
                 "id": x["id_list"][0],
-                "cluster_score": np.nan,
+                "cluster_score": np.nan, #Cluster scoring turned off for multiplexing
                 "count": len(x["id_list"]),
             }
         )
     )
 
-    # Filter candidate singletons by cluster score
     return peak_df.sort("count", descending=True)
 
 def ms1_to_ms2_dict(raw_file_read):
@@ -154,18 +154,21 @@ def ms1_to_ms2_dict(raw_file_read):
     
     ms2_to_ms1_idx = {}
 
-    for _ in range(len(raw_file_read) - 1):
-        # Select next scan
-        scan = next(raw_file_read)
+    while True:
+        try:
+            # Select next scan
+            scan = next(raw_file_read)
 
-        # Skip scan if it is no MS2 scan
-        if scan.ms_level != 2:
-            continue
-        
-        ms2_idx = scan.index
-        ms1_idx = scan.precursor_information.precursor.index
-        
-        ms2_to_ms1_idx[ms2_idx] = ms1_idx
+            # Skip scan if it is no MS2 scan
+            if scan.ms_level != 2:
+                continue
+            
+            ms2_idx = scan.index
+            ms1_idx = scan.precursor_information.precursor.index
+            
+            ms2_to_ms1_idx[ms2_idx] = ms1_idx
+        except StopIteration:
+            break
 
     ms1_to_ms2_idx = defaultdict(list)
     for ms2_idx, ms1_idx in ms2_to_ms1_idx.items():
@@ -229,7 +232,7 @@ def group_ms1_mass_collect_ms2_scan(average_ms1_mass_list, priority_charges, min
     for ms1_grp in ms1_grp_list:
         df_filter = df_average_ms1_mass_info.filter(pl.col("ms1_window_grp") == ms1_grp)
         
-        ms1_max_idx = df_filter["ms1_neutral_mass"].arg_max()
+        ms1_min_idx = df_filter["ms1_neutral_mass"].arg_min()
         
         ms1_window_scan_index_list = df_filter["ms1_window_scan_index"].to_numpy()        
         ms2_window_scan_list = [average_ms1_mass_list[idx].ms2_scan for idx in ms1_window_scan_index_list]
@@ -238,8 +241,8 @@ def group_ms1_mass_collect_ms2_scan(average_ms1_mass_list, priority_charges, min
             DeisotopedMS1Peak(
                 min_scan_time=min_window_time,
                 max_scan_time=max_window_time,
-                ms1_neutral_mass=df_filter["ms1_neutral_mass"][ms1_max_idx], 
-                ms1_intensity= df_filter["ms1_intensity"][ms1_max_idx],
+                ms1_neutral_mass=df_filter["ms1_neutral_mass"][ms1_min_idx], 
+                ms1_intensity= df_filter["ms1_intensity"][ms1_min_idx],
                 ms2_scan = ms2_window_scan_list,
                 max_charge_state = max(priority_charges)
                 ))
@@ -256,7 +259,7 @@ def average_deisotope_ms1_collect_ms2(raw_file_read, decon_params, min_scan_time
 
     ms1_mass_ms2_scans_list = []
 
-    for t in tqdm.tqdm(np.arange(min_scan_time, max_scan_time, dt/4), desc="Deisotoping average MS1 and collecting MS2"):#, max_scan_time, dt)):
+    for t in tqdm.tqdm(np.arange(min_scan_time, max_scan_time, dt/2), desc="Deisotoping average MS1 and collecting MS2"):#, max_scan_time, dt)):
         scan = raw_file_read.get_scan_by_time(t)
         if scan.ms_level != 1:
             scan = raw_file_read.find_previous_ms1(scan.index)
@@ -288,22 +291,145 @@ def average_deisotope_ms1_collect_ms2(raw_file_read, decon_params, min_scan_time
             ms1_mass_ms2_scans_list.append(ms1_mass_ms2_scans)
     return ms1_mass_ms2_scans_list
 
+SODIUM_MASS = 22.989769
+POTASSIUM_MASS = 39.098300
+
+# def is_adduct(mass1, mass2):
+#     sodium_error = abs(mass2-mass1+ELEMENT_MASSES["H+"]-SODIUM_MASS)/mass1
+#     # potassium_error = abs(mass2-mass1-ELEMENT_MASSES["H+"]-POTASSIUM_MASS)/mass1
+
+#     sodium_noH_error = abs(mass2-mass1-SODIUM_MASS)/mass1
+#     # potassium_noH_error = abs(mass2-mass1-POTASSIUM_MASS)/mass1
+
+#     if sodium_error < 2*PREPROCESS_TOL or sodium_noH_error < 2*PREPROCESS_TOL:# or potassium_error < 2*PREPROCESS_TOL or potassium_noH_error < 2*PREPROCESS_TOL:
+#         return True
+#     else:
+#         return False
+
+# def find(parent, x):
+#     while parent[x] != x:
+#         parent[x] = parent[parent[x]]
+#         x = parent[x]
+#     return x
+
+# def union(parent, a, b):
+#     root_a = find(parent, a)
+#     root_b = find(parent, b)
+#     if root_a != root_b:
+#         parent[root_b] = root_a
+
+salt_corrections = {
+    "none": 0.0,
+    "Na-H": SODIUM_MASS - ELEMENT_MASSES["H+"],
+    "K-H": POTASSIUM_MASS - ELEMENT_MASSES["H+"],
+}
+
 def cluster_ms1_masses(ms1_mass_ms2_scans_list):
     df_ms1_clusters = pl.DataFrame(
-                data=np.array(
-                    [[frag.__dict__[key] for key in COL_TYPES_MS1_CLUSTER.keys()] for frag in ms1_mass_ms2_scans_list]
-                ),
-                schema=COL_TYPES_MS1_CLUSTER,
-            ).with_row_index("ms1_cluster_index").sort("ms1_neutral_mass").with_columns(
-                    (
-                        abs(pl.col("ms1_neutral_mass").shift(1) - pl.col("ms1_neutral_mass"))
-                        / pl.col("ms1_neutral_mass").shift(1)
+                    data=np.array(
+                        [[frag.__dict__[key] for key in COL_TYPES_MS1_CLUSTER.keys()] for frag in ms1_mass_ms2_scans_list]
+                    ),
+                    schema=COL_TYPES_MS1_CLUSTER,
+                ).with_row_index("ms1_cluster_index"
+                ).sort(["min_scan_time", "max_scan_time", "ms1_neutral_mass"]
+                ).with_columns(
+                        ((
+                            abs(pl.col("min_scan_time").shift(1) - pl.col("min_scan_time"))>1e-3
+                        ) & 
+                        (
+                            pl.col("min_scan_time")>pl.col("max_scan_time").shift(1)
+                        ))  
+                        .cast(pl.Int8).fill_null(0).fill_nan(0).cum_sum().alias("time_grp"))
+
+    time_grp_list = df_ms1_clusters["time_grp"].unique().to_numpy()
+
+    # cluster_index_to_neutral_mass_grp = {}
+    last_grp_idx = 0
+
+    list_df_timegrp = []
+
+    for tgrp in time_grp_list:
+        df_timegrp_filter = df_ms1_clusters.filter(pl.col("time_grp") == tgrp)
+
+        expanded_rows = []
+
+        for row in df_timegrp_filter.iter_rows(named=True):
+            for adduct_type, correction in salt_corrections.items():
+                new_row = dict(row)
+                new_row["ms1_neutral_mass"] = row["ms1_neutral_mass"]
+                new_row["corrected_neutral_mass"] = row["ms1_neutral_mass"] + correction
+                new_row["adduct_type"] = adduct_type
+                expanded_rows.append(new_row)
+
+        df_timegrp_filter = pl.DataFrame(expanded_rows)
+        
+        df_timegrp_filter = df_timegrp_filter.sort(["corrected_neutral_mass"]).with_columns(
+                        (
+                            abs(pl.col("corrected_neutral_mass").shift(1) - pl.col("corrected_neutral_mass"))
+                            / pl.col("corrected_neutral_mass").shift(1)
+                        )
+                        .fill_null(0)
+                        .fill_nan(0)
+                        .gt(PREPROCESS_TOL)
+                        .cum_sum()
+                        .alias("add_mass_subgrp"))
+
+        df_timegrp_filter = df_timegrp_filter.sort(["add_mass_subgrp", "adduct_type", "ms1_cluster_index"])
+        
+        df_timegrp_deduplicate = df_timegrp_filter.group_by("add_mass_subgrp").agg(pl.col("ms1_cluster_index").unique().sort()).unique("ms1_cluster_index", keep='first', maintain_order=True)
+        df_timegrp_filter = df_timegrp_filter.filter(pl.col("add_mass_subgrp").is_in(df_timegrp_deduplicate["add_mass_subgrp"].to_list()))
+        df_timegrp_filter = df_timegrp_filter.with_columns(
+                                    (
+                                        pl.col("add_mass_subgrp")
+                                        .rank("dense")
+                                        .cast(pl.Int64) - 1 + last_grp_idx
+                                    ).alias("add_mass_subgrp")
+                                )
+        # subgrp_mass = (
+        # df_timegrp_filter
+        # .group_by("neutral_mass_subgrp")
+        # .agg(pl.col("ms1_neutral_mass").min().alias("rep_mass"))
+        # .to_dict(as_series=False)
+        # )
+
+        # subgrp_ids = subgrp_mass["neutral_mass_subgrp"]
+        # masses = subgrp_mass["rep_mass"]
+
+        # mass_map = dict(zip(subgrp_ids, masses))
+        # parent = {grp: grp for grp in subgrp_ids}
+
+        # for i, grp1 in enumerate(subgrp_ids):
+        #     for grp2 in subgrp_ids[i+1:]:
+        #         m1 = mass_map[grp1]
+        #         m2 = mass_map[grp2]
+
+        #         # IMPORTANT: symmetric check
+        #         if is_adduct(m1, m2) or is_adduct(m2, m1):
+        #             union(parent, grp1, grp2)
+        
+        # final_map = {grp: find(parent, grp) for grp in subgrp_ids}
+        # df_timegrp_filter = df_timegrp_filter.with_columns(
+        # pl.col("neutral_mass_subgrp")
+        # .map_elements(lambda x: int(final_map[x]), return_dtype =pl.Int64)
+        # .alias("new_neutral_mass_subgrp")
+        # )
+
+        # for row in df_timegrp_filter.iter_rows(named = True):
+        #     cluster_index_to_neutral_mass_grp[row["ms1_cluster_index"]] = int(row["add_mass_subgrp"])
+
+        list_df_timegrp.append(df_timegrp_filter)
+        last_grp_idx = (
+                        df_timegrp_filter.select(
+                            pl.col("add_mass_subgrp").max()
+                        ).item() + 1
                     )
-                    .fill_null(0)
-                    .fill_nan(0)
-                    .gt(PREPROCESS_TOL)
-                    .cum_sum()
-                    .alias("neutral_mass_grp")).sort(["neutral_mass_grp", "min_scan_time", "max_scan_time"])
+        #last_grp_idx += df_timegrp_filter.select(pl.col("new_neutral_mass_subgrp").max()).item()+1
+
+    df_ms1_clusters = pl.concat(list_df_timegrp).rename({"add_mass_subgrp": "neutral_mass_grp"}).drop(["corrected_neutral_mass"])
+
+    # df_ms1_clusters = df_ms1_clusters.with_columns(pl.col("ms1_cluster_index").replace_strict(cluster_index_to_neutral_mass_grp, default = -1).alias("neutral_mass_grp"))
+    # df_ms1_clusters = df_ms1_clusters.sort(["time_grp", "neutral_mass_grp", "min_scan_time", "max_scan_time", "ms1_neutral_mass"])
+
     return df_ms1_clusters
 
 def average_and_deconvolute_ms2_scan(df_filter, ms1_mass_ms2_scans_list, ms2_decon_params):
@@ -339,7 +465,7 @@ class PreprocessedGroup:
 
 def pre_process_multiplexing(file_path, params, min_scan_time = 0, max_scan_time = np.inf, dt = 0.2, three_prime_tag = 728.2006, five_prime_tag = 170.9755):
     sample_name = file_path.stem
-    ms1_decon_params = DeconvolutionParameters(params)
+    ms1_decon_params = DeconvolutionParameters({"scorer": ms_ditp.PenalizedMSDeconVFitter(), "truncate_after": 0.95, "max_missed_peaks": 1})
     ms2_decon_params = DeconvolutionParameters({"min_score": 0})
     raw_file_read = initialize_raw_file_iterator(str(file_path))
 
@@ -355,11 +481,12 @@ def pre_process_multiplexing(file_path, params, min_scan_time = 0, max_scan_time
     preprocessed_groups = []
     for g in tqdm.tqdm(grp_indices, desc="Deisotoping average MS2 scans"):
         df_filter = df_ms1_clusters.filter(pl.col("neutral_mass_grp") == g)
-        min_cluster_time = df_filter["min_average_scan_time"].min()
-        max_cluster_time = df_filter["max_average_scan_time"].max()
+        min_cluster_time = df_filter["min_scan_time"].min()
+        max_cluster_time = df_filter["max_scan_time"].max()
+        adduct_types = df_filter["adduct_type"].unique().to_list()
 
-        precursor_max_idx = df_filter["ms1_neutral_mass"].arg_max()
-        intact_mass = df_filter["ms1_neutral_mass"][precursor_max_idx]
+        precursor_min_idx = df_filter["ms1_neutral_mass"].arg_min()
+        intact_mass = df_filter["ms1_neutral_mass"][precursor_min_idx]
 
         if intact_mass < three_prime_tag+five_prime_tag:
             continue
@@ -383,7 +510,8 @@ def pre_process_multiplexing(file_path, params, min_scan_time = 0, max_scan_time
                 "intensity_cutoff": intensity_cutoff,
                 "3_prime_tag": three_prime_tag, #728.2006,
                 "5_prime_tag": five_prime_tag, #170.9755,
-                "intact_mass": intact_mass,}
+                "intact_mass": intact_mass,
+                "adduct_types": adduct_types}
         
         preprocessed_groups.append(PreprocessedGroup(fragments = fragments,
                                                      singletons = singletons,
@@ -443,9 +571,9 @@ def align_prediction_results(prediction_vals, target_sequence, alignment_score_t
         if final_comparison[2] > alignment_score_threshold:
             continue
     
-        alignment_vals.append(final_comparison+(i[0], i[1], i[3],))
+        alignment_vals.append(final_comparison+(i[0], i[1], i[3], i[4]))
 
-    df_alignment = pl.DataFrame(alignment_vals, schema = ["predicted_string", "best_matching_target_string", "normalized_damerau_levenshtein_distance", "target_start_pos", "target_end_pos", "is_backward", "group", "intact_mass", "prediction_runtime"], orient = "row")
+    df_alignment = pl.DataFrame(alignment_vals, schema = ["predicted_string", "best_matching_target_string", "normalized_damerau_levenshtein_distance", "target_start_pos", "target_end_pos", "is_backward", "group", "intact_mass", "min_scan_time", "max_scan_time"], orient = "row")
 
     return df_alignment
 
@@ -460,6 +588,8 @@ def interpret_alignment_results(df_alignment, target_sequence):
         target_string = r["best_matching_target_string"]
         start_pos = r["target_start_pos"]
         intact_mass = r["intact_mass"]
+        min_scan_time = r["min_scan_time"]
+        max_scan_time = r["max_scan_time"]
 
         for i, (p, t) in enumerate(zip(pred_string, target_string)):
             if p == t:
@@ -472,7 +602,9 @@ def interpret_alignment_results(df_alignment, target_sequence):
                             "predicted_base": p, 
                             "target_base": t, 
                             "status": status,
-                            "intact_mass": intact_mass})
+                            "intact_mass": intact_mass,
+                            "min_scan_time": min_scan_time,
+                            "max_scan_time": max_scan_time})
 
     for b in range(len(target_sequence)):
         targ_base = masses.filter(pl.col("id") == target_sequence[b][0])["encoding"].item()
@@ -482,7 +614,9 @@ def interpret_alignment_results(df_alignment, target_sequence):
                             "predicted_base": targ_base, 
                             "target_base": targ_base, 
                             "status": "match",
-                            "intact_mass": np.nan})
+                            "intact_mass": np.nan,
+                            "min_scan_time": np.nan,
+                            "max_scan_time": np.nan})
 
     df_expanded_alignment = pl.DataFrame(match_rows)
 
@@ -556,7 +690,7 @@ def plot_interpreted_alignment(df_expanded_alignment):
         y=alt.Y("pos:N"),
         text="predicted_base:N",
         color=alt.Color("status:N", scale=color_scale),
-        tooltip=["group", "target_position", "score", "predicted_base", "target_base", "status", "canonical_name", "intact_mass"]
+        tooltip=["group", "target_position", "score", "predicted_base", "target_base", "status", "canonical_name", "intact_mass", "min_scan_time", "max_scan_time"]
     ).properties(
         width=850,
         height=400
@@ -572,3 +706,5 @@ def post_processing_alignment(prediction_vals, sample_name, target_sequence, ali
     chart.show()
     if save_file:
         chart.save(sample_name + '_output.html')
+
+    return df_expanded_alignment
