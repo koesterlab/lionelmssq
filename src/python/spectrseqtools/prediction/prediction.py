@@ -95,6 +95,7 @@ class Predictor:
 
     def predict(self):
         """Predict sequence."""
+        # TODO: Log to stderr instead of stdout
         print("Alphabet after singleton reduction:")
         self.inferrer.print_alphabet()
         print()
@@ -171,6 +172,7 @@ class Predictor:
             skeleton_seq, fragments = skeleton_builder.build_skeleton(
                 fragments=fragments, solver_params=solver_params
             )
+        # TODO: Replace generic Exception, within custom one
         except Exception:
             return Prediction.default()
 
@@ -201,6 +203,7 @@ class Predictor:
                 skeleton_seq=skeleton_seq,
                 solver_params=solver_params,
             )
+        # TODO: Replace generic ValueError, within custom one
         except ValueError:
             return Prediction.default()
 
@@ -222,6 +225,7 @@ class Predictor:
             )
 
             return lp_instance.evaluate(solver_params=solver_params)
+        # TODO: Replace generic Exception, within custom one
         except Exception:
             return Prediction.default()
 
@@ -321,6 +325,7 @@ class Predictor:
 def select_solver(solver: SolverType):
     """Select solver."""
     match solver:
+        # TODO: Allow usage of HiGHS solver
         case SolverType.GUROBI:
             return "GUROBI_CMD"
         case SolverType.CBC:
