@@ -177,8 +177,12 @@ def ms1_to_ms2_dict(raw_file_read):
     return ms1_to_ms2_idx
 
 def deconvolute_average_ms1_scan(average_ms1_scan, priority_ms1_peaks, priority_ms1_charges, ms2_scan_list, decon_params):
-    max_ms1_charge_state = max(priority_ms1_charges)
-    ms1_charge_range = (average_ms1_scan.polarity, average_ms1_scan.polarity*max_ms1_charge_state)
+    max_abs_charge = max(abs(c) for c in priority_ms1_charges if c)
+    if average_ms1_scan.polarity < 0:
+        ms1_charge_range = (-max_abs_charge, -1)
+    else:
+        ms1_charge_range = (1, max_abs_charge)
+
     ms1_min_intensity = select_min_intensity(
                     scan=average_ms1_scan, min_intensity=decon_params.minimum_intensity
                 )
@@ -451,7 +455,7 @@ def average_and_deconvolute_ms2_scan(df_filter, ms1_mass_ms2_scans_list, ms2_dec
     else:
         average_ms2_scan = grp_ms2_scans[0]
 
-    ms2_decon_params.charge_range = (-1, -max(grp_charge_states))
+    ms2_decon_params.charge_range = (-max(grp_charge_states), -1)
     decon_ms2_peaks = deconvolute_scan(average_ms2_scan, params = ms2_decon_params)
 
     return average_ms2_scan, decon_ms2_peaks
