@@ -136,14 +136,10 @@ class SkeletonBuilder:
         invalid_list = []
         last_valid_bin = None
         bins = fragments.bin(tolerance=self.inferrer.tolerance)
-        for bin_idx, current_bin in enumerate(bins):
+        for current_bin in bins:
             # Stop if no positions are left to fill
             if len(pos) == 0:
                 invalid_list += current_bin.invalidate()
-                continue
-
-            # TODO: This condition imitates bug found in previous code; remove it
-            if (bin_idx + 1 == len(bins)) & (len(current_bin) == 1):
                 continue
 
             compositions = self.infer_compositions_for_bin_differences(
