@@ -1,15 +1,10 @@
 from typing import List
-import polars as pl
+
 import altair as alt
-import importlib.resources
+import polars as pl
 
-from spectrseqtools.common import parse_nucleosides
-from spectrseqtools.prediction import Prediction
-
-MASSES = pl.read_csv(
-    (importlib.resources.files(__package__) / "assets" / "masses.tsv"),
-    separator="\t",
-)
+from spectrseqtools.dataclasses import Sequence
+from spectrseqtools.prediction.prediction import Prediction
 
 STATUS_COLORS = {
     "False": "#808285",
@@ -17,20 +12,19 @@ STATUS_COLORS = {
 }
 
 
-def convert_seq(seq: List[str]) -> List[str]:
-    return [
-        MASSES.row(named=True, by_predicate=(pl.col("id") == val))["encoding"]
-        for val in seq
-    ]
+def encode_seq(seq: str) -> List[str]:
+    """Format sequence to use nucleotide encoding."""
+    seq = Sequence.from_str(input_seq=seq)
+    return seq.to_encoding()
 
 
 def plot_prediction(
     prediction: Prediction,
-    true_seq: List[str],
+    true_seq: Sequence,
     simulation: pl.DataFrame = None,
 ) -> alt.Chart:
-    true_seq = convert_seq(seq=true_seq)
-    pred_seq = convert_seq(seq=prediction.sequence)
+    true_seq = true_seq.to_encoding()
+    pred_seq = prediction.sequence.to_encoding()
     seq_data = pl.DataFrame(
         {
             "nuc": true_seq + pred_seq,
@@ -50,7 +44,9 @@ def plot_prediction(
     def create_range(left, right):
         return list(range(left, right))
 
-    fragment_predictions = prediction.fragments.with_columns(
+    fragment_predictions = prediction.fragments.fragments
+
+    fragment_predictions = fragment_predictions.with_columns(
         pl.col("left") - 0.5,
         pl.col("right") - 1 + 0.5,
         pl.struct(["left", "right"])
@@ -72,8 +68,7 @@ def plot_prediction(
         )
         .alias("ppm_error"),
         pl.col("predicted_seq")
-        # .map_elements(reject_none, return_dtype=pl.List(pl.Utf8))
-        .map_elements(parse_nucleosides, return_dtype=pl.List(pl.Utf8))
+        .map_elements(encode_seq, return_dtype=pl.List(pl.Utf8))
         .alias("fragment_seq"),
         pl.lit("").cast(str).alias("type"),
     ).with_row_index()
@@ -91,9 +86,8 @@ def plot_prediction(
             pl.col("true_mass_with_backbone")
             .map_elements(lambda mass: f"{mass:.2f}", return_dtype=pl.Utf8)
             .alias("mass_info"),
-            # pl.col("sequence").alias("fragment_seq"),
             pl.col("sequence")
-            .map_elements(parse_nucleosides, return_dtype=pl.List(pl.Utf8))
+            .map_elements(encode_seq, return_dtype=pl.List(pl.Utf8))
             .alias("fragment_seq"),
             pl.lit("truth").alias("type"),
         ).with_row_index()
@@ -104,9 +98,6 @@ def plot_prediction(
         data = fragment_predictions
 
     data = data.with_columns(
-        pl.col("fragment_seq")
-        .map_elements(convert_seq, return_dtype=pl.List(pl.Utf8))
-        .name.keep(),
         pl.when(pl.col("ppm_error").abs().lt(10))
         .then(pl.lit("True"))
         .otherwise(pl.lit("False"))

@@ -1,19 +1,16 @@
 import importlib.resources
 import os
-import yaml
-import pytest
-from clr_loader import get_mono
 from pathlib import Path
 
-from spectrseqtools.cli import (
-    PredictionOptions,
-    PreprocessingOptions,
-    SolverType,
-    format_sequence_to_full_version,
-    predict,
-)
-from spectrseqtools.common import parse_nucleosides
+import pytest
+import yaml
+from clr_loader import get_mono
+from spectrseqtools.dataclasses import Sequence
+from spectrseqtools.enums import SolverType
+from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
+from spectrseqtools.parsers import PredictionOptions, PreprocessingOptions
 from spectrseqtools.plotting import plot_prediction
+from spectrseqtools.prediction.prediction import Predictor
 from spectrseqtools.preprocessing.preprocessing import Preprocessor
 
 rt = get_mono()
@@ -57,7 +54,7 @@ def test_testcase(testcase):
         with open(base_path / "fragments.preprocessed.meta.yaml", "w") as f:
             yaml.safe_dump(meta, f)
 
-    prediction = predict(
+    prediction = Predictor(
         PredictionOptions(
             fragments=base_path / "fragments.tsv",
             meta=base_path / "fragments.preprocessed.meta.yaml",
@@ -69,14 +66,15 @@ def test_testcase(testcase):
             solver=SolverType.CBC,
             # solver=SolverType.GUROBI,
         )
-    )
+    ).predict()
 
     # Read true sequence from meta file
-    true_seq = parse_nucleosides(meta["true_sequence"])
+    true_seq = Sequence.from_str(meta["true_sequence"])
 
     print("True sequence =\t\t", true_seq)
     print(
-        "Full sequence =\t\t", format_sequence_to_full_version(seq=prediction.sequence)
+        "Full sequence =\t\t",
+        prediction.sequence.fmt(nucleotide_alphabet=NucleotideAlphabet.from_file()),
     )
 
     plots = plot_prediction(prediction=prediction, true_seq=true_seq)
@@ -87,7 +85,7 @@ def test_testcase(testcase):
     plots[3].save(base_path / "fragments.plot.html")
 
     # Save updated meta data
-    meta["predicted_sequence"] = "".join(prediction.sequence)
+    meta["predicted_sequence"] = prediction.sequence.to_str()
     with open(base_path / "fragments.testing.meta.yaml", "w") as f:
         yaml.safe_dump(meta, f)
 

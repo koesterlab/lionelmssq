@@ -1,6 +1,5 @@
 import pytest
 from clr_loader import get_mono
-
 from spectrseqtools.preprocessing.preprocessing import AveragineBackbone, set_averagine
 
 rt = get_mono()

@@ -1,17 +1,31 @@
-import re
+# -*- coding: utf-8 -*-
+"""Module for commonly used functions."""
 
 from pathlib import Path
-from typing import List, Tuple
-
-from spectrseqtools.composition_inference import infer_compositions_with_matrix
-from spectrseqtools.traceback_matrix import CompositionInferrer
-
+from typing import Tuple
 
 ERROR_METHOD = "l1_norm"
-_NUCLEOSIDE_RE = re.compile(r"\d*[ACGU]")
 
 
-def set_output_path(input_path: Path, output_dir: str) -> Tuple[str, str]:
+def set_output_path(input_path: Path, output_dir: Path) -> Tuple[Path, str]:
+    """
+    Set directory and prefix for output path.
+
+    Parameters
+    ----------
+    input_path : Path
+        Input path.
+    output_dir : Path
+        Output directory.
+
+    Returns
+    -------
+    path_dir : Path
+        Updated output directory.
+    path_prefix : str
+        Updated output prefix.
+
+    """
     path = input_path.resolve()
     path_dir = path.parent if output_dir is None else output_dir
     path_prefix = path.stem
@@ -19,28 +33,25 @@ def set_output_path(input_path: Path, output_dir: str) -> Tuple[str, str]:
     return path_dir, path_prefix
 
 
-def parse_nucleosides(sequence: str):
-    return _NUCLEOSIDE_RE.findall(sequence)
-
-
-class Composition:
-    def __init__(self, *nucleosides):
-        self.nucleosides = tuple(sorted(nucleosides))
-
-    def __iter__(self):
-        yield from self.nucleosides
-
-    def __len__(self):
-        return len(self.nucleosides)
-
-    def __repr__(self):
-        return f"{{{','.join(self.nucleosides)}}}"
-
-    def __eq__(self, other):
-        return self.nucleosides == other
-
-
 def calculate_error_threshold(mass1: float, mass2: float, threshold: float) -> float:
+    """
+    Calculate maximum tolerated error to still consider two masses equal.
+
+    Parameters
+    ----------
+    mass1 : float
+        First mass.
+    mass2 : float
+        Second mass.
+    threshold : float
+        Relative tolerance.
+
+    Returns
+    -------
+    float
+        Error threshold.
+
+    """
     match ERROR_METHOD:
         case "l1_norm":
             return threshold * (mass1 + mass2)
@@ -48,24 +59,3 @@ def calculate_error_threshold(mass1: float, mass2: float, threshold: float) -> f
             return threshold * ((mass1**2 + mass2**2) ** 0.5)
         case _:
             raise NotImplementedError("This error method is not implemented.")
-
-
-def calculate_compositions(
-    diff: float,
-    threshold: float,
-    inferrer: CompositionInferrer,
-) -> List[Composition]:
-    composition_list = infer_compositions_with_matrix(
-        diff,
-        inferrer=inferrer,
-        max_modifications=round(inferrer.seq.modification_rate * inferrer.seq.max_len),
-        threshold=threshold,
-    ).compositions
-
-    # Return None if no composition was found
-    if composition_list is None:
-        return None
-
-    # Return all found compositions
-    composition_list = list(composition_list)
-    return [Composition(*composition_list[i]) for i in range(len(composition_list))]

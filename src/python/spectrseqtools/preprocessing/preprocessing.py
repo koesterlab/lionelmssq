@@ -2,7 +2,6 @@
 """Preprocessing of raw mass spectrometry data."""
 
 import importlib.resources
-from enum import Enum
 
 import ms_deisotope as ms_ditp
 import numpy as np
@@ -12,7 +11,9 @@ import yaml
 from clr_loader import get_mono
 
 from spectrseqtools.common import set_output_path
-from spectrseqtools.masses import initialize_nucleotide_df
+from spectrseqtools.enums import AveragineBackbone
+from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
+from spectrseqtools.parsers import PreprocessingOptions
 from spectrseqtools.preprocessing.deconvolution import (
     DeconvolutionParameters,
     DeisotopedPeakList,
@@ -28,8 +29,8 @@ rt = get_mono()
 class Preprocessor:
     """Class for preprocessing of raw MS data."""
 
-    def __init__(self, options) -> None:
-        self.alphabet = initialize_nucleotide_df(input_path=options.alphabet)
+    def __init__(self, options: PreprocessingOptions) -> None:
+        self.alphabet = NucleotideAlphabet.from_file(input_path=options.alphabet)
         self.tolerance = options.tolerance
         self.singleton_boundaries = SingletonBoundaries.from_alphabet(
             alphabet=self.alphabet,
@@ -144,6 +145,7 @@ class Preprocessor:
         -------
         polars.DataFrame
             Dataframe containing singleton candidates.
+
         """
         # Initialize iterator for RAW file
         raw_file_read = initialize_raw_file_iterator(file_path=str(self.input_path))
@@ -234,14 +236,6 @@ def initialize_raw_file_iterator(
     return raw_file
 
 
-class AveragineBackbone(Enum):
-    """Enum of backbone types for Averagine model used in deisotoping."""
-
-    NONE = "no_backbone"
-    PHOSPHATE = "phosphate"
-    THIOPHOSPHATE = "thiophosphate"
-
-
 def set_averagine(backbone: AveragineBackbone) -> dict:
     """
     Calculate the average elemental composition of RNA.
@@ -280,7 +274,7 @@ def set_averagine(backbone: AveragineBackbone) -> dict:
 
     # Calculate average elemental composition
     average_composition = {}
-    for element in base_compositions[0].keys():
+    for element in base_compositions[0]:
         average_composition[element] = sum(
             float(base[element]) for base in base_compositions
         ) / len(base_compositions)

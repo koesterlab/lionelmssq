@@ -11,6 +11,8 @@ from clr_loader import get_mono
 from dbscan1d.core import DBSCAN1D
 from sklearn.metrics import silhouette_score
 
+from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
+
 rt = get_mono()
 
 
@@ -36,8 +38,8 @@ class SingletonBoundaries:
     ) -> Self:
         """Set singleton boundaries based on nucleotide alphabet."""
         return SingletonBoundaries(
-            min_mz=alphabet["singleton_mz"].min() * (1 - boundary_factor * tolerance),
-            max_mz=alphabet["singleton_mz"].max() * (1 + boundary_factor * tolerance),
+            min_mz=alphabet.min.singleton_mz * (1 - boundary_factor * tolerance),
+            max_mz=alphabet.max.singleton_mz * (1 + boundary_factor * tolerance),
         )
 
 
@@ -115,7 +117,9 @@ class RawPeakList:
                 )
         return RawPeakList(peaks=peak_list)
 
-    def to_singletons(self, alphabet: pl.DataFrame, tolerance: float) -> pl.DataFrame:
+    def to_singletons(
+        self, alphabet: NucleotideAlphabet, tolerance: float
+    ) -> pl.DataFrame:
         """
         Select candidate singletons based on raw peaks.
 
@@ -124,8 +128,8 @@ class RawPeakList:
 
         Parameters
         ----------
-        alphabet : pl.DataFrame
-            Nucleotide alphabet.
+        alphabet : NucleotideAlphabet
+            Alphabet of considered nucleotides.
         tolerance : float
             Error tolerance for individual masses.
 
@@ -135,6 +139,11 @@ class RawPeakList:
             Dataframe containing singleton candidates.
 
         """
+        alphabet_df = alphabet.to_dataframe()
+        alphabet_df = alphabet_df.with_columns(
+            pl.col("names").first().alias("representative")
+        )
+
         # Build dataframe from peak list
         peak_df = pl.DataFrame(
             data=np.array(
@@ -145,7 +154,7 @@ class RawPeakList:
 
         # Match observed m/z to singleton m/z from the reference table
         peak_df = peak_df.sort("mz").join_asof(
-            alphabet.sort("singleton_mz"),
+            alphabet_df.sort("singleton_mz"),
             left_on="mz",
             right_on="singleton_mz",
             strategy="nearest",
@@ -166,12 +175,12 @@ class RawPeakList:
         )
 
         # Map representative nucleotide, cluster score, and count to each nucleotide group
-        peak_df = peak_df.group_by("id_list").map_groups(
+        peak_df = peak_df.group_by("names").map_groups(
             lambda x: pl.DataFrame(
                 {
-                    "id": x["id_list"][0],
+                    "id": x["names"][0],
                     "cluster_score": calculate_cluster_score(x["scan_time"]),
-                    "count": len(x["id_list"]),
+                    "count": len(x["names"]),
                 }
             )
         )
