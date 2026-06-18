@@ -198,16 +198,15 @@ class SkeletonBuilder:
         best_len = -1
         best_val = np.inf
         for len_cand in range(self.inferrer.seq.min_len, self.inferrer.seq.max_len + 1):
+            # Merge directional skeletons
+            seq = start_skeleton.merge(other=end_skeleton, seq_len=len_cand)
+
             # Skip candidates resulting in invalid sequences
-            # TODO: Use merged sequence for additional tightening of bounds
             if not self.inferrer.seq.validate_sequence(
-                seq=start_skeleton.combine(other=end_skeleton, seq_len=len_cand),
+                seq=seq,
                 alphabet=self.inferrer.alphabet,
             ):
                 continue
-
-            # Merge directional skeletons
-            seq = start_skeleton.merge(other=end_skeleton, seq_len=len_cand)
 
             # Combine directional terminal-fragment lists
             fragments = StandardUnitFragments.from_terminals(
@@ -292,7 +291,7 @@ class SkeletonBuilder:
         for len_cand in range(self.inferrer.seq.min_len, self.inferrer.seq.max_len + 1):
             # Skip candidates resulting in invalid sequences
             if not self.inferrer.seq.validate_sequence(
-                seq=start_skeleton.combine(other=end_skeleton, seq_len=len_cand),
+                seq=start_skeleton.merge(other=end_skeleton, seq_len=len_cand),
                 alphabet=self.inferrer.alphabet,
             ):
                 continue
@@ -427,6 +426,12 @@ def jaccard_index(input_tuple: Tuple[Set[str], Set[str]]) -> float:
     """
     # Return score for perfect similarity if one set is empty
     if len(input_tuple[0]) == 0 or len(input_tuple[1]) == 0:
+        return 1
+
+    # Return score for perfect similarity if one set is subset of the other
+    if input_tuple[0].issuperset(input_tuple[1]) or input_tuple[1].issuperset(
+        input_tuple[0]
+    ):
         return 1
 
     # Return Jaccard score

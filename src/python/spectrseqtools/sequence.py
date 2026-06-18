@@ -138,25 +138,3 @@ class SkeletonSequence:
         #  then the same nucleotide cannot be selected in the other position!
 
         return SkeletonSequence(sequence=merged_skeleton)
-
-    def combine(self, other: Self, seq_len: int) -> Self:
-        """
-        Combine with other skeleton sequence without merging.
-
-        Parameters
-        ----------
-        other : SkeletonSequence
-            Other skeleton sequence.
-        seq_len : int
-            Sequence length.
-
-        """
-        # Adapt directed skeleton parts to have correct length
-        start_skeleton = self.sequence[:seq_len]
-        end_skeleton = other.sequence[len(other) - seq_len :]
-
-        combined_skeleton = [set() for _ in range(seq_len)]
-        for i in range(seq_len):
-            combined_skeleton[i] = start_skeleton[i].union(end_skeleton[i])
-
-        return SkeletonSequence(sequence=combined_skeleton)

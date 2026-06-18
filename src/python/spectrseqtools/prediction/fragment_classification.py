@@ -126,13 +126,4 @@ class FragmentClassifier:
             SU-fragments.
 
         """
-        fragments = fragments.standardize(fragmentation_dict=self.fragmentation_options)
-
-        # TODO: What is the purpose of the below? It is never used anyway as the
-        #  mass would be way too high for a mass spectrometer.
-        # # Filter out fragments that have a too high mass
-        # fragments = fragments.sort(pl.col("standard_unit_mass")).filter(
-        #     pl.col("observed_mass") < mass_cutoff
-        # )
-
-        return fragments
+        return fragments.standardize(fragmentation_dict=self.fragmentation_options)

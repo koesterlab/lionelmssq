@@ -61,7 +61,6 @@ class Predictor:
         alphabet = NucleotideAlphabet.from_file(
             modification_rate=options.modification_rate
         )
-        max_weight = alphabet.max.nucleotide_mass
         alphabet.filter_by_singletons(singleton_path=options.singletons)
 
         # Standardize intact sequence mass by removing START_END fragmentation to gain SU mass
@@ -87,7 +86,6 @@ class Predictor:
         )
 
         self.inferrer = inferrer
-        self.max_weight = max_weight
         self.fragment_path = options.fragments
         self.predict_path = options.fragment_predictions
         self.sequence_path = options.sequence_prediction
@@ -262,11 +260,9 @@ class Predictor:
                 **singleton_compositions,
                 **fragments.start.collect_mass_difference_compositions(
                     inferrer=self.inferrer,
-                    max_weight=self.max_weight,
                 ),
                 **fragments.end.collect_mass_difference_compositions(
                     inferrer=self.inferrer,
-                    max_weight=self.max_weight,
                 ),
             }
 
