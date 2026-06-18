@@ -15,6 +15,8 @@ from spectrseqtools.prediction.composition_inference import CompositionInferrer
 from spectrseqtools.prediction.sequence_inference import LinearProgramInstance
 from spectrseqtools.sequence import SkeletonSequence
 
+NUC_WEIGHT_FACTOR = 1
+
 
 @dataclass
 class StandardUnitFragments:
@@ -359,7 +361,7 @@ class StandardUnitFragments:
         )
 
     def collect_mass_difference_compositions(
-        self, inferrer: CompositionInferrer, max_weight: float
+        self, inferrer: CompositionInferrer
     ) -> dict:
         """
         Collect compositions of mass differences between fragments in list.
@@ -368,8 +370,6 @@ class StandardUnitFragments:
         ----------
         inferrer : CompositionInferrer
             Composition inferrer.
-        max_weight : float
-            Maximum nucleotide weight to consider.
 
         Returns
         -------
@@ -383,6 +383,7 @@ class StandardUnitFragments:
         end = 1
 
         compositions = {}
+        max_weight = inferrer.alphabet.max.nucleotide_mass * NUC_WEIGHT_FACTOR
         while end < len(self):
             # Skip singletons
             if (end - start) <= 0:
@@ -392,8 +393,7 @@ class StandardUnitFragments:
             # Determine mass difference between fragments
             diff = su_masses[end] - su_masses[start]
 
-            # TODO: Set max_weight to be the maximum nucleotide mass in alphabet * factor
-            # If mass difference > any nucleotide mass, drop 1st fragment in window
+            # If mass difference > maximum allowed weight, drop 1st fragment in window
             if diff > max_weight:
                 start += 1
                 end = start + 1
