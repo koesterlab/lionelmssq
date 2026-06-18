@@ -118,33 +118,17 @@ class NucleotideAlphabet:
         masses = pl.read_csv(input_path, separator="\t")
         assert masses.columns == _DF_COLS
 
-        # TODO: Round other masses in DF (not just nucleoside one)
-
-        # Round nucleoside masses, we consider DECIMAL_PLACES+1 for since
-        # rounding errors propagate at the last decimal digit
-        masses = masses.with_columns(
-            pl.col("monoisotopic_mass").round(DECIMAL_PLACES + 1)
-        ).rename({"monoisotopic_mass": "nucleoside_mass"})
-
-        # Group nucleosides by their mass, select a representative for each
-        # group, and aggregate them into a list of equal-mass nucleosides
-        masses = masses.group_by("nucleoside_mass", maintain_order=True).agg(
-            pl.col("id").first().alias("representative"),
-            pl.col("id").unique().alias("id_list"),
-            pl.col("modification_rate").max(),
-        )
-
         # Set mass for phosphate link between bases
         phosphate_link = (
             ELEMENT_MASSES["P"] + 2 * ELEMENT_MASSES["O"] - ELEMENT_MASSES["H+"]
         )
 
-        # Add phosphate backbone to gain nucleotide masses (also rounded)
+        # Rename monoisotopic mass to nucleoside mass
+        masses = masses.rename({"monoisotopic_mass": "nucleoside_mass"})
+
+        # Add phosphate backbone to gain nucleotide masses
         masses = masses.with_columns(
-            pl.col("nucleoside_mass")
-            .add(phosphate_link)
-            # .round(DECIMAL_PLACES + 1)
-            .alias("nucleotide_mass")
+            pl.col("nucleoside_mass").add(phosphate_link).alias("nucleotide_mass")
         )
 
         # Add new columns for singleton m/z values (subtract one proton
@@ -155,6 +139,24 @@ class NucleotideAlphabet:
             .round(0)
             .cast(pl.Int64)
             .alias("integer_mass"),
+        )
+
+        # Round masses using DECIMAL_PLACES+1 since errors propagate at last digit
+        masses = masses.with_columns(
+            pl.col("nucleoside_mass").round(DECIMAL_PLACES + 1),
+            pl.col("nucleotide_mass").round(DECIMAL_PLACES + 1),
+            pl.col("singleton_mz").round(DECIMAL_PLACES + 1),
+        )
+
+        # Group nucleotides by their mass, select a representative for each
+        # group, and aggregate them into a list of equal-mass nucleotides
+        masses = masses.group_by("integer_mass", maintain_order=True).agg(
+            pl.col("id").first().alias("representative"),
+            pl.col("nucleoside_mass").max(),
+            pl.col("nucleotide_mass").max(),
+            pl.col("singleton_mz").max(),
+            pl.col("id").unique().alias("id_list"),
+            pl.col("modification_rate").max(),
         )
 
         # Add modification flag
