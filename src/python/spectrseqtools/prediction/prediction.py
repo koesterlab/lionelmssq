@@ -321,10 +321,11 @@ class Predictor:
 def select_solver(solver: SolverType):
     """Select solver."""
     match solver:
-        # TODO: Allow usage of HiGHS solver
-        case SolverType.GUROBI:
-            return "GUROBI_CMD"
         case SolverType.CBC:
             return "PULP_CBC_CMD"
+        case SolverType.GUROBI:
+            return "GUROBI_CMD"
+        case SolverType.HIGHS:
+            return "HiGHS_CMD"
         case _:
             raise NotImplementedError(f"Support for '{solver}' is currently not given.")
