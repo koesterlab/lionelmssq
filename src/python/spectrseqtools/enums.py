@@ -17,3 +17,4 @@ class SolverType(Enum):
 
     CBC = "cbc"
     GUROBI = "gurobi"
+    HIGHS = "highs"

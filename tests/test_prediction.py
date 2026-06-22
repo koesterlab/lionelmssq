@@ -65,6 +65,7 @@ def test_testcase(testcase):
             output_dir=None,
             solver=SolverType.CBC,
             # solver=SolverType.GUROBI,
+            # solver=SolverType.HIGHS,
         )
     ).predict()
 
