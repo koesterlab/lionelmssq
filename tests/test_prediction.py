@@ -63,9 +63,9 @@ def test_testcase(testcase):
             fragment_predictions=base_path / "fragments.prediction.tsv",
             sequence_name=f"{testcase}",
             output_dir=None,
-            solver=SolverType.CBC,
+            # solver=SolverType.CBC,
             # solver=SolverType.GUROBI,
-            # solver=SolverType.HIGHS,
+            solver=SolverType.HIGHS,
         )
     ).predict()
 

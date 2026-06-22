@@ -141,7 +141,7 @@ class PredictionOptions(ddargparse.OptionsBase):
         },
     )
     solver: SolverType = field(
-        default=SolverType.GUROBI,
+        default=SolverType.HIGHS,
         metadata={"help": "Solver to use for optimization problem"},
     )
     lp_timeout_short: int = field(
