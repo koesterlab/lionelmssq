@@ -102,9 +102,6 @@ class PreprocessingOptions(ddargparse.OptionsBase):
             "(used in ms_deisotope package)."
         },
     )
-    cutoff_percentile: int = field(
-        default=75, metadata={"help": "Intensity percentile used as cutoff"}
-    )
 
 
 @dataclass
@@ -153,6 +150,9 @@ class PredictionOptions(ddargparse.OptionsBase):
     threads: int = field(
         default=1,
         metadata={"help": "Number of threads to use for the optimization problem"},
+    )
+    intensity_cutoff_percentile: int = field(
+        default=75, metadata={"help": "Intensity percentile used as cutoff"}
     )
 
 

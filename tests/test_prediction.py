@@ -46,7 +46,6 @@ def test_testcase(testcase):
                 alphabet=None,
                 charge_range=None,
                 min_intensity=None,
-                cutoff_percentile=75,
             )
         ).preprocess()
     else:
@@ -63,6 +62,7 @@ def test_testcase(testcase):
             fragment_predictions=base_path / "fragments.prediction.tsv",
             sequence_name=f"{testcase}",
             output_dir=None,
+            intensity_cutoff_percentile=75,
             # solver=SolverType.CBC,
             # solver=SolverType.GUROBI,
             solver=SolverType.HIGHS,

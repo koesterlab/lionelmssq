@@ -16,9 +16,6 @@ from spectrseqtools.prediction.fragment_classification import FragmentClassifier
 from spectrseqtools.prediction.sequence_inference import LinearProgramInstance
 from spectrseqtools.prediction.skeleton_building import SkeletonBuilder
 
-# Set default value for intensity cutoff
-DEFAULT_INTENSITY_CUTOFF = 115000
-
 # Set relative tolerance such that we consider
 # abs(sum(masses)/target_mass - 1) < TOLERANCE for matching
 # Note that the error is on the higher side than would be for a good
@@ -53,9 +50,10 @@ class Predictor:
         with open(options.meta, "r", encoding="utf-8") as f:
             meta = yaml.safe_load(f)
 
-        self.intensity_cutoff = meta.setdefault(
-            "intensity_cutoff", DEFAULT_INTENSITY_CUTOFF
-        )
+        # Set intensity cutoff
+        self.intensity_cutoff = None
+        if "intensity_cutoff" in meta:
+            self.intensity_cutoff = meta["intensity_cutoff"]
 
         # Initialize nucleotide alphabet
         alphabet = NucleotideAlphabet.from_file(
@@ -90,6 +88,7 @@ class Predictor:
         self.predict_path = options.fragment_predictions
         self.sequence_path = options.sequence_prediction
         self.sequence_name = options.sequence_name
+        self.cutoff_percentile = options.intensity_cutoff_percentile
 
     def predict(self):
         """Predict sequence."""
@@ -100,7 +99,10 @@ class Predictor:
 
         # Initialize raw fragments
         fragments = RawFragments.from_file(input_path=self.fragment_path)
-        fragments.filter_by_intensity(cutoff=self.intensity_cutoff)
+        fragments.filter_by_intensity(
+            intensity_cutoff=self.intensity_cutoff,
+            cutoff_percentile=self.cutoff_percentile,
+        )
 
         # Classify raw fragments into SU-fragments
         fragments = self.classifier.classify(fragments=fragments)

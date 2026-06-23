@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Self, Set
 
+import numpy as np
 import polars as pl
 from loguru import logger
 
@@ -525,18 +526,36 @@ class RawFragments:
             ),
         )
 
-    def filter_by_intensity(self, cutoff: float = 0.5e6) -> None:
+    def filter_by_intensity(
+        self, cutoff_percentile: int, intensity_cutoff: float = None
+    ) -> None:
         """
         Filter out fragments with too low intensity.
 
         Parameters
         ----------
-        cutoff : float, optional
-            Intensity cutoff. Default: 0.5e6.
+        cutoff_percentile : int
+            Intensity cutoff percentile.
+        intensity_cutoff : float, optional
+            Fixed intensity cutoff. Default: None.
 
         """
+        if intensity_cutoff is None:
+            # Get intensity cutoffs for all percentiles (in increments of 5%)
+            percentile_df = self.fragments.get_column("intensity").describe(
+                percentiles=np.linspace(0, 0.95, 20),
+                interpolation="midpoint",
+            )
+
+            # Set intensity cutoff (if not given in metadata) based on desired percentile
+            intensity_cutoff = percentile_df.filter(
+                pl.col("statistic") == f"{cutoff_percentile}%"
+            )["value"].to_list()[0]
+
         if self.fragments.select("intensity").min().item() > -1:
-            self.fragments = self.fragments.filter(pl.col("intensity") > cutoff)
+            self.fragments = self.fragments.filter(
+                pl.col("intensity") >= intensity_cutoff
+            )
 
     def standardize(self, fragmentation_dict: dict) -> StandardUnitFragments:
         """

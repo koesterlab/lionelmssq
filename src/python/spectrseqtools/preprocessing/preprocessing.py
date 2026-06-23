@@ -4,7 +4,6 @@
 import importlib.resources
 
 import ms_deisotope as ms_ditp
-import numpy as np
 import polars as pl
 import tqdm
 import yaml
@@ -44,7 +43,6 @@ class Preprocessor:
         self.output_prefix = self.output_dir / self.output_id
         with open(options.meta, "r", encoding="utf-8") as f:
             self.meta_params = yaml.safe_load(f)
-        self.cutoff_percentile = options.cutoff_percentile
 
         self.deconvolution_params = DeconvolutionParameters(
             min_precursor_charge=options.min_precursor_charge,
@@ -83,13 +81,6 @@ class Preprocessor:
         meta_params.setdefault("identity", self.output_id)
         meta_params.setdefault("intact_mass", self.select_intact_mass(fragments))
         meta_params.setdefault("true_sequence", None)
-
-        # Set intensity cutoff
-        meta_params["intensity_cutoff"] = (
-            determine_intensity_percentiles(fragments)
-            .filter(pl.col("statistic") == f"{self.cutoff_percentile}%")["value"]
-            .to_list()[0]
-        )
 
         # Save updated meta data
         with open(
@@ -298,23 +289,3 @@ def set_averagine(backbone: AveragineBackbone) -> dict:
             )
 
     return average_composition
-
-
-def determine_intensity_percentiles(fragments: pl.DataFrame) -> pl.DataFrame:
-    """
-    Determine percentile values for intensities in given dataframe.
-
-    Parameters
-    ----------
-    fragments : polars.DataFrame
-        Dataframe containing deconvoluted fragments.
-
-    Returns
-    -------
-    polars.DataFrame
-        Dataframe containing intensity percentile values.
-    """
-    return fragments.get_column("intensity").describe(
-        percentiles=np.linspace(0, 0.95, 20),
-        interpolation="midpoint",
-    )
