@@ -92,13 +92,3 @@ def test_testcase(testcase):
 
     # Assert whether the sequences match
     assert prediction.sequence == true_seq
-
-    # Assert whether observed and predicted mass match for all fragments
-    # Note this will only be true for simulated data; experimental data does
-    # not have any guarantee accuracy
-    # if simulation:
-    #     for idx in range(len(prediction.fragments)):
-    #         assert abs(
-    #             prediction.fragments.item(idx, "standard_unit_mass")
-    #             - prediction.fragments.item(idx, "predicted_mass")
-    #         ) <= TOLERANCE * prediction.fragments.item(idx, "observed_mass")

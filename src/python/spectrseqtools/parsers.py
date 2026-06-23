@@ -131,6 +131,16 @@ class PredictionOptions(ddargparse.OptionsBase):
             "help": "Output directory (default: input directory)",
         }
     )
+    tolerance: float = field(
+        default=10e-6,
+        metadata={"help": "Error tolerance to consider masses identical."},
+    )
+    compression_rate: int = field(
+        default=32,
+        metadata={
+            "help": "Number of binary-compressed masses per cell in traceback matrix."
+        },
+    )
     modification_rate: float = field(
         default=0.5,
         metadata={

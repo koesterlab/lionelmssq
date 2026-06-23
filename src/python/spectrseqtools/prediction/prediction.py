@@ -16,16 +16,6 @@ from spectrseqtools.prediction.fragment_classification import FragmentClassifier
 from spectrseqtools.prediction.sequence_inference import LinearProgramInstance
 from spectrseqtools.prediction.skeleton_building import SkeletonBuilder
 
-# Set relative tolerance such that we consider
-# abs(sum(masses)/target_mass - 1) < TOLERANCE for matching
-# Note that the error is on the higher side than would be for a good
-# calibrated machine (10 ppm), but in the absence of an experimental
-# measurement of this error, this conservative value works well
-TOLERANCE = 10e-6
-
-# Set number of binary-compressed masses per integer cell in traceback matrix
-COMPRESSION_RATE = 32
-
 
 class Predictor:
     """Class to predict sequence and fragment."""
@@ -78,8 +68,8 @@ class Predictor:
         # Initialize CompositionInferrer class
         inferrer = CompositionInferrer(
             alphabet=alphabet,
-            compression_rate=int(COMPRESSION_RATE),
-            tolerance=TOLERANCE,
+            compression_rate=int(options.compression_rate),
+            tolerance=options.tolerance,
             seq=seq_info,
         )
 
