@@ -25,6 +25,65 @@ MAX_VARIANCE = 1
 
 
 @dataclass
+class FileSettings:
+    """Class for file-related settings."""
+
+    input_path: Path
+    meta_path: Path
+    alphabet_path: Path | None = None
+    output_dir: Path | None = None
+
+    def __post_init__(self):
+        path = self.input_path.resolve()
+        if self.output_dir is None:
+            self.output_dir = path.parent
+
+    @property
+    def file_prefix(self):
+        """Return file prefix (not including directory path)."""
+        return self.input_path.stem
+
+
+@dataclass
+class PreprocessingFileSettings(FileSettings):
+    """Class for file-related settings used during preprocessing phase."""
+
+    @property
+    def updated_meta_path(self) -> Path:
+        """Return path for updated metafile."""
+        return self.output_dir / f"{self.file_prefix}.preprocessed.meta.yaml"
+
+    @property
+    def fragment_path(self) -> Path:
+        """Return path for file containing raw fragments."""
+        return self.output_dir / f"{self.file_prefix}.tsv"
+
+    @property
+    def updated_alphabet_path(self) -> Path:
+        """Return path for file containing updated nucleotide alphabet (singletons)."""
+        return self.output_dir / f"{self.file_prefix}.singletons.tsv"
+
+
+@dataclass
+class PredictionFileSettings(FileSettings):
+    """Class for file-related settings used during prediction phase."""
+
+    predicted_fragment_path: Path | None = None
+    sequence_path: Path | None = None
+    sequence_header: str | None = None
+
+    @property
+    def raw_fragment_path(self) -> Path:
+        """Return path for file containing raw fragments."""
+        return self.input_path
+
+    @property
+    def su_fragment_path(self) -> Path:
+        """Return path for file containing SU-fragments."""
+        return self.output_dir / f"{self.file_prefix}.standard_unit_fragments.tsv"
+
+
+@dataclass
 class SolverParameters:
     """Class for parameters used to solve optimization problems."""
 
@@ -292,9 +351,7 @@ class Prediction:
 
     def save(
         self,
-        fragment_path: Path,
-        sequence_path: Path,
-        sequence_name: str,
+        file_settings: PredictionFileSettings,
         alphabet: NucleotideAlphabet,
     ) -> None:
         """
@@ -302,23 +359,19 @@ class Prediction:
 
         Parameters
         ----------
-        fragment_path : Path
-            Path to output file for fragments in TSV format.
-        sequence_path : Path
-            Path to output file for sequence in FASTA format.
-        sequence_name : str
-            Name of sequence in FASTA header.
+        file_settings : PredictionFileSettings
+            File-related settings for prediction phase.
         alphabet : NucleotideAlphabet
             Alphabet of considered nucleotides.
 
         """
         # Save fragment predictions
-        self.fragments.save(output_path=fragment_path)
+        self.fragments.save(output_path=file_settings.predicted_fragment_path)
 
         # Save predicted sequence
         self.sequence.save(
-            output_path=sequence_path,
-            sequence_name=sequence_name,
+            output_path=file_settings.sequence_path,
+            sequence_name=file_settings.sequence_header,
             alphabet=alphabet,
         )
 

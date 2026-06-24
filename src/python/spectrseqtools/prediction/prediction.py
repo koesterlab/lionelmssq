@@ -5,8 +5,12 @@ from typing import Set, Tuple
 
 import yaml
 
-from spectrseqtools.common import set_output_path
-from spectrseqtools.dataclasses import Prediction, SequenceInformation, SolverParameters
+from spectrseqtools.dataclasses import (
+    Prediction,
+    PredictionFileSettings,
+    SequenceInformation,
+    SolverParameters,
+)
 from spectrseqtools.enums import SolverType
 from spectrseqtools.fragments import RawFragments, StandardUnitFragments
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
@@ -30,14 +34,21 @@ class Predictor:
             time_limit_long=options.lp_timeout_long,
         )
 
-        self.fragment_dir, self.file_prefix = set_output_path(
-            input_path=options.fragments, output_dir=options.output_dir
+        # Set file-related settings
+        self.file_settings = PredictionFileSettings(
+            input_path=options.fragments,
+            meta_path=options.meta,
+            alphabet_path=options.alphabet,
+            output_dir=options.output_dir,
+            predicted_fragment_path=options.fragment_predictions,
+            sequence_path=options.sequence_prediction,
+            sequence_header=options.sequence_name,
         )
 
         # Initialize fragment classifier
-        self.classifier = FragmentClassifier(file_path=options.meta)
+        self.classifier = FragmentClassifier(file_path=self.file_settings.meta_path)
 
-        with open(options.meta, "r", encoding="utf-8") as f:
+        with open(self.file_settings.meta_path, "r", encoding="utf-8") as f:
             meta = yaml.safe_load(f)
 
         # Set intensity cutoff
@@ -48,7 +59,7 @@ class Predictor:
         # Initialize nucleotide alphabet
         alphabet = NucleotideAlphabet.from_file(
             modification_rate=options.modification_rate,
-            input_path=options.alphabet,
+            input_path=self.file_settings.alphabet_path,
         )
 
         # Standardize intact sequence mass by removing START_END fragmentation to gain SU mass
@@ -74,10 +85,6 @@ class Predictor:
         )
 
         self.inferrer = inferrer
-        self.fragment_path = options.fragments
-        self.predict_path = options.fragment_predictions
-        self.sequence_path = options.sequence_prediction
-        self.sequence_name = options.sequence_name
         self.cutoff_percentile = options.intensity_cutoff_percentile
 
     def predict(self):
@@ -88,7 +95,9 @@ class Predictor:
         print()
 
         # Initialize raw fragments
-        fragments = RawFragments.from_file(input_path=self.fragment_path)
+        fragments = RawFragments.from_file(
+            input_path=self.file_settings.raw_fragment_path
+        )
         fragments.filter_by_intensity(
             intensity_cutoff=self.intensity_cutoff,
             cutoff_percentile=self.cutoff_percentile,
@@ -101,10 +110,7 @@ class Predictor:
         fragments.filter_with_traceback_matrix(inferrer=self.inferrer)
 
         # Save SU-fragments
-        fragments.save(
-            output_path=self.fragment_dir
-            / f"{self.file_prefix}.standard_unit_fragments.tsv"
-        )
+        fragments.save(output_path=self.file_settings.su_fragment_path)
 
         fragments.index()
 
@@ -121,9 +127,7 @@ class Predictor:
 
         # Save prediction results
         prediction.save(
-            fragment_path=self.predict_path,
-            sequence_path=self.sequence_path,
-            sequence_name=self.sequence_name,
+            file_settings=self.file_settings,
             alphabet=self.inferrer.alphabet,
         )
 

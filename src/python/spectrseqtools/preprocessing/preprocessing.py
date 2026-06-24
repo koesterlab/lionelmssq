@@ -9,7 +9,7 @@ import tqdm
 import yaml
 from clr_loader import get_mono
 
-from spectrseqtools.common import set_output_path
+from spectrseqtools.dataclasses import PreprocessingFileSettings
 from spectrseqtools.enums import AveragineBackbone
 from spectrseqtools.parsers import PreprocessingOptions
 from spectrseqtools.preprocessing.deconvolution import (
@@ -28,19 +28,19 @@ class Preprocessor:
     """Class for preprocessing of raw MS data."""
 
     def __init__(self, options: PreprocessingOptions) -> None:
-        self.alphabet_path = options.alphabet
+        self.file_settings = PreprocessingFileSettings(
+            input_path=options.input,
+            meta_path=options.meta,
+            alphabet_path=options.alphabet,
+            output_dir=options.output_dir,
+        )
         self.tolerance = options.tolerance
         self.singleton_boundaries = SingletonBoundaries.from_alphabet_file(
-            input_path=self.alphabet_path,
+            input_path=self.file_settings.alphabet_path,
             boundary_factor=options.boundary_factor,
             tolerance=self.tolerance,
         )
-        self.input_path = options.input
-        self.output_dir, self.output_id = set_output_path(
-            input_path=options.input, output_dir=options.output_dir
-        )
-        self.output_prefix = self.output_dir / self.output_id
-        with open(options.meta, "r", encoding="utf-8") as f:
+        with open(self.file_settings.meta_path, "r", encoding="utf-8") as f:
             self.meta_params = yaml.safe_load(f)
 
         self.deconvolution_params = DeconvolutionParameters(
@@ -77,24 +77,20 @@ class Preprocessor:
 
         # Update meta parameters (if needed)
         meta_params = self.meta_params
-        meta_params.setdefault("identity", self.output_id)
+        meta_params.setdefault("identity", self.file_settings.file_prefix)
         meta_params.setdefault("intact_mass", self.select_intact_mass(fragments))
         meta_params.setdefault("true_sequence", None)
 
         # Save updated meta data
-        with open(
-            f"{self.output_prefix}.preprocessed.meta.yaml", "w", encoding="utf-8"
-        ) as f:
+        with open(self.file_settings.updated_meta_path, "w", encoding="utf-8") as f:
             yaml.dump(meta_params, f)
 
         # Save preprocessed fragments
-        fragments.write_csv(f"{self.output_prefix}.tsv", separator="\t")
+        fragments.write_csv(self.file_settings.fragment_path, separator="\t")
 
-        # Identify singletons
+        # Save singletons detected from raw data as new nucleotide alphabet
         singletons = self.identify_singletons()
-
-        # Save singletons detected from raw data
-        singletons.write_csv(f"{self.output_prefix}.singletons.tsv", separator="\t")
+        singletons.write_csv(self.file_settings.updated_alphabet_path, separator="\t")
 
         print("Preprocessing completed!\n")
 
@@ -109,7 +105,9 @@ class Preprocessor:
 
         """
         # Initialize iterator for RAW file
-        raw_file_read = initialize_raw_file_iterator(file_path=str(self.input_path))
+        raw_file_read = initialize_raw_file_iterator(
+            file_path=str(self.file_settings.input_path)
+        )
 
         peak_list = DeisotopedPeakList.default()
         for _ in tqdm.tqdm(range(len(raw_file_read) - 1), desc="Deisotoping MS2 scans"):
@@ -138,7 +136,9 @@ class Preprocessor:
 
         """
         # Initialize iterator for RAW file
-        raw_file_read = initialize_raw_file_iterator(file_path=str(self.input_path))
+        raw_file_read = initialize_raw_file_iterator(
+            file_path=str(self.file_settings.input_path)
+        )
 
         peak_list = RawPeakList.default()
         for _ in tqdm.tqdm(
@@ -157,7 +157,7 @@ class Preprocessor:
             )
 
         return peak_list.to_singletons(
-            tolerance=self.tolerance, alphabet_path=self.alphabet_path
+            tolerance=self.tolerance, alphabet_path=self.file_settings.alphabet_path
         )
 
     def select_intact_mass(self, fragments: pl.DataFrame) -> float:
