@@ -2,7 +2,7 @@
 """Module for composition inference."""
 
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Set, Tuple
 
 from spectrseqtools.compositions import CompositionList
 from spectrseqtools.dataclasses import (
@@ -36,42 +36,49 @@ class CompositionInferrer:
         self.matrix = None
 
         self.alphabet = alphabet
-        self._reduce_nucleotide_alphabet(compression_rate=compression_rate)
 
-        # Initialize matrix from file (for no alphabet reduction)
-        if self.matrix is None:
+        if self.alphabet.is_default:
+            # Initialize matrix from file (for default alphabet)
+            print("Default alphabet detected. Trying to load traceback matrix.\n")
             self.matrix = TracebackMatrix.load(
                 alphabet=self.alphabet, compression_rate=compression_rate
             )
+        else:
+            # Set up matrix for given alphabet
+            print("Custom alphabet detected. Setting up new traceback matrix.\n")
+            self.matrix = TracebackMatrix.set_up_bit_matrix(
+                alphabet=self.alphabet, compression_rate=compression_rate
+            )
 
-    def adapt_individual_modification_rates_by_alphabet_reduction(self, alphabet):
-        """Adapt modification rates for each nucleotide based on new alphabet."""
-        mapping = self.alphabet.adapt_individual_modification_rates_by_alphabet(
-            alphabet=alphabet
-        )
-        self._reduce_nucleotide_alphabet()
-        return mapping
+    def reduce_alphabet(self, new_alphabet: Set[int]) -> dict:
+        """
+        Reduce alphabet by removing nucleotides not new alphabet list.
 
-    def _reduce_nucleotide_alphabet(self, compression_rate: int = None):
-        """Reduce alphabet by removing nucleotides that can never occur."""
+        Parameters
+        ----------
+        new_alphabet : Set[int]
+            Set of nucleotide indices to keep in new alphabet.
+
+        Returns
+        -------
+        dict
+            Mapping between old and new indexing.
+
+        """
         # Get current alphabet size
         alphabet_size = len(self.alphabet)
 
         # Reduce nucleotide alphabet (if possible)
-        self.alphabet.reduce()
+        mapping = self.alphabet.reduce(new_alphabet=new_alphabet)
 
-        # Return if alphabet was not reduced
-        if len(self.alphabet) == alphabet_size:
-            return
+        # Recompute matrix if alphabet was reduced
+        if len(self.alphabet) != alphabet_size:
+            self.matrix = TracebackMatrix.set_up_bit_matrix(
+                alphabet=self.alphabet,
+                compression_rate=self.matrix.compression_rate,
+            )
 
-        if self.matrix is not None:
-            compression_rate = self.matrix.compression_rate
-
-        # Recompute matrix
-        self.matrix = TracebackMatrix.set_up_bit_matrix(
-            alphabet=self.alphabet,
-            compression_rate=compression_rate,
-        )
+        return mapping
 
     def print_alphabet(self) -> None:
         """Print alphabet."""

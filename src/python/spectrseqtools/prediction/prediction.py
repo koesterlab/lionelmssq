@@ -47,9 +47,9 @@ class Predictor:
 
         # Initialize nucleotide alphabet
         alphabet = NucleotideAlphabet.from_file(
-            modification_rate=options.modification_rate
+            modification_rate=options.modification_rate,
+            input_path=options.alphabet,
         )
-        alphabet.filter_by_singletons(singleton_path=options.singletons)
 
         # Standardize intact sequence mass by removing START_END fragmentation to gain SU mass
         seq_mass_obs = meta["intact_mass"]
@@ -268,7 +268,9 @@ class Predictor:
             observed_nucleotides = {
                 nuc for comp in compositions.values() for nuc in comp.nucleotides
             }
-            fragments, _ = self._reduce_alphabet(observed_nucleotides, fragments)
+            fragments, _ = self._reduce_alphabet(
+                nucleotide_list=observed_nucleotides, fragments=fragments
+            )
 
         print("Alphabet after composition-based reduction:")
         self.inferrer.print_alphabet()
@@ -277,14 +279,14 @@ class Predictor:
         return fragments, compositions
 
     def _reduce_alphabet(
-        self, nucleotide_list: Set[str], fragments: StandardUnitFragments
+        self, nucleotide_list: Set[int], fragments: StandardUnitFragments
     ) -> Tuple[StandardUnitFragments, dict]:
         """
         Reduce nucleotide alphabet (and fragments) by list of valid nucleotides.
 
         Parameters
         ----------
-        nucleotide_list : Set[str]
+        nucleotide_list : Set[int]
             List of valid nucleotides.
         fragments : StandardUnitFragments
             SU-fragments before reduction.
@@ -298,11 +300,7 @@ class Predictor:
 
         """
         # Reduce nucleotide alphabet
-        mapping = (
-            self.inferrer.adapt_individual_modification_rates_by_alphabet_reduction(
-                nucleotide_list
-            )
-        )
+        mapping = self.inferrer.reduce_alphabet(new_alphabet=nucleotide_list)
 
         # Filter out all fragments with no valid composition
         fragments.filter_with_traceback_matrix(inferrer=self.inferrer)

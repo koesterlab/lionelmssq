@@ -5,7 +5,7 @@ import importlib.resources
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Self
+from typing import List, Self, Set
 
 import numpy as np
 import polars as pl
@@ -15,6 +15,8 @@ from spectrseqtools.masses import DECIMAL_PLACES, ELEMENT_MASSES, PRECISION
 # TODO: Currently, the list of unmodified bases is only defined for RNA;
 #  make it universally applicable
 UNMODIFIED_BASES = ["A", "C", "G", "U"]
+
+DEFAULT_ALPHABET_PATH = importlib.resources.files(__package__) / "assets" / "masses.tsv"
 
 _DF_COLS = [
     "id",
@@ -104,18 +106,19 @@ class NucleotideAlphabet:
             Maximum percentage of modification in sequence.
         precision : float
             Precision used for (nucleotide) masses.
-        input_path : Path
+        input_path : Path | None
             Path to file with nucleoside information.
 
         """
-        # If input path is None, set default
-        if input_path is None:
-            input_path = (
-                importlib.resources.files(__package__) / "assets" / "masses.tsv"
-            )
+        # If input path is None or non-existent, set default
+        if input_path is None or not os.path.isfile(input_path):
+            if input_path is not None:
+                print("No valid alphabet path detected. Proceeding with default.")
+            input_path = DEFAULT_ALPHABET_PATH
 
         # Read nucleoside masses from file
         masses = pl.read_csv(input_path, separator="\t")
+        masses = masses.select(_DF_COLS)
         assert masses.columns == _DF_COLS
 
         # Set mass for phosphate link between bases
@@ -197,8 +200,15 @@ class NucleotideAlphabet:
                 .otherwise(pl.col("modification_rate"))
             )
         )
+
+        # Return alphabet over all nucleotides that can occur in a sequence
         return cls(
-            alphabet=[NucleotideMass(**row) for row in new_df.rows(named=True)],
+            alphabet=[
+                NucleotideMass(**row)
+                for row in new_df.filter(pl.col("modification_rate") > 0).rows(
+                    named=True
+                )
+            ],
             precision=precision,
         )
 
@@ -215,6 +225,11 @@ class NucleotideAlphabet:
     def max(self) -> NucleotideMass:
         """Return heaviest nucleotide in alphabet."""
         return self.alphabet[-1]
+
+    @property
+    def is_default(self) -> bool:
+        """Return whether default alphabet was used."""
+        return self == NucleotideAlphabet.from_file(precision=self.precision)
 
     def get(self, idx: int) -> NucleotideMass:
         """Return nucleotide at index in alphabet."""
@@ -271,14 +286,14 @@ class NucleotideAlphabet:
             if len(set(nuc.names) & singleton_names) == 0 and nuc.is_modification:
                 nuc.modification_rate = 0.0
 
-    def adapt_individual_modification_rates_by_alphabet(self, alphabet: List) -> dict:
+    def reduce(self, new_alphabet: Set[int]) -> dict:
         """
-        Set individual modification rate to 0 if nucleotide not in new alphabet.
+        Reduce alphabet by removing nucleotides not in new alphabet.
 
         Parameters
         ----------
-        alphabet : List
-            List of nucleotide names in new alphabet.
+        new_alphabet : Set[int]
+            Set of nucleotide indices to keep in new alphabet.
 
         Returns
         -------
@@ -287,14 +302,20 @@ class NucleotideAlphabet:
 
         """
         mapping = {idx: idx for idx in range(len(self))}
+
+        # Set modification rate of all superfluous nucleotides to 0 and adapt mapping
         for idx, nucleotide_mass in enumerate(self.alphabet):
-            if nucleotide_mass.is_modification and idx not in alphabet:
+            if nucleotide_mass.is_modification and idx not in new_alphabet:
                 mapping = {
                     key: value - 1 if idx < key else value
                     for (key, value) in (mapping.items())
                     if key != idx
                 }
                 nucleotide_mass.modification_rate = 0.0
+
+        # Remove all modifications that cannot occur in sequence
+        self.alphabet = [mass for mass in self.alphabet if mass.modification_rate > 0.0]
+
         return mapping
 
     def get_seq_weight(self, seq: tuple) -> float:
@@ -317,10 +338,6 @@ class NucleotideAlphabet:
         }
 
         return round(sum(mass_dict[nuc] for nuc in seq), 5)
-
-    def reduce(self) -> None:
-        """Reduce alphabet by removing nucleotides that cannot be in sequence."""
-        self.alphabet = [mass for mass in self.alphabet if mass.modification_rate > 0.0]
 
     def to_dataframe(self) -> pl.DataFrame:
         """Return nucleotide alphabet as Polars dataframe."""

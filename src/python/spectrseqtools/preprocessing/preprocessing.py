@@ -11,7 +11,6 @@ from clr_loader import get_mono
 
 from spectrseqtools.common import set_output_path
 from spectrseqtools.enums import AveragineBackbone
-from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 from spectrseqtools.parsers import PreprocessingOptions
 from spectrseqtools.preprocessing.deconvolution import (
     DeconvolutionParameters,
@@ -29,10 +28,10 @@ class Preprocessor:
     """Class for preprocessing of raw MS data."""
 
     def __init__(self, options: PreprocessingOptions) -> None:
-        self.alphabet = NucleotideAlphabet.from_file(input_path=options.alphabet)
+        self.alphabet_path = options.alphabet
         self.tolerance = options.tolerance
-        self.singleton_boundaries = SingletonBoundaries.from_alphabet(
-            alphabet=self.alphabet,
+        self.singleton_boundaries = SingletonBoundaries.from_alphabet_file(
+            input_path=self.alphabet_path,
             boundary_factor=options.boundary_factor,
             tolerance=self.tolerance,
         )
@@ -157,7 +156,9 @@ class Preprocessor:
                 scan=scan, boundaries=self.singleton_boundaries
             )
 
-        return peak_list.to_singletons(tolerance=self.tolerance, alphabet=self.alphabet)
+        return peak_list.to_singletons(
+            tolerance=self.tolerance, alphabet_path=self.alphabet_path
+        )
 
     def select_intact_mass(self, fragments: pl.DataFrame) -> float:
         """

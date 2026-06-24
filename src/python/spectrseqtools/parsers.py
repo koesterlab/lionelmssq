@@ -112,8 +112,11 @@ class PredictionOptions(ddargparse.OptionsBase):
         metadata={"help": "Path to TSV table of observed fragments"},
     )
     meta: Path = field(metadata={"help": "Path to YAML with meta information"})
-    singletons: Path = field(
-        metadata={"help": "Path to TSV with singleton information"}
+    alphabet: Path | None = field(
+        metadata={
+            "help": "Path to file containing nucleotide alphabet. If preprocessing was "
+            "used, this should correspond to the detected singletons."
+        }
     )
     fragment_predictions: Path = field(
         metadata={

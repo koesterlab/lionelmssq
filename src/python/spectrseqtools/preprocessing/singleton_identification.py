@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 """Singleton selection from raw mass spectrometry data."""
 
+import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import List, Self
 
 import ms_deisotope as ms_ditp
@@ -11,7 +13,7 @@ from clr_loader import get_mono
 from dbscan1d.core import DBSCAN1D
 from sklearn.metrics import silhouette_score
 
-from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
+from spectrseqtools.nucleotide_alphabet import DEFAULT_ALPHABET_PATH, NucleotideAlphabet
 
 rt = get_mono()
 
@@ -33,10 +35,23 @@ class SingletonBoundaries:
     max_mz: float
 
     @classmethod
-    def from_alphabet(
-        cls, alphabet: pl.DataFrame, tolerance: float, boundary_factor: float
+    def from_alphabet_file(
+        cls, input_path: Path | None, tolerance: float, boundary_factor: float
     ) -> Self:
-        """Set singleton boundaries based on nucleotide alphabet."""
+        """
+        Set singleton boundaries based on nucleotide alphabet in given file.
+
+        Parameters
+        ----------
+        input_path : Path | None
+            Path to alphabet of considered nucleotides.
+        tolerance : float
+            Error tolerance for individual masses.
+        boundary_factor : int
+            Factor for scaling theoretical singleton boundaries.
+
+        """
+        alphabet = NucleotideAlphabet.from_file(input_path=input_path)
         return SingletonBoundaries(
             min_mz=alphabet.min.singleton_mz * (1 - boundary_factor * tolerance),
             max_mz=alphabet.max.singleton_mz * (1 + boundary_factor * tolerance),
@@ -117,9 +132,7 @@ class RawPeakList:
                 )
         return RawPeakList(peaks=peak_list)
 
-    def to_singletons(
-        self, alphabet: NucleotideAlphabet, tolerance: float
-    ) -> pl.DataFrame:
+    def to_singletons(self, alphabet_path: Path, tolerance: float) -> pl.DataFrame:
         """
         Select candidate singletons based on raw peaks.
 
@@ -128,8 +141,8 @@ class RawPeakList:
 
         Parameters
         ----------
-        alphabet : NucleotideAlphabet
-            Alphabet of considered nucleotides.
+        alphabet_path : Path
+            Path to alphabet of considered nucleotides.
         tolerance : float
             Error tolerance for individual masses.
 
@@ -139,10 +152,9 @@ class RawPeakList:
             Dataframe containing singleton candidates.
 
         """
-        alphabet_df = alphabet.to_dataframe()
-        alphabet_df = alphabet_df.with_columns(
-            pl.col("names").first().alias("representative")
-        )
+        alphabet_df = NucleotideAlphabet.from_file(
+            input_path=alphabet_path
+        ).to_dataframe()
 
         # Build dataframe from peak list
         peak_df = pl.DataFrame(
@@ -171,7 +183,7 @@ class RawPeakList:
                 .alias("is_match")
             )
             .filter(pl.col("is_match"))
-            .sort(["representative", "scan_time"])
+            .sort("scan_time")
         )
 
         # Map representative nucleotide, cluster score, and count to each nucleotide group
@@ -186,11 +198,20 @@ class RawPeakList:
         )
 
         # Filter candidate singletons by cluster score
-        return (
+        singletons = (
             peak_df.filter(pl.col("cluster_score") >= 0).select(
                 ["id", "count", "cluster_score"]
             )
         ).sort("count", descending=True)
+
+        # If alphabet path is None or non-existent, set default
+        if alphabet_path is None or not os.path.isfile(alphabet_path):
+            alphabet_path = DEFAULT_ALPHABET_PATH
+
+        # Only select singletons for new alphabet
+        return pl.read_csv(alphabet_path, separator="\t").join(
+            singletons, on="id", how="inner"
+        )
 
 
 def calculate_cluster_score(scan_times: pl.Series) -> float:

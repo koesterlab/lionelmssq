@@ -57,10 +57,8 @@ class SkeletonBuilder:
         end_skeleton = end_skeleton.reverse
 
         # Reduce nucleotide alphabet based on skeleton parts
-        mapping = (
-            self.inferrer.adapt_individual_modification_rates_by_alphabet_reduction(
-                alphabet=start_skeleton.nucleotides.union(end_skeleton.nucleotides)
-            )
+        mapping = self.inferrer.reduce_alphabet(
+            new_alphabet=start_skeleton.nucleotides.union(end_skeleton.nucleotides)
         )
         self.inferrer.update_sequence_length()
         start_skeleton.update_indexing(mapping=mapping)

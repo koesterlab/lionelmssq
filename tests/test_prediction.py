@@ -57,7 +57,7 @@ def test_testcase(testcase):
         PredictionOptions(
             fragments=base_path / "fragments.tsv",
             meta=base_path / "fragments.preprocessed.meta.yaml",
-            singletons=base_path / "fragments.singletons.tsv",
+            alphabet=base_path / "fragments.singletons.tsv",
             sequence_prediction=base_path / "fragments.prediction.fasta",
             fragment_predictions=base_path / "fragments.prediction.tsv",
             sequence_name=f"{testcase}",
