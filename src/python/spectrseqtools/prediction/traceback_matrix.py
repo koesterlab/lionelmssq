@@ -49,7 +49,7 @@ class TracebackMatrix:
 
         """
         # Set matrix path
-        path = set_matrix_path(alphabet.precision, compression_rate)
+        path = set_matrix_path(10 ** (-alphabet.decimal_places), compression_rate)
 
         # Compute and save bit-representation matrix if not existing
         if not Path(f"{path}.npy").is_file():

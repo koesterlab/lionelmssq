@@ -166,9 +166,7 @@ class LinearProgramInstance:
             fragment_masses[j]
             - lpSum(
                 [
-                    self.z[i][j][k]
-                    * self.alphabet.get(i).mass
-                    * self.alphabet.precision
+                    self.z[i][j][k] * self.alphabet.get(i).nucleotide_mass
                     for i in range(len(self.alphabet))
                     for k in range(self.seq.max_len)
                 ]
@@ -286,6 +284,7 @@ class LinearProgramInstance:
         # TODO: Make returned value resemble prediction accuracy
         lp_problem = self._define_lp_problem()
         _ = lp_problem.solve(solver)
+        print(f"LP status after solving: {lp_problem.status}\n")
 
         # Interpret solution
         return Prediction(
@@ -327,8 +326,9 @@ class LinearProgramInstance:
         predicted_fragment_mass = [
             sum(
                 (
-                    self.alphabet.get(self._get_fragment_nucleotide(j, k)).mass
-                    * self.alphabet.precision
+                    self.alphabet.get(
+                        self._get_fragment_nucleotide(j, k)
+                    ).nucleotide_mass
                     for k in range(self.seq.max_len)
                     if self._get_fragment_nucleotide(j, k) is not None
                 )
@@ -344,9 +344,16 @@ class LinearProgramInstance:
                     "left": self._get_leftmost_position(j),
                     "right": self._get_rightmost_position(j),
                     "observed_mass": observed_masses[j],
-                    "standard_unit_mass": fragment_masses[j],
-                    "predicted_mass": predicted_fragment_mass[j],
-                    "predicted_diff": self.predicted_mass_diff[j].value(),
+                    "standard_unit_mass": round(
+                        fragment_masses[j], self.alphabet.decimal_places
+                    ),
+                    "predicted_mass": round(
+                        predicted_fragment_mass[j], self.alphabet.decimal_places
+                    ),
+                    "predicted_diff": round(
+                        self.predicted_mass_diff[j].value(),
+                        self.alphabet.decimal_places,
+                    ),
                     "predicted_seq": fragment_seq[j],
                 }
                 for j in list(range(len(fragment_masses)))

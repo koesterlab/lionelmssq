@@ -2,7 +2,7 @@
 """Module for composition inference."""
 
 from dataclasses import dataclass
-from typing import Set, Tuple
+from typing import List, Set
 
 from spectrseqtools.compositions import CompositionList
 from spectrseqtools.dataclasses import (
@@ -11,6 +11,7 @@ from spectrseqtools.dataclasses import (
     SequenceInformation,
     UpperLengthBound,
 )
+from spectrseqtools.error_calculator import ErrorCalculator
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 from spectrseqtools.prediction.traceback_matrix import TracebackMatrix
 
@@ -19,22 +20,20 @@ from spectrseqtools.prediction.traceback_matrix import TracebackMatrix
 class CompositionInferrer:
     """Class to infer compositions."""
 
+    error: ErrorCalculator
     matrix: TracebackMatrix
-    tolerance: float
     seq: SequenceInformation
     alphabet: NucleotideAlphabet
 
     def __init__(
         self,
         alphabet: NucleotideAlphabet,
+        error: ErrorCalculator,
         compression_rate: int,
-        tolerance: float,
         seq: SequenceInformation,
     ):
-        self.tolerance = tolerance
+        self.error = error
         self.seq = seq
-        self.matrix = None
-
         self.alphabet = alphabet
 
         if self.alphabet.is_default:
@@ -97,37 +96,6 @@ class CompositionInferrer:
             self.seq.min_len = seq_len
             self.seq.max_len = seq_len
 
-    def set_target(self, mass: float, threshold: float = None) -> Tuple[int, int]:
-        """
-        Return precision-adjusted target and threshold (as integers).
-
-        Parameters
-        ----------
-        mass : float
-            Given target mass.
-        threshold : float
-            Given threshold.
-
-        Returns
-        -------
-        mass : int
-            Precision-adapted inference target.
-        threshold : int
-            Precision-adapted inference threshold.
-
-        """
-        # Convert the target to an integer for easy operations
-        target = self.alphabet.set_target(value=mass)
-
-        # Set relative threshold if not given
-        if threshold is None:
-            threshold = self.tolerance * mass
-
-        # Convert the threshold to integer
-        threshold = self.alphabet.set_threshold(value=threshold)
-
-        return target, threshold
-
     def infer_length_bound(self, bound: LengthBoundary) -> int:
         """
         Return bound on length for any composition of the given mass.
@@ -146,8 +114,9 @@ class CompositionInferrer:
         # Set maximum number of modifications
         max_modifications = self.seq.max_modifications
 
-        target, threshold = self.set_target(
-            mass=self.seq.su_mass, threshold=self.tolerance * self.seq.obs_mass
+        target, threshold = self.error.set_target(
+            su_mass=self.seq.su_mass,
+            obs_masses=[self.seq.obs_mass],
         )
 
         # Initialize memorization dict
@@ -239,7 +208,7 @@ class CompositionInferrer:
     def is_valid_mass(
         self,
         mass: float,
-        threshold: float = None,
+        obs_masses: List[float] = None,
     ) -> bool:
         """
         Check whether a given mass has any valid composition.
@@ -247,9 +216,9 @@ class CompositionInferrer:
         Parameters
         ----------
         mass : float
-            Given mass.
-        threshold : float
-            Given threshold.
+            Given SU-mass.
+        obs_masses : List[float]
+            Given observed masses.
 
         Returns
         -------
@@ -257,7 +226,7 @@ class CompositionInferrer:
             Flag whether a valid composition exists.
 
         """
-        target, threshold = self.set_target(mass=mass, threshold=threshold)
+        target, threshold = self.error.set_target(su_mass=mass, obs_masses=obs_masses)
 
         for value in range(target - threshold, target + threshold + 1):
             # Skip non-positive masses
@@ -276,7 +245,7 @@ class CompositionInferrer:
     def infer_compositions(
         self,
         mass: float,
-        threshold: float = None,
+        obs_masses: List[float] = None,
         with_memo: bool = True,
     ) -> CompositionList:
         """
@@ -285,11 +254,11 @@ class CompositionInferrer:
         Parameters
         ----------
         mass : float
-            Given mass.
-        threshold : float
-            Given threshold.
+            Given SU-mass.
+        obs_masses : List[float]
+            Given observed masses.
         with_memo : bool
-            Flag whether memorization is used.
+            Flag whether memorization is used. Default: True.
 
         Returns
         -------
@@ -300,7 +269,7 @@ class CompositionInferrer:
         # Set maximum number of modifications
         max_modifications = self.seq.max_modifications
 
-        target, threshold = self.set_target(mass=mass, threshold=threshold)
+        target, threshold = self.error.set_target(su_mass=mass, obs_masses=obs_masses)
 
         # Memoization dictionary to store results for a given target
         memo = {}
@@ -381,7 +350,7 @@ class CompositionInferrer:
 def infer_compositions_with_recursion(
     mass: float,
     inferrer: CompositionInferrer,
-    threshold=None,
+    obs_masses: List[float] = None,
 ) -> CompositionList:
     """
     Return all possible nucleotide compositions that could sum up to the given mass.
@@ -389,11 +358,11 @@ def infer_compositions_with_recursion(
     Parameters
     ----------
     mass : float
-        Given mass.
+        Given SU-mass.
     inferrer : CompositionInferrer
         CompositionInferrer.
-    threshold : float
-        Given threshold.
+    obs_masses : List[float]
+        Given observed masses.
 
     Returns
     -------
@@ -404,7 +373,7 @@ def infer_compositions_with_recursion(
     # Set maximum number of modifications
     max_modifications = inferrer.seq.max_modifications
 
-    target, threshold = inferrer.set_target(mass=mass, threshold=threshold)
+    target, threshold = inferrer.error.set_target(su_mass=mass, obs_masses=obs_masses)
 
     # Memoization dictionary to store results for a given target
     memo = {}

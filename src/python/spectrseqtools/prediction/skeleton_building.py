@@ -6,7 +6,6 @@ from typing import Optional, Set, Tuple
 
 import numpy as np
 
-from spectrseqtools.common import calculate_error_threshold
 from spectrseqtools.compositions import CompositionList
 from spectrseqtools.dataclasses import SolverParameters
 from spectrseqtools.fragments import StandardUnitFragments
@@ -133,7 +132,7 @@ class SkeletonBuilder:
 
         invalid_list = []
         last_valid_bin = None
-        bins = fragments.bin(tolerance=self.inferrer.tolerance)
+        bins = fragments.bin(error=self.inferrer.error)
         for current_bin in bins:
             # Stop if no positions are left to fill
             if len(pos) == 0:
@@ -399,12 +398,9 @@ class SkeletonBuilder:
         if diff in self.compositions:
             return self.compositions.get(diff, CompositionList())
 
-        threshold = calculate_error_threshold(
-            prev_mass,
-            current_mass,
-            self.inferrer.tolerance,
+        return self.inferrer.infer_compositions(
+            mass=diff, obs_masses=[prev_mass, current_mass]
         )
-        return self.inferrer.infer_compositions(mass=diff, threshold=threshold)
 
 
 def jaccard_index(input_tuple: Tuple[Set[str], Set[str]]) -> float:

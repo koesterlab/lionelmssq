@@ -11,6 +11,7 @@ from clr_loader import get_mono
 
 from spectrseqtools.dataclasses import PreprocessingFileSettings
 from spectrseqtools.enums import AveragineBackbone
+from spectrseqtools.error_calculator import ErrorUnderL1Norm
 from spectrseqtools.parsers import PreprocessingOptions
 from spectrseqtools.preprocessing.deconvolution import (
     DeconvolutionParameters,
@@ -34,11 +35,11 @@ class Preprocessor:
             alphabet_path=options.alphabet,
             output_dir=options.output_dir,
         )
-        self.tolerance = options.tolerance
+        self.error = ErrorUnderL1Norm(tolerance=options.tolerance)
         self.singleton_boundaries = SingletonBoundaries.from_alphabet_file(
             input_path=self.file_settings.alphabet_path,
             boundary_factor=options.boundary_factor,
-            tolerance=self.tolerance,
+            error=self.error,
         )
         with open(self.file_settings.meta_path, "r", encoding="utf-8") as f:
             self.meta_params = yaml.safe_load(f)
@@ -123,7 +124,7 @@ class Preprocessor:
                 scan=scan, params=self.deconvolution_params
             )
 
-        return peak_list.to_fragments(tolerance=self.tolerance)
+        return peak_list.to_fragments(tolerance=self.error.tolerance)
 
     def identify_singletons(self) -> pl.DataFrame:
         """
@@ -157,7 +158,8 @@ class Preprocessor:
             )
 
         return peak_list.to_singletons(
-            tolerance=self.tolerance, alphabet_path=self.file_settings.alphabet_path
+            alphabet_path=self.file_settings.alphabet_path,
+            error=self.error,
         )
 
     def select_intact_mass(self, fragments: pl.DataFrame) -> float:

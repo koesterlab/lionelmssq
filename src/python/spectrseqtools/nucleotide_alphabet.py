@@ -7,14 +7,23 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Self, Set
 
-import numpy as np
 import polars as pl
 
-from spectrseqtools.masses import DECIMAL_PLACES, ELEMENT_MASSES, PRECISION
+from spectrseqtools.error_calculator import ErrorCalculator, ErrorUnderL1Norm
 
 # TODO: Currently, the list of unmodified bases is only defined for RNA;
 #  make it universally applicable
 UNMODIFIED_BASES = ["A", "C", "G", "U"]
+
+# Build dict with elemental masses
+elements = pl.read_csv(
+    importlib.resources.files(__package__) / "assets" / "element_masses.tsv",
+    separator="\t",
+)
+ELEMENT_MASSES = {
+    row[elements.get_column_index("symbol")]: row[elements.get_column_index("mass")]
+    for row in elements.iter_rows()
+}
 
 DEFAULT_ALPHABET_PATH = importlib.resources.files(__package__) / "assets" / "masses.tsv"
 
@@ -85,7 +94,6 @@ class NucleotideAlphabet:
     """Class for considered nucleotide alphabet."""
 
     alphabet: List[NucleotideMass]
-    precision: float
 
     def __repr__(self) -> str:
         return self.to_dataframe().__repr__()
@@ -93,7 +101,7 @@ class NucleotideAlphabet:
     @classmethod
     def from_file(
         cls,
-        precision: float = PRECISION,
+        error: ErrorCalculator,
         modification_rate: float = 0.5,
         input_path: Path = None,
     ) -> Self:
@@ -104,8 +112,8 @@ class NucleotideAlphabet:
         ----------
         modification_rate : float
             Maximum percentage of modification in sequence.
-        precision : float
-            Precision used for (nucleotide) masses.
+        error : ErrorCalculator
+            Error calculator.
         input_path : Path | None
             Path to file with nucleoside information.
 
@@ -138,17 +146,17 @@ class NucleotideAlphabet:
         # from nucleotide) and integer masses for the DP algorithm
         masses = masses.with_columns(
             pl.col("nucleotide_mass").add(-ELEMENT_MASSES["H+"]).alias("singleton_mz"),
-            (pl.col("nucleotide_mass") * 10**DECIMAL_PLACES)
+            (pl.col("nucleotide_mass") / error.precision)
             .round(0)
             .cast(pl.Int64)
             .alias("integer_mass"),
         )
 
-        # Round masses using DECIMAL_PLACES+1 since errors propagate at last digit
+        # Round masses
         masses = masses.with_columns(
-            pl.col("nucleoside_mass").round(DECIMAL_PLACES + 1),
-            pl.col("nucleotide_mass").round(DECIMAL_PLACES + 1),
-            pl.col("singleton_mz").round(DECIMAL_PLACES + 1),
+            pl.col("nucleoside_mass").round(error.decimal_places),
+            pl.col("nucleotide_mass").round(error.decimal_places),
+            pl.col("singleton_mz").round(error.decimal_places),
         )
 
         # Group nucleotides by their mass, select a representative for each
@@ -170,12 +178,11 @@ class NucleotideAlphabet:
         return cls.from_dataframe(
             nucleotide_df=masses,
             modification_rate=modification_rate,
-            precision=precision,
         )
 
     @classmethod
     def from_dataframe(
-        cls, nucleotide_df: pl.DataFrame, modification_rate: float, precision: float
+        cls, nucleotide_df: pl.DataFrame, modification_rate: float
     ) -> Self:
         """
         Initialize nucleotide alphabet from file.
@@ -186,8 +193,6 @@ class NucleotideAlphabet:
             Polars dataframe containing nucleoside information.
         modification_rate : float
             Maximum percentage of modification in sequence.
-        precision : float
-            Precision used for (nucleotide) masses.
 
         """
         new_df = (
@@ -209,12 +214,17 @@ class NucleotideAlphabet:
                     named=True
                 )
             ],
-            precision=precision,
         )
 
     def __len__(self) -> int:
         """Return alphabet size."""
         return len(self.alphabet)
+
+    @property
+    def decimal_places(self) -> int:
+        """Determine number of decimal places from first nucleotide in alphabet."""
+        value = self.alphabet[0]
+        return len(str(value.mass)) - len(str(int(value.nucleotide_mass)))
 
     @property
     def min(self) -> NucleotideMass:
@@ -229,7 +239,9 @@ class NucleotideAlphabet:
     @property
     def is_default(self) -> bool:
         """Return whether default alphabet was used."""
-        return self == NucleotideAlphabet.from_file(precision=self.precision)
+        return self == NucleotideAlphabet.from_file(
+            error=ErrorUnderL1Norm(decimal_places=self.decimal_places)
+        )
 
     def get(self, idx: int) -> NucleotideMass:
         """Return nucleotide at index in alphabet."""
@@ -248,14 +260,6 @@ class NucleotideAlphabet:
             if rep == nuc.names[0]:
                 return idx
         return -1
-
-    def set_threshold(self, value: float) -> int:
-        """Return precision-adapted inference threshold."""
-        return int(np.ceil(value / self.precision))
-
-    def set_target(self, value: float) -> int:
-        """Return precision-adapted inference target."""
-        return int(round(value / self.precision, 0))
 
     def filter_by_singletons(self, singleton_path: Path) -> None:
         """Filter out nucleotides not found during singleton identification.

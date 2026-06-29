@@ -1,6 +1,7 @@
 import pytest
 from spectrseqtools.compositions import Composition
 from spectrseqtools.dataclasses import SequenceInformation
+from spectrseqtools.error_calculator import ErrorUnderL1Norm
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 from spectrseqtools.prediction.composition_inference import (
     CompositionInferrer,
@@ -25,7 +26,10 @@ COMPRESSION_RATES = [32]
 @pytest.mark.parametrize("seq", TEST_SEQ)
 @pytest.mark.parametrize("tolerance", TOLERANCES)
 def test_infer_composition_with_recursion(seq, tolerance):
-    alphabet = NucleotideAlphabet.from_file(modification_rate=MOD_RATE)
+    error_calculator = ErrorUnderL1Norm(tolerance=tolerance)
+    alphabet = NucleotideAlphabet.from_file(
+        modification_rate=MOD_RATE, error=error_calculator
+    )
     seq_weight = alphabet.get_seq_weight(seq)
 
     seq_info = SequenceInformation(
@@ -38,7 +42,7 @@ def test_infer_composition_with_recursion(seq, tolerance):
     inferrer = CompositionInferrer(
         alphabet=alphabet,
         compression_rate=32,
-        tolerance=tolerance,
+        error=error_calculator,
         seq=seq_info,
     )
 
@@ -53,7 +57,10 @@ def test_infer_composition_with_recursion(seq, tolerance):
 @pytest.mark.parametrize("memo", WITH_MEMO)
 @pytest.mark.parametrize("tolerance", TOLERANCES)
 def test_infer_composition_with_matrix(seq, compression, tolerance, memo):
-    alphabet = NucleotideAlphabet.from_file(modification_rate=MOD_RATE)
+    error_calculator = ErrorUnderL1Norm(tolerance=tolerance)
+    alphabet = NucleotideAlphabet.from_file(
+        modification_rate=MOD_RATE, error=error_calculator
+    )
     seq_weight = alphabet.get_seq_weight(seq)
 
     seq_info = SequenceInformation(
@@ -66,7 +73,7 @@ def test_infer_composition_with_matrix(seq, compression, tolerance, memo):
     inferrer = CompositionInferrer(
         alphabet=alphabet,
         compression_rate=compression,
-        tolerance=tolerance,
+        error=error_calculator,
         seq=seq_info,
     )
 

@@ -12,6 +12,7 @@ from spectrseqtools.dataclasses import (
     SolverParameters,
 )
 from spectrseqtools.enums import SolverType
+from spectrseqtools.error_calculator import ErrorUnderL1Norm
 from spectrseqtools.fragments import RawFragments, StandardUnitFragments
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 from spectrseqtools.parsers import PredictionOptions
@@ -45,8 +46,12 @@ class Predictor:
             sequence_header=options.sequence_name,
         )
 
+        error_calculator = ErrorUnderL1Norm(tolerance=options.tolerance)
+
         # Initialize fragment classifier
-        self.classifier = FragmentClassifier(file_path=self.file_settings.meta_path)
+        self.classifier = FragmentClassifier(
+            file_path=self.file_settings.meta_path, error=error_calculator
+        )
 
         with open(self.file_settings.meta_path, "r", encoding="utf-8") as f:
             meta = yaml.safe_load(f)
@@ -60,13 +65,12 @@ class Predictor:
         alphabet = NucleotideAlphabet.from_file(
             modification_rate=options.modification_rate,
             input_path=self.file_settings.alphabet_path,
+            error=error_calculator,
         )
 
         # Standardize intact sequence mass by removing START_END fragmentation to gain SU mass
         seq_mass_obs = meta["intact_mass"]
-        seq_mass_su = (
-            seq_mass_obs - self.classifier.start_end_fragmentation * alphabet.precision
-        )
+        seq_mass_su = seq_mass_obs - self.classifier.start_end_fragmentation
 
         # Initialize SequenceInformation class
         seq_info = SequenceInformation(
@@ -79,8 +83,8 @@ class Predictor:
         # Initialize CompositionInferrer class
         inferrer = CompositionInferrer(
             alphabet=alphabet,
+            error=error_calculator,
             compression_rate=int(options.compression_rate),
-            tolerance=options.tolerance,
             seq=seq_info,
         )
 

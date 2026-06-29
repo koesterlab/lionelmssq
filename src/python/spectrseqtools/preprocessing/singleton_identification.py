@@ -13,6 +13,7 @@ from clr_loader import get_mono
 from dbscan1d.core import DBSCAN1D
 from sklearn.metrics import silhouette_score
 
+from spectrseqtools.error_calculator import ErrorCalculator
 from spectrseqtools.nucleotide_alphabet import DEFAULT_ALPHABET_PATH, NucleotideAlphabet
 
 rt = get_mono()
@@ -36,7 +37,7 @@ class SingletonBoundaries:
 
     @classmethod
     def from_alphabet_file(
-        cls, input_path: Path | None, tolerance: float, boundary_factor: float
+        cls, input_path: Path | None, error: ErrorCalculator, boundary_factor: float
     ) -> Self:
         """
         Set singleton boundaries based on nucleotide alphabet in given file.
@@ -45,16 +46,16 @@ class SingletonBoundaries:
         ----------
         input_path : Path | None
             Path to alphabet of considered nucleotides.
-        tolerance : float
-            Error tolerance for individual masses.
+        error : ErrorCalculator
+            Error calculator.
         boundary_factor : int
             Factor for scaling theoretical singleton boundaries.
 
         """
-        alphabet = NucleotideAlphabet.from_file(input_path=input_path)
+        alphabet = NucleotideAlphabet.from_file(input_path=input_path, error=error)
         return SingletonBoundaries(
-            min_mz=alphabet.min.singleton_mz * (1 - boundary_factor * tolerance),
-            max_mz=alphabet.max.singleton_mz * (1 + boundary_factor * tolerance),
+            min_mz=alphabet.min.singleton_mz * (1 - boundary_factor * error.tolerance),
+            max_mz=alphabet.max.singleton_mz * (1 + boundary_factor * error.tolerance),
         )
 
 
@@ -132,7 +133,9 @@ class RawPeakList:
                 )
         return RawPeakList(peaks=peak_list)
 
-    def to_singletons(self, alphabet_path: Path, tolerance: float) -> pl.DataFrame:
+    def to_singletons(
+        self, alphabet_path: Path, error: ErrorCalculator
+    ) -> pl.DataFrame:
         """
         Select candidate singletons based on raw peaks.
 
@@ -143,8 +146,8 @@ class RawPeakList:
         ----------
         alphabet_path : Path
             Path to alphabet of considered nucleotides.
-        tolerance : float
-            Error tolerance for individual masses.
+        error : ErrorCalculator
+            Error calculator.
 
         Returns
         -------
@@ -153,7 +156,7 @@ class RawPeakList:
 
         """
         alphabet_df = NucleotideAlphabet.from_file(
-            input_path=alphabet_path
+            input_path=alphabet_path, error=error
         ).to_dataframe()
 
         # Build dataframe from peak list
@@ -179,7 +182,7 @@ class RawPeakList:
                 (abs(pl.col("mz") - pl.col("singleton_mz")) / pl.col("mz"))
                 .fill_null(0)
                 .fill_nan(0)
-                .lt(tolerance)
+                .lt(error.tolerance)
                 .alias("is_match")
             )
             .filter(pl.col("is_match"))

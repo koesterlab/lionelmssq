@@ -9,9 +9,8 @@ import numpy as np
 import polars as pl
 from loguru import logger
 
-from spectrseqtools.common import calculate_error_threshold
 from spectrseqtools.dataclasses import SequenceInformation
-from spectrseqtools.masses import PRECISION
+from spectrseqtools.error_calculator import ErrorCalculator
 from spectrseqtools.prediction.composition_inference import CompositionInferrer
 from spectrseqtools.prediction.sequence_inference import LinearProgramInstance
 from spectrseqtools.sequence import SkeletonSequence
@@ -227,7 +226,7 @@ class StandardUnitFragments:
                 .map_elements(
                     lambda x: inferrer.is_valid_mass(
                         mass=x["standard_unit_mass"],
-                        threshold=inferrer.tolerance * x["observed_mass"],
+                        obs_masses=[x["observed_mass"]],
                     ),
                     return_dtype=bool,
                 )
@@ -283,7 +282,7 @@ class StandardUnitFragments:
             # Compute mass compositions
             comps = inferrer.infer_compositions(
                 mass=frag["standard_unit_mass"],
-                threshold=inferrer.tolerance * frag["observed_mass"],
+                obs_masses=[frag["observed_mass"]],
             )
 
             # Ensure mass corresponds to true singleton
@@ -292,14 +291,14 @@ class StandardUnitFragments:
 
         return compositions
 
-    def bin(self, tolerance: float) -> List[Self]:
+    def bin(self, error: ErrorCalculator) -> List[Self]:
         """
         Split fragments into bins within mass tolerance.
 
         Parameters
         ----------
-        tolerance : float
-            Relative mass tolerance.
+        error : ErrorCalculator
+            Error calculator.
 
         """
         # Sort fragments for consecutive binning
@@ -312,10 +311,11 @@ class StandardUnitFragments:
             neighbor_diff = self.fragments.item(
                 frag_idx, "standard_unit_mass"
             ) - self.fragments.item(frag_idx - 1, "standard_unit_mass")
-            neighbor_threshold = calculate_error_threshold(
-                self.fragments.item(frag_idx - 1, "observed_mass"),
-                self.fragments.item(frag_idx, "observed_mass"),
-                tolerance,
+            neighbor_threshold = error.get_threshold(
+                mass_list=[
+                    self.fragments.item(frag_idx - 1, "observed_mass"),
+                    self.fragments.item(frag_idx, "observed_mass"),
+                ]
             )
 
             # Continue filling bin for fragments with similar mass
@@ -400,12 +400,9 @@ class StandardUnitFragments:
                 end = start + 1
                 continue
 
-            diff_error = calculate_error_threshold(
-                observed_masses[start],
-                observed_masses[end],
-                inferrer.tolerance,
+            comp = inferrer.infer_compositions(
+                mass=diff, obs_masses=[observed_masses[start], observed_masses[end]]
             )
-            comp = inferrer.infer_compositions(mass=diff, threshold=diff_error)
             if len(comp) > 0:
                 compositions[diff] = comp
             if end == len(self) - 1:
@@ -470,10 +467,9 @@ class StandardUnitFragments:
             )
 
             # Check whether fragment can feasibly be aligned to skeleton
-            if (
-                filter_instance.minimize_error(solver_params=solver_params)
-                > inferrer.tolerance * fragment["observed_mass"]
-            ):
+            if filter_instance.minimize_error(
+                solver_params=solver_params
+            ) > inferrer.error.get_threshold(mass_list=[fragment["observed_mass"]]):
                 is_invalid.append(fragment["index"])
 
         # Return only valid fragments
@@ -557,7 +553,9 @@ class RawFragments:
                 pl.col("intensity") >= intensity_cutoff
             )
 
-    def standardize(self, fragmentation_dict: dict) -> StandardUnitFragments:
+    def standardize(
+        self, fragmentation_dict: dict, error: ErrorCalculator
+    ) -> StandardUnitFragments:
         """
         Obtain SU-fragments for each considered fragmentation type.
 
@@ -565,6 +563,8 @@ class RawFragments:
         ----------
         fragmentation_dict : dict
             Dictionary with masses of all considered fragmentation types.
+        error : ErrorCalculator
+            Error calculator.
 
         Returns
         -------
@@ -576,9 +576,9 @@ class RawFragments:
         fragments = pl.concat(
             [
                 self.fragments.with_columns(
-                    (pl.col("observed_mass") - (weight * PRECISION)).alias(
-                        "standard_unit_mass"
-                    ),
+                    (pl.col("observed_mass") - (weight * error.precision))
+                    .round(error.decimal_places)
+                    .alias("standard_unit_mass"),
                     pl.lit(fragmentation[0]).alias("fragmentation"),
                 )
                 for (weight, fragmentation) in fragmentation_dict.items()
