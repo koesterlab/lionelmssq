@@ -12,7 +12,7 @@ from spectrseqtools.dataclasses import (
     SolverParameters,
 )
 from spectrseqtools.enums import SolverType
-from spectrseqtools.error_calculator import ErrorUnderL1Norm
+from spectrseqtools.error_calculator import ErrorCalculator
 from spectrseqtools.fragments import RawFragments, StandardUnitFragments
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 from spectrseqtools.parsers import PredictionOptions
@@ -46,7 +46,12 @@ class Predictor:
             sequence_header=options.sequence_name,
         )
 
-        error_calculator = ErrorUnderL1Norm(tolerance=options.tolerance)
+        # Initialize error calculator with desired metric
+        error_calculator = ErrorCalculator.with_metric(
+            metric=options.error_metric,
+            tolerance=options.tolerance,
+            decimal_places=options.num_decimal_places,
+        )
 
         # Initialize fragment classifier
         self.classifier = FragmentClassifier(

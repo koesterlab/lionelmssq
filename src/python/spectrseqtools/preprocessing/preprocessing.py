@@ -11,7 +11,7 @@ from clr_loader import get_mono
 
 from spectrseqtools.dataclasses import PreprocessingFileSettings
 from spectrseqtools.enums import AveragineBackbone
-from spectrseqtools.error_calculator import ErrorUnderL1Norm
+from spectrseqtools.error_calculator import ErrorCalculator
 from spectrseqtools.parsers import PreprocessingOptions
 from spectrseqtools.preprocessing.deconvolution import (
     DeconvolutionParameters,
@@ -35,7 +35,10 @@ class Preprocessor:
             alphabet_path=options.alphabet,
             output_dir=options.output_dir,
         )
-        self.error = ErrorUnderL1Norm(tolerance=options.tolerance)
+        self.error = ErrorCalculator.with_metric(
+            tolerance=options.tolerance,
+            decimal_places=options.num_decimal_places,
+        )
         self.singleton_boundaries = SingletonBoundaries.from_alphabet_file(
             input_path=self.file_settings.alphabet_path,
             boundary_factor=options.boundary_factor,

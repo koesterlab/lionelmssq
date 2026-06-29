@@ -7,7 +7,7 @@ from typing import Tuple
 
 import ddargparse
 
-from spectrseqtools.enums import AveragineBackbone, SolverType
+from spectrseqtools.enums import AveragineBackbone, ErrorMetric, SolverType
 
 
 @dataclass
@@ -41,6 +41,10 @@ class PreprocessingOptions(ddargparse.OptionsBase):
     tolerance: float = field(
         default=10e-6,
         metadata={"help": "Error tolerance to consider masses identical."},
+    )
+    num_decimal_places: int = field(
+        default=3,
+        metadata={"help": "Number of considered decimal places for precision."},
     )
     boundary_factor: int = field(
         default=2,
@@ -137,6 +141,16 @@ class PredictionOptions(ddargparse.OptionsBase):
     tolerance: float = field(
         default=10e-6,
         metadata={"help": "Error tolerance to consider masses identical."},
+    )
+    num_decimal_places: int = field(
+        default=3,
+        metadata={"help": "Number of considered decimal places for precision."},
+    )
+    error_metric: ErrorMetric = field(
+        default=ErrorMetric.L1NORM,
+        metadata={
+            "help": "Metric for used for error calculation over multiple values."
+        },
     )
     compression_rate: int = field(
         default=32,

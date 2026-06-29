@@ -7,7 +7,7 @@ import yaml
 from clr_loader import get_mono
 from spectrseqtools.dataclasses import Sequence
 from spectrseqtools.enums import SolverType
-from spectrseqtools.error_calculator import ErrorUnderL1Norm
+from spectrseqtools.error_calculator import ErrorCalculator
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 from spectrseqtools.parsers import PredictionOptions, PreprocessingOptions
 from spectrseqtools.plotting import plot_prediction
@@ -77,7 +77,9 @@ def test_testcase(testcase):
     print(
         "Full sequence =\t\t",
         prediction.sequence.fmt(
-            nucleotide_alphabet=NucleotideAlphabet.from_file(error=ErrorUnderL1Norm())
+            nucleotide_alphabet=NucleotideAlphabet.from_file(
+                error=ErrorCalculator.with_metric()
+            )
         ),
     )
 

@@ -3,9 +3,11 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import List, Self, Tuple
 
 import numpy as np
+
+from spectrseqtools.enums import ErrorMetric
 
 
 @dataclass
@@ -14,6 +16,27 @@ class ErrorCalculator(ABC):
 
     tolerance: float = 10e-6
     decimal_places: int = 3
+
+    @classmethod
+    def with_metric(
+        cls,
+        metric: ErrorMetric = ErrorMetric.L1NORM,
+        tolerance: float = 10e-6,
+        decimal_places: int = 3,
+    ) -> Self:
+        match metric:
+            case ErrorMetric.L1NORM:
+                return ErrorUnderL1Norm(
+                    tolerance=tolerance, decimal_places=decimal_places
+                )
+            case ErrorMetric.L2NORM:
+                return ErrorUnderL2Norm(
+                    tolerance=tolerance, decimal_places=decimal_places
+                )
+            case _:
+                raise NotImplementedError(
+                    f"Support for '{metric}' is currently not given."
+                )
 
     @property
     def precision(self):

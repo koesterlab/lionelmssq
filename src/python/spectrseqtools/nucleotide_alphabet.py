@@ -9,7 +9,7 @@ from typing import List, Self, Set
 
 import polars as pl
 
-from spectrseqtools.error_calculator import ErrorCalculator, ErrorUnderL1Norm
+from spectrseqtools.error_calculator import ErrorCalculator
 
 # TODO: Currently, the list of unmodified bases is only defined for RNA;
 #  make it universally applicable
@@ -240,7 +240,7 @@ class NucleotideAlphabet:
     def is_default(self) -> bool:
         """Return whether default alphabet was used."""
         return self == NucleotideAlphabet.from_file(
-            error=ErrorUnderL1Norm(decimal_places=self.decimal_places)
+            error=ErrorCalculator.with_metric(decimal_places=self.decimal_places)
         )
 
     def get(self, idx: int) -> NucleotideMass:
