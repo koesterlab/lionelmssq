@@ -10,12 +10,17 @@ tests/testcases/*/fragments.plot.html
 tests/testcases/*/fragments.plot.end.html
 tests/testcases/*/fragments.plot.internal.html
 tests/testcases/*/fragments.plot.start.html
+tests/testcases/*/fragments.preprocessed.meta.yaml
+tests/testcases/*/fragments.prediction.*
 tests/testcases/*/fragments.raw
 tests/testcases/*/fragments.singletons.tsv
 tests/testcases/*/fragments.standard_unit_fragments.tsv
 tests/testcases/*/fragments.testing.meta.yaml
 tests/scratch_*
-*.html
-*.ai
-*.svg
-/tests/scratch
+/target
+/.pixi
+/dist
+# maturin-generated dynamic libraries
+*.so
+/pixi.lock
+/Cargo.lock
