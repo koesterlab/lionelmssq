@@ -18,3 +18,4 @@ tests/scratch_*
 *.html
 *.ai
 *.svg
+/tests/scratch
