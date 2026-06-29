@@ -42,8 +42,11 @@ class Preprocessor:
             input_path=options.input, output_dir=options.output_dir
         )
         self.output_prefix = self.output_dir / self.output_id
-        with open(options.meta, "r", encoding="utf-8") as f:
-            self.meta_params = yaml.safe_load(f)
+        if options.meta is None:
+            self.meta_params = None
+        else:
+            with open(options.meta, "r", encoding="utf-8") as f:
+                self.meta_params = yaml.safe_load(f)
         self.cutoff_percentile = options.cutoff_percentile
 
         self.deconvolution_params = DeconvolutionParameters(
@@ -78,24 +81,25 @@ class Preprocessor:
         # Deconvolute raw data from file
         fragments = self.deconvolute()
 
-        # Update meta parameters (if needed)
-        meta_params = self.meta_params
-        meta_params.setdefault("identity", self.output_id)
-        meta_params.setdefault("intact_mass", self.select_intact_mass(fragments))
-        meta_params.setdefault("true_sequence", None)
+        if self.meta_params is not None:
+            # Update meta parameters (if needed)
+            meta_params = self.meta_params
+            meta_params.setdefault("identity", self.output_id)
+            meta_params.setdefault("intact_mass", self.select_intact_mass(fragments))
+            meta_params.setdefault("true_sequence", None)
 
-        # Set intensity cutoff
-        meta_params["intensity_cutoff"] = (
-            determine_intensity_percentiles(fragments)
-            .filter(pl.col("statistic") == f"{self.cutoff_percentile}%")["value"]
-            .to_list()[0]
-        )
+            # Set intensity cutoff
+            meta_params["intensity_cutoff"] = (
+                determine_intensity_percentiles(fragments)
+                .filter(pl.col("statistic") == f"{self.cutoff_percentile}%")["value"]
+                .to_list()[0]
+            )
 
-        # Save updated meta data
-        with open(
-            f"{self.output_prefix}.preprocessed.meta.yaml", "w", encoding="utf-8"
-        ) as f:
-            yaml.dump(meta_params, f)
+            # Save updated meta data
+            with open(
+                f"{self.output_prefix}.preprocessed.meta.yaml", "w", encoding="utf-8"
+            ) as f:
+                yaml.dump(meta_params, f)
 
         # Save preprocessed fragments
         fragments.write_csv(f"{self.output_prefix}.tsv", separator="\t")
@@ -210,6 +214,7 @@ class Preprocessor:
 
 def initialize_raw_file_iterator(
     file_path: str,
+    is_grouped = False
 ) -> ms_ditp.data_source.thermo_raw_net.ThermoRawLoader:
     """
     Initialize iterator over scans in ThermoFisher RAW file format.
@@ -230,8 +235,8 @@ def initialize_raw_file_iterator(
         file_path, _load_metadata=True
     )
 
-    # Initialize an iterator while ungrouping MS1 from MS2 scans
-    raw_file.make_iterator(grouped=False)
+    # Initialize an iterator while grouping/ungrouping MS1 from MS2 scans based on 'is_grouped'
+    raw_file.make_iterator(grouped=is_grouped)
 
     return raw_file
 

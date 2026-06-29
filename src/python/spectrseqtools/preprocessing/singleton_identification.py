@@ -118,13 +118,15 @@ class RawPeakList:
         return RawPeakList(peaks=peak_list)
 
     def to_singletons(
-        self, alphabet: NucleotideAlphabet, tolerance: float
+        self, alphabet: NucleotideAlphabet, tolerance: float, filter_cluster_score = True
     ) -> pl.DataFrame:
         """
         Select candidate singletons based on raw peaks.
 
         Build dataframe of raw peaks, match theoretical and observed mz,
-        cluster them, and filter the candidates based on their cluster score.
+        cluster them, and if 'filter_cluster_score'=True filter the candidates 
+        based on their cluster score. If 'filter_cluster_score'=False, return all
+        candidate singletons regardless of clustering score.
 
         Parameters
         ----------
@@ -186,11 +188,14 @@ class RawPeakList:
         )
 
         # Filter candidate singletons by cluster score
-        return (
-            peak_df.filter(pl.col("cluster_score") >= 0).select(
-                ["id", "count", "cluster_score"]
-            )
-        ).sort("count", descending=True)
+        if filter_cluster_score:
+            return (
+                peak_df.filter(pl.col("cluster_score") >= 0).select(
+                    ["id", "count", "cluster_score"]
+                )
+            ).sort("count", descending=True)
+        else:
+            return peak_df
 
 
 def calculate_cluster_score(scan_times: pl.Series) -> float:

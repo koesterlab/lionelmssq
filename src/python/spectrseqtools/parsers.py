@@ -17,7 +17,7 @@ class PreprocessingOptions(ddargparse.OptionsBase):
     input: Path = field(
         metadata={"help": "Path to input file in RAW format"},
     )
-    meta: Path = field(metadata={"help": "Path to YAML with meta information"})
+    meta: Path | None = field(metadata={"help": "Path to YAML with meta information"})
     alphabet: Path | None = field(
         metadata={"help": "Path to file containing nucleotide alphabet."}
     )
