@@ -24,6 +24,7 @@ class ErrorCalculator(ABC):
         tolerance: float = 10e-6,
         decimal_places: int = 3,
     ) -> Self:
+        """Initialize subclass based on given error metric."""
         match metric:
             case ErrorMetric.L1NORM:
                 return ErrorUnderL1Norm(

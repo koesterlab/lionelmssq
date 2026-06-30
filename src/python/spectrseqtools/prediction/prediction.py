@@ -55,7 +55,9 @@ class Predictor:
 
         # Initialize fragment classifier
         self.classifier = FragmentClassifier(
-            file_path=self.file_settings.meta_path, error=error_calculator
+            file_path=self.file_settings.meta_path,
+            error=error_calculator,
+            reduced=options.reduce_fragmentation_dict,
         )
 
         with open(self.file_settings.meta_path, "r", encoding="utf-8") as f:

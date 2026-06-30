@@ -10,10 +10,6 @@ from spectrseqtools.error_calculator import ErrorCalculator
 from spectrseqtools.fragments import RawFragments, StandardUnitFragments
 from spectrseqtools.nucleotide_alphabet import ELEMENT_MASSES
 
-# Set fragmentation dict mode (full vs only c/y)
-REDUCED_FRAGMENTATION_DICT = True
-
-
 # METHOD: Precompute all weight changes caused by fragmentation and adapt the
 # target masses accordingly while finding compositions explaining it.
 # We consider tags at the 5'- or 3'-end to be possible fragmentation options.
@@ -30,7 +26,7 @@ class FragmentClassifier:
         self,
         file_path: Path,
         error: ErrorCalculator,
-        reduced: bool = REDUCED_FRAGMENTATION_DICT,
+        reduced: bool = True,
     ):
         """
         Initialize classifier by building dictionary over fragmentation options.
