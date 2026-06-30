@@ -4,6 +4,7 @@ import altair as alt
 import polars as pl
 
 from spectrseqtools.dataclasses import Sequence
+from spectrseqtools.file_settings import load_alphabet
 from spectrseqtools.prediction.prediction import Prediction
 
 STATUS_COLORS = {
@@ -12,19 +13,15 @@ STATUS_COLORS = {
 }
 
 
-def encode_seq(seq: str) -> List[str]:
-    """Format sequence to use nucleotide encoding."""
-    seq = Sequence.from_str(input_seq=seq)
-    return seq.to_encoding()
-
-
 def plot_prediction(
     prediction: Prediction,
     true_seq: Sequence,
     simulation: pl.DataFrame = None,
+    alphabet_path=None,
 ) -> alt.Chart:
-    true_seq = true_seq.to_encoding()
-    pred_seq = prediction.sequence.to_encoding()
+    alphabet_df = load_alphabet(input_path=alphabet_path)
+    true_seq = true_seq.to_encoding(masses=alphabet_df)
+    pred_seq = prediction.sequence.to_encoding(masses=alphabet_df)
     seq_data = pl.DataFrame(
         {
             "nuc": true_seq + pred_seq,
@@ -32,6 +29,11 @@ def plot_prediction(
             "type": ["truth"] * len(true_seq) + ["predicted"] * len(pred_seq),
         }
     )
+
+    def encode_seq(seq: str) -> List[str]:
+        """Format sequence to use nucleotide encoding."""
+        seq = Sequence.from_str(input_seq=seq)
+        return seq.to_encoding(masses=alphabet_df)
 
     def fmt_mass(cols):
         return pl.Series([f"{row[0]:.2f} ({row[1]:.2f})" for row in zip(*cols)])

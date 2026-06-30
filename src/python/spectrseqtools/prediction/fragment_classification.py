@@ -7,8 +7,8 @@ from pathlib import Path
 import yaml
 
 from spectrseqtools.error_calculator import ErrorCalculator
+from spectrseqtools.file_settings import ELEMENT_MASSES
 from spectrseqtools.fragments import RawFragments, StandardUnitFragments
-from spectrseqtools.nucleotide_alphabet import ELEMENT_MASSES
 
 # METHOD: Precompute all weight changes caused by fragmentation and adapt the
 # target masses accordingly while finding compositions explaining it.

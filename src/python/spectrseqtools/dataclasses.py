@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """Module for dataclasses."""
 
-import importlib.resources
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -11,76 +10,14 @@ from typing import List, Self
 import numpy as np
 import polars as pl
 
+from spectrseqtools.file_settings import PredictionFileSettings, load_alphabet
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 from spectrseqtools.sequence import SkeletonSequence
 
 _NUCLEOSIDE_RE = re.compile(r"\d*[ACGU]")
-MASSES = pl.read_csv(
-    (importlib.resources.files(__package__) / "assets" / "masses.tsv"),
-    separator="\t",
-)
 
 # Maximum variance for intact mass
 MAX_VARIANCE = 1
-
-
-@dataclass
-class FileSettings:
-    """Class for file-related settings."""
-
-    input_path: Path
-    meta_path: Path
-    alphabet_path: Path | None = None
-    output_dir: Path | None = None
-
-    def __post_init__(self):
-        path = self.input_path.resolve()
-        if self.output_dir is None:
-            self.output_dir = path.parent
-
-    @property
-    def file_prefix(self):
-        """Return file prefix (not including directory path)."""
-        return self.input_path.stem
-
-
-@dataclass
-class PreprocessingFileSettings(FileSettings):
-    """Class for file-related settings used during preprocessing phase."""
-
-    @property
-    def updated_meta_path(self) -> Path:
-        """Return path for updated metafile."""
-        return self.output_dir / f"{self.file_prefix}.preprocessed.meta.yaml"
-
-    @property
-    def fragment_path(self) -> Path:
-        """Return path for file containing raw fragments."""
-        return self.output_dir / f"{self.file_prefix}.tsv"
-
-    @property
-    def updated_alphabet_path(self) -> Path:
-        """Return path for file containing updated nucleotide alphabet (singletons)."""
-        return self.output_dir / f"{self.file_prefix}.singletons.tsv"
-
-
-@dataclass
-class PredictionFileSettings(FileSettings):
-    """Class for file-related settings used during prediction phase."""
-
-    predicted_fragment_path: Path | None = None
-    sequence_path: Path | None = None
-    sequence_header: str | None = None
-
-    @property
-    def raw_fragment_path(self) -> Path:
-        """Return path for file containing raw fragments."""
-        return self.input_path
-
-    @property
-    def su_fragment_path(self) -> Path:
-        """Return path for file containing SU-fragments."""
-        return self.output_dir / f"{self.file_prefix}.standard_unit_fragments.tsv"
 
 
 @dataclass
@@ -235,10 +172,12 @@ class Sequence:
         """
         return "".join(nucleotide_alphabet.fmt(rep=nuc) for nuc in self.sequence)
 
-    def to_encoding(self) -> List[str]:
+    def to_encoding(self, masses: pl.DataFrame | None = None) -> List[str]:
         """Format sequence to use encoding."""
+        if masses is None:
+            masses = load_alphabet()
         return [
-            MASSES.row(named=True, by_predicate=pl.col("id") == val)["encoding"]
+            masses.row(named=True, by_predicate=pl.col("id") == val)["encoding"]
             for val in self.sequence
         ]
 

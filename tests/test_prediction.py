@@ -54,11 +54,12 @@ def test_testcase(testcase):
         with open(base_path / "fragments.preprocessed.meta.yaml", "w") as f:
             yaml.safe_dump(meta, f)
 
+    alphabet_path = base_path / "fragments.singletons.tsv"
     prediction = Predictor(
         PredictionOptions(
             fragments=base_path / "fragments.tsv",
             meta=base_path / "fragments.preprocessed.meta.yaml",
-            alphabet=base_path / "fragments.singletons.tsv",
+            alphabet=alphabet_path,
             sequence_prediction=base_path / "fragments.prediction.fasta",
             fragment_predictions=base_path / "fragments.prediction.tsv",
             sequence_name=f"{testcase}",
@@ -83,7 +84,9 @@ def test_testcase(testcase):
         ),
     )
 
-    plots = plot_prediction(prediction=prediction, true_seq=true_seq)
+    plots = plot_prediction(
+        prediction=prediction, true_seq=true_seq, alphabet_path=alphabet_path
+    )
 
     # plots[0].save(base_path / "fragments.plot.start.html")
     # plots[1].save(base_path / "fragments.plot.end.html")

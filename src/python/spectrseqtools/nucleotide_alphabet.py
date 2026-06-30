@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """Module for nucleotide alphabet."""
 
-import importlib.resources
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -10,30 +9,12 @@ from typing import List, Self, Set
 import polars as pl
 
 from spectrseqtools.error_calculator import ErrorCalculator
+from spectrseqtools.file_settings import ELEMENT_MASSES, load_alphabet
 
 # TODO: Currently, the list of unmodified bases is only defined for RNA;
 #  make it universally applicable
 UNMODIFIED_BASES = ["A", "C", "G", "U"]
 
-# Build dict with elemental masses
-elements = pl.read_csv(
-    importlib.resources.files(__package__) / "assets" / "element_masses.tsv",
-    separator="\t",
-)
-ELEMENT_MASSES = {
-    row[elements.get_column_index("symbol")]: row[elements.get_column_index("mass")]
-    for row in elements.iter_rows()
-}
-
-DEFAULT_ALPHABET_PATH = importlib.resources.files(__package__) / "assets" / "masses.tsv"
-
-_DF_COLS = [
-    "id",
-    "canonical_name",
-    "monoisotopic_mass",
-    "modification_rate",
-    "encoding",
-]
 _ALPHABET_COLS = [
     "integer_mass",
     "nucleoside_mass",
@@ -118,16 +99,8 @@ class NucleotideAlphabet:
             Path to file with nucleoside information.
 
         """
-        # If input path is None or non-existent, set default
-        if input_path is None or not os.path.isfile(input_path):
-            if input_path is not None:
-                print("No valid alphabet path detected. Proceeding with default.")
-            input_path = DEFAULT_ALPHABET_PATH
-
         # Read nucleoside masses from file
-        masses = pl.read_csv(input_path, separator="\t")
-        masses = masses.select(_DF_COLS)
-        assert masses.columns == _DF_COLS
+        masses = load_alphabet(input_path=input_path)
 
         # Set mass for phosphate link between bases
         phosphate_link = (

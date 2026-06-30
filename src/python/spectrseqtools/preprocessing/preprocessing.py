@@ -9,9 +9,9 @@ import tqdm
 import yaml
 from clr_loader import get_mono
 
-from spectrseqtools.dataclasses import PreprocessingFileSettings
 from spectrseqtools.enums import AveragineBackbone
 from spectrseqtools.error_calculator import ErrorCalculator
+from spectrseqtools.file_settings import PreprocessingFileSettings
 from spectrseqtools.parsers import PreprocessingOptions
 from spectrseqtools.preprocessing.deconvolution import (
     DeconvolutionParameters,

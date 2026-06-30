@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """Singleton selection from raw mass spectrometry data."""
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Self
@@ -14,7 +13,8 @@ from dbscan1d.core import DBSCAN1D
 from sklearn.metrics import silhouette_score
 
 from spectrseqtools.error_calculator import ErrorCalculator
-from spectrseqtools.nucleotide_alphabet import DEFAULT_ALPHABET_PATH, NucleotideAlphabet
+from spectrseqtools.file_settings import load_alphabet
+from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 
 rt = get_mono()
 
@@ -207,12 +207,8 @@ class RawPeakList:
             )
         ).sort("count", descending=True)
 
-        # If alphabet path is None or non-existent, set default
-        if alphabet_path is None or not os.path.isfile(alphabet_path):
-            alphabet_path = DEFAULT_ALPHABET_PATH
-
         # Only select singletons for new alphabet
-        return pl.read_csv(alphabet_path, separator="\t").join(
+        return load_alphabet(input_path=alphabet_path).join(
             singletons, on="id", how="inner"
         )
 
