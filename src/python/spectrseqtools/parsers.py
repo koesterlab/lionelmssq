@@ -118,17 +118,17 @@ class PredictionOptions(ddargparse.OptionsBase):
     singletons: Path = field(
         metadata={"help": "Path to TSV with singleton information"}
     )
-    fragment_predictions: Path = field(
+    fragment_predictions: Path | None = field(
         metadata={
             "help": "Path to TSV table that shall contain the per fragment predictions"
         }
     )
-    sequence_prediction: Path = field(
+    sequence_prediction: Path | None = field(
         metadata={
             "help": "Path to FASTA file that shall contain the predicted sequence"
         }
     )
-    sequence_name: str = field(metadata={"help": "Header in FASTA output file"})
+    sequence_name: str | None = field(metadata={"help": "Header in FASTA output file"})
     output_dir: Path | None = field(
         metadata={
             "help": "Output directory (default: input directory)",
