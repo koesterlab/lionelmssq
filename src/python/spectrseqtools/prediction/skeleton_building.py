@@ -2,16 +2,15 @@
 """Building of sequence skeletons."""
 
 from dataclasses import dataclass
-from typing import Optional, Set, Tuple
-
-import numpy as np
+from typing import Optional, Tuple
 
 from spectrseqtools.compositions import CompositionList
 from spectrseqtools.dataclasses import SolverParameters
+from spectrseqtools.enums import LengthEstimatorMetric
 from spectrseqtools.fragments import StandardUnitFragments
 from spectrseqtools.prediction.composition_inference import CompositionInferrer
-from spectrseqtools.prediction.sequence_inference import LinearProgramInstance
 from spectrseqtools.sequence import SkeletonSequence
+from spectrseqtools.sequence_length import SequenceLengthEstimator
 
 
 @dataclass
@@ -67,16 +66,25 @@ class SkeletonBuilder:
         print("Skeleton sequence (3'-end)\t= ", end_skeleton)
 
         # Select best sequence length with LP
-        seq_len = self.select_sequence_length_with_lp(
+        estimator = SequenceLengthEstimator.with_metric(
+            metric=LengthEstimatorMetric.LP,
+            inferrer=self.inferrer,
+            solver_params=solver_params,
+        )
+        seq_len = estimator.select_sequence_length(
             start_fragments=start_fragments,
             end_fragments=end_fragments,
             start_skeleton=start_skeleton,
             end_skeleton=end_skeleton,
-            solver_params=solver_params,
         )
         if seq_len < 1:
             # Use Jaccard-based method as backup (in case LP does not work)
-            seq_len = self.select_sequence_length_with_jaccard(
+            estimator = SequenceLengthEstimator.with_metric(
+                metric=LengthEstimatorMetric.JACCARD, inferrer=self.inferrer
+            )
+            seq_len = estimator.select_sequence_length(
+                start_fragments=start_fragments,
+                end_fragments=end_fragments,
                 start_skeleton=start_skeleton,
                 end_skeleton=end_skeleton,
             )
@@ -161,164 +169,6 @@ class SkeletonBuilder:
             bins=bins, invalid_list=invalid_list
         )
 
-    def select_sequence_length_with_lp(
-        self,
-        start_skeleton: SkeletonSequence,
-        end_skeleton: SkeletonSequence,
-        start_fragments: StandardUnitFragments,
-        end_fragments: StandardUnitFragments,
-        solver_params: SolverParameters,
-    ) -> int:
-        """
-        Select sequence length based on LP score.
-
-        Parameters
-        ----------
-        start_skeleton : SkeletonSequence
-            Skeleton in 5'-direction.
-        end_skeleton : SkeletonSequence
-            Skeleton in 3'-direction.
-        start_fragments : StandardUnitFragments
-            List of terminal fragments in 5'-direction.
-        end_fragments : StandardUnitFragments
-            List of terminal fragments in 3'-direction.
-        solver_params : SolverParameters
-            Solver parameter.
-
-        Returns
-        -------
-        int
-            Selected sequence length.
-
-        """
-        # Determine sequence length with the best LP score
-        best_len = -1
-        best_val = np.inf
-        for len_cand in range(self.inferrer.seq.min_len, self.inferrer.seq.max_len + 1):
-            # Merge directional skeletons
-            seq = start_skeleton.merge(other=end_skeleton, seq_len=len_cand)
-
-            # Skip candidates resulting in invalid sequences
-            if not self.inferrer.seq.validate_sequence(
-                seq=seq,
-                alphabet=self.inferrer.alphabet,
-            ):
-                continue
-
-            # Combine directional terminal-fragment lists
-            fragments = StandardUnitFragments.from_terminals(
-                start_fragments=start_fragments,
-                end_fragments=end_fragments,
-                seq_len=len_cand,
-            )
-
-            # Determine LP score for terminal-fragment alignment
-            value = self.determine_lp_score(
-                terminal_fragments=fragments,
-                skeleton_seq=seq,
-                solver_params=solver_params,
-            )
-
-            # Update best found sequence length if needed
-            if value < best_val:
-                best_val = value
-                best_len = len_cand
-
-        return best_len
-
-    def determine_lp_score(
-        self,
-        terminal_fragments: StandardUnitFragments,
-        skeleton_seq: SkeletonSequence,
-        solver_params: SolverParameters,
-    ) -> float:
-        """
-
-        Parameters
-        ----------
-        terminal_fragments : StandardUnitFragments
-            Terminal SU-fragments.
-        skeleton_seq : SkeletonSequence
-            Skeleton sequence.
-        solver_params : SolverParameters
-            Solver parameter.
-
-        Returns
-        -------
-        float
-            Score of linear program solution.
-
-        """
-        # Initialize LP instance for terminal fragment
-        try:
-            lp_instance = LinearProgramInstance(
-                fragments=terminal_fragments.fragments,
-                alphabet=self.inferrer.alphabet,
-                seq=self.inferrer.seq,
-                skeleton_seq=skeleton_seq,
-            )
-        except Exception:
-            return np.inf
-
-        # Return minimum error when fragments can feasibly be aligned to skeleton
-        return lp_instance.minimize_error(solver_params=solver_params)
-
-    def select_sequence_length_with_jaccard(
-        self, start_skeleton: SkeletonSequence, end_skeleton: SkeletonSequence
-    ) -> int:
-        """
-        Select sequence length based on Jaccard index.
-
-        Parameters
-        ----------
-        start_skeleton : SkeletonSequence
-            Skeleton in 5'-direction.
-        end_skeleton : SkeletonSequence
-            Skeleton in 3'-direction.
-
-        Returns
-        -------
-        int
-            Selected sequence length.
-
-        """
-        # Determine sequence length with the highest similarity between skeleton parts
-        best_len = self.inferrer.seq.min_len
-        best_val = -1
-        for len_cand in range(self.inferrer.seq.min_len, self.inferrer.seq.max_len + 1):
-            # Skip candidates resulting in invalid sequences
-            if not self.inferrer.seq.validate_sequence(
-                seq=start_skeleton.merge(other=end_skeleton, seq_len=len_cand),
-                alphabet=self.inferrer.alphabet,
-            ):
-                continue
-
-            # Determine normalized sum of Jaccard similarity in each position
-            value = (
-                sum(
-                    map(
-                        jaccard_index,
-                        zip(
-                            start_skeleton.sequence[:len_cand],
-                            end_skeleton.sequence[len(end_skeleton) - len_cand :],
-                        ),
-                    )
-                )
-                / len_cand
-            )
-
-            # Update best found sequence length if needed
-            if value > best_val:
-                best_val = value
-                best_len = len_cand
-
-        if best_val < 0:
-            raise Exception(
-                "No sequence length fitting the given sequence mass could be estimated."
-            )
-
-        return best_len
-
     def infer_compositions_for_bin_differences(
         self,
         prev_bin: StandardUnitFragments,
@@ -401,34 +251,3 @@ class SkeletonBuilder:
         return self.inferrer.infer_compositions(
             mass=diff, obs_masses=[prev_mass, current_mass]
         )
-
-
-def jaccard_index(input_tuple: Tuple[Set[str], Set[str]]) -> float:
-    """
-    Determine Jaccard index.
-
-    Parameters
-    ----------
-    input_tuple : Tuple[Set[str], Set[str]]
-        Tuple of candidates for nucleotides at any skeleton position.
-
-    Returns
-    -------
-    float
-        Jaccard index.
-
-    """
-    # Return score for perfect similarity if one set is empty
-    if len(input_tuple[0]) == 0 or len(input_tuple[1]) == 0:
-        return 1
-
-    # Return score for perfect similarity if one set is subset of the other
-    if input_tuple[0].issuperset(input_tuple[1]) or input_tuple[1].issuperset(
-        input_tuple[0]
-    ):
-        return 1
-
-    # Return Jaccard score
-    return len(input_tuple[0].intersection(input_tuple[1])) / len(
-        input_tuple[0].union(input_tuple[1])
-    )

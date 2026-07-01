@@ -19,6 +19,13 @@ class ErrorMetric(Enum):
     L2NORM = "l2_norm"
 
 
+class LengthEstimatorMetric(Enum):
+    """Enum of types of metrics used for sequence length estimation."""
+
+    JACCARD = "jaccard"
+    LP = "lp"
+
+
 class SolverType(Enum):
     """Enum of types of solvers used for linear optimization."""
 
