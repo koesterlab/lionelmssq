@@ -11,10 +11,6 @@ import polars as pl
 from spectrseqtools.error_calculator import ErrorCalculator
 from spectrseqtools.file_settings import ELEMENT_MASSES, load_alphabet
 
-# TODO: Currently, the list of unmodified bases is only defined for RNA;
-#  make it universally applicable
-UNMODIFIED_BASES = ["A", "C", "G", "U"]
-
 _ALPHABET_COLS = [
     "integer_mass",
     "nucleoside_mass",
@@ -141,35 +137,12 @@ class NucleotideAlphabet:
             pl.col("singleton_mz").max(),
             pl.col("id").unique().alias("id_list"),
             pl.col("modification_rate").max(),
+            pl.col("is_modification").all(),
         )
 
-        # Add modification flag
-        masses = masses.with_columns(
-            ~pl.col("representative").is_in(UNMODIFIED_BASES).alias("is_modification")
-        )
-
-        return cls.from_dataframe(
-            nucleotide_df=masses,
-            modification_rate=modification_rate,
-        )
-
-    @classmethod
-    def from_dataframe(
-        cls, nucleotide_df: pl.DataFrame, modification_rate: float
-    ) -> Self:
-        """
-        Initialize nucleotide alphabet from file.
-
-        Parameters
-        ----------
-        nucleotide_df : polars.DataFrame
-            Polars dataframe containing nucleoside information.
-        modification_rate : float
-            Maximum percentage of modification in sequence.
-
-        """
+        # Adapt individual modification rates to global one (and update columns)
         new_df = (
-            nucleotide_df.sort("integer_mass")
+            masses.sort("integer_mass")
             .rename({"id_list": "names"})
             .drop("representative")
             .with_columns(

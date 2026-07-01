@@ -25,6 +25,7 @@ _ALPHABET_DF_COLS = [
     "canonical_name",
     "monoisotopic_mass",
     "modification_rate",
+    "is_modification",
     "encoding",
 ]
 
