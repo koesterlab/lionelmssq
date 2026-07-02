@@ -85,6 +85,7 @@ class Predictor:
             su_mass=seq_mass_su,
             obs_mass=seq_mass_obs,
             modification_rate=options.modification_rate,
+            max_variance=options.max_intact_mass_variance,
         )
 
         # Initialize CompositionInferrer class

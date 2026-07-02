@@ -16,9 +16,6 @@ from spectrseqtools.sequence import SkeletonSequence
 
 _NUCLEOSIDE_RE = re.compile(r"\d*[ACGU]")
 
-# Maximum variance for intact mass
-MAX_VARIANCE = 1
-
 
 @dataclass
 class SolverParameters:
@@ -67,7 +64,7 @@ class SequenceInformation:
     obs_mass: float
     max_len: int
     min_len: int = 0
-    max_variance: int = MAX_VARIANCE
+    max_variance: int = 1
 
     @property
     def max_modifications(self) -> int:

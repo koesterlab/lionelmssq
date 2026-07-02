@@ -10,8 +10,10 @@ import polars as pl
 from platformdirs import user_cache_dir
 
 # Set OS-independent cache directory for traceback matrix
-MATRIX_CACHE_DIR = user_cache_dir(
-    appname="spectrseqtools/traceback_matrix", version="1.0", ensure_exists=True
+MATRIX_CACHE_DIR = Path(
+    user_cache_dir(
+        appname="spectrseqtools/traceback_matrix", version="1.0", ensure_exists=True
+    )
 )
 
 # Set default file paths
@@ -84,9 +86,8 @@ def set_matrix_path(num_places: int, compression_rate: int) -> Path:
     path = MATRIX_CACHE_DIR / f"{num_places}_decimal_places.{compression_rate}_per_cell"
 
     # Create directory for traceback matrix if it does not already exist
-    subdir = Path("/".join(path.split("/")[:-1]))
-    if not os.path.exists(subdir):
-        os.makedirs(subdir)
+    if not os.path.exists(path.parent):
+        os.makedirs(path.parent)
 
     return path
 

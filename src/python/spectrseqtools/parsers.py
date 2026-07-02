@@ -152,6 +152,9 @@ class PredictionOptions(ddargparse.OptionsBase):
             "help": "Metric for used for error calculation over multiple values."
         },
     )
+    max_intact_mass_variance: int = field(
+        default=1, metadata={"help": "Maximum variance for intact mass."}
+    )
     reduce_fragmentation_dict: bool = field(
         default=True,
         metadata={"help": "Flag whether only c/y-fragmentation should be considered."},
