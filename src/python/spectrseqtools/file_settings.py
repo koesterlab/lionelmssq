@@ -7,7 +7,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import polars as pl
+from platformdirs import user_cache_dir
 
+# Set OS-independent cache directory for traceback matrix
+MATRIX_CACHE_DIR = user_cache_dir(
+    appname="spectrseqtools/traceback_matrix", version="1.0", ensure_exists=True
+)
+
+# Set default file paths
 DEFAULT_ALPHABET_PATH = importlib.resources.files(__package__) / "assets" / "masses.tsv"
 DEFAULT_ELEMENT_PATH = (
     importlib.resources.files(__package__) / "assets" / "element_masses.tsv"
@@ -54,6 +61,34 @@ def load_alphabet(input_path: Path | None = None) -> pl.DataFrame:
     masses = alphabet.select(_ALPHABET_DF_COLS)
     assert masses.columns == _ALPHABET_DF_COLS
     return alphabet
+
+
+def set_matrix_path(num_places: int, compression_rate: int) -> Path:
+    """
+    Set path to traceback matrix.
+
+    Parameters
+    ----------
+    num_places : int
+        Number of decimal places used for rounding of (nucleotide) masses.
+    compression_rate : int
+        Compression per matrix cell.
+
+    Returns
+    -------
+    path : Path
+        Path to traceback matrix.
+
+    """
+    # Set path for traceback matrix
+    path = MATRIX_CACHE_DIR / f"{num_places}_decimal_places.{compression_rate}_per_cell"
+
+    # Create directory for traceback matrix if it does not already exist
+    subdir = Path("/".join(path.split("/")[:-1]))
+    if not os.path.exists(subdir):
+        os.makedirs(subdir)
+
+    return path
 
 
 @dataclass

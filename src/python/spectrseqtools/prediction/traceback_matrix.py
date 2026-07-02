@@ -1,20 +1,14 @@
 # -*- coding: utf-8 -*-
 """Module for traceback matrix."""
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Self, Tuple
 
 import numpy as np
-from platformdirs import user_cache_dir
 
+from spectrseqtools.file_settings import set_matrix_path
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
-
-# Set OS-independent cache directory for traceback matrix
-MATRIX_DIR = user_cache_dir(
-    appname="spectrseqtools/traceback_matrix", version="1.1", ensure_exists=True
-)
 
 # Set maximum sequence length to be represented in traceback matrix
 MAX_SEQ_LENGTH = 35
@@ -49,7 +43,9 @@ class TracebackMatrix:
 
         """
         # Set matrix path
-        path = set_matrix_path(10 ** (-alphabet.decimal_places), compression_rate)
+        path = set_matrix_path(
+            num_places=alphabet.decimal_places, compression_rate=compression_rate
+        )
 
         # Compute and save bit-representation matrix if not existing
         if not Path(f"{path}.npy").is_file():
@@ -211,34 +207,6 @@ class TracebackMatrix:
         horizontal_move = (current_value >> 1) % 2 == 1
 
         return vertical_move, horizontal_move
-
-
-def set_matrix_path(precision: float, compression_rate: int) -> str:
-    """
-    Set path to traceback matrix.
-
-    Parameters
-    ----------
-    precision : float
-        Precision used for (nucleotide) masses.
-    compression_rate : int
-        Compression per matrix cell.
-
-    Returns
-    -------
-    path : str
-        Path to traceback matrix.
-
-    """
-    # Set path for traceback matrix
-    path = f"{MATRIX_DIR}/tol_{precision:.0E}.{compression_rate}_per_cell"
-
-    # Create directory for traceback matrix if it does not already exist
-    subdir = "/".join(path.split("/")[:-1])
-    if not os.path.exists(subdir):
-        os.makedirs(subdir)
-
-    return path
 
 
 def select_matrix_building_settings(compression_rate: int) -> dict:
