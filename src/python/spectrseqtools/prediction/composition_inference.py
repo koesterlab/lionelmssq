@@ -20,34 +20,10 @@ from spectrseqtools.prediction.traceback_matrix import TracebackMatrix
 class CompositionInferrer:
     """Class to infer compositions."""
 
+    alphabet: NucleotideAlphabet
     error: ErrorCalculator
     matrix: TracebackMatrix
     seq: SequenceInformation
-    alphabet: NucleotideAlphabet
-
-    def __init__(
-        self,
-        alphabet: NucleotideAlphabet,
-        error: ErrorCalculator,
-        compression_rate: int,
-        seq: SequenceInformation,
-    ):
-        self.error = error
-        self.seq = seq
-        self.alphabet = alphabet
-
-        if self.alphabet.is_default:
-            # Initialize matrix from file (for default alphabet)
-            print("Default alphabet detected. Trying to load traceback matrix.\n")
-            self.matrix = TracebackMatrix.load(
-                alphabet=self.alphabet, compression_rate=compression_rate
-            )
-        else:
-            # Set up matrix for given alphabet
-            print("Custom alphabet detected. Setting up new traceback matrix.\n")
-            self.matrix = TracebackMatrix.set_up_bit_matrix(
-                alphabet=self.alphabet, compression_rate=compression_rate
-            )
 
     def reduce_alphabet(self, new_alphabet: Set[int]) -> dict:
         """
@@ -72,10 +48,7 @@ class CompositionInferrer:
 
         # Recompute matrix if alphabet was reduced
         if len(self.alphabet) != alphabet_size:
-            self.matrix = TracebackMatrix.set_up_bit_matrix(
-                alphabet=self.alphabet,
-                compression_rate=self.matrix.compression_rate,
-            )
+            self.matrix.rebuild(alphabet=self.alphabet)
 
         return mapping
 

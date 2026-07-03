@@ -20,6 +20,7 @@ from spectrseqtools.prediction.composition_inference import CompositionInferrer
 from spectrseqtools.prediction.fragment_classification import FragmentClassifier
 from spectrseqtools.prediction.sequence_inference import LinearProgramInstance
 from spectrseqtools.prediction.skeleton_building import SkeletonBuilder
+from spectrseqtools.prediction.traceback_matrix import TracebackMatrix
 
 
 class Predictor:
@@ -89,10 +90,14 @@ class Predictor:
         )
 
         # Initialize CompositionInferrer class
+        matrix = TracebackMatrix.load_with_compression(
+            alphabet=alphabet, compression_rate=int(options.compression_rate)
+        )
+
         inferrer = CompositionInferrer(
             alphabet=alphabet,
             error=error_calculator,
-            compression_rate=int(options.compression_rate),
+            matrix=matrix,
             seq=seq_info,
         )
 

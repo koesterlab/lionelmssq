@@ -7,6 +7,7 @@ from spectrseqtools.prediction.composition_inference import (
     CompositionInferrer,
     infer_compositions_with_recursion,
 )
+from spectrseqtools.prediction.traceback_matrix import TracebackMatrix
 
 TEST_SEQ = [
     tuple("A"),
@@ -39,10 +40,15 @@ def test_infer_composition_with_recursion(seq, tolerance):
         modification_rate=MOD_RATE,
     )
 
-    inferrer = CompositionInferrer(
+    matrix = TracebackMatrix.load_with_compression(
         alphabet=alphabet,
         compression_rate=32,
+    )
+
+    inferrer = CompositionInferrer(
+        alphabet=alphabet,
         error=error_calculator,
+        matrix=matrix,
         seq=seq_info,
     )
 
@@ -70,10 +76,15 @@ def test_infer_composition_with_matrix(seq, compression, tolerance, memo):
         modification_rate=MOD_RATE,
     )
 
-    inferrer = CompositionInferrer(
+    matrix = TracebackMatrix.load_with_compression(
         alphabet=alphabet,
         compression_rate=compression,
+    )
+
+    inferrer = CompositionInferrer(
+        alphabet=alphabet,
         error=error_calculator,
+        matrix=matrix,
         seq=seq_info,
     )
 
