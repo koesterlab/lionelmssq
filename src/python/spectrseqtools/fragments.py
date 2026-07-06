@@ -9,13 +9,11 @@ import numpy as np
 import polars as pl
 from loguru import logger
 
-from spectrseqtools.dataclasses import SequenceInformation
+from spectrseqtools.dataclasses import SequenceInformation, SolverParameters
 from spectrseqtools.error_calculator import ErrorCalculator
 from spectrseqtools.prediction.composition_inference import CompositionInferrer
 from spectrseqtools.prediction.sequence_inference import LinearProgramInstance
 from spectrseqtools.sequence import SkeletonSequence
-
-NUC_WEIGHT_FACTOR = 1
 
 
 @dataclass
@@ -46,7 +44,7 @@ class StandardUnitFragments:
         )
 
     @classmethod
-    def from_bins(cls, bins: List[Self], invalid_list: List) -> Self:
+    def from_bins(cls, bins: List[Self], invalid_list: List[int]) -> Self:
         """
         Initialize SU-fragments from list of binned fragments.
 
@@ -54,7 +52,7 @@ class StandardUnitFragments:
         ----------
         bins : List[StandardUnitFragments]
             List of binned SU-fragments.
-        invalid_list : List
+        invalid_list : List[int]
             List of indices for invalid fragments.
 
         """
@@ -362,7 +360,9 @@ class StandardUnitFragments:
         )
 
     def collect_mass_difference_compositions(
-        self, inferrer: CompositionInferrer
+        self,
+        inferrer: CompositionInferrer,
+        max_weight: float,
     ) -> dict:
         """
         Collect compositions of mass differences between fragments in list.
@@ -371,6 +371,8 @@ class StandardUnitFragments:
         ----------
         inferrer : CompositionInferrer
             Composition inferrer.
+        max_weight : float
+            Maximum weight allowed for nucleotides to be considered.
 
         Returns
         -------
@@ -384,7 +386,6 @@ class StandardUnitFragments:
         end = 1
 
         compositions = {}
-        max_weight = inferrer.alphabet.max.nucleotide_mass * NUC_WEIGHT_FACTOR
         while end < len(self):
             # Skip singletons
             if (end - start) <= 0:
@@ -424,7 +425,7 @@ class StandardUnitFragments:
                 "No end fragments provided, this will likely lead to suboptimal results."
             )
 
-    def filter_by_index_list(self, invalid_indices: list) -> None:
+    def filter_by_index_list(self, invalid_indices: List[int]) -> None:
         """Filter out fragments whose index is in given list."""
         self.fragments = self.fragments.filter(~pl.col("index").is_in(invalid_indices))
 
@@ -432,7 +433,7 @@ class StandardUnitFragments:
         self,
         inferrer: CompositionInferrer,
         skeleton_seq: SkeletonSequence,
-        solver_params,
+        solver_params: SolverParameters,
     ) -> None:
         """
         Filter out fragments that the LP cannot individually fit into sequence.

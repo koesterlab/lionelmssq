@@ -103,6 +103,7 @@ class Predictor:
 
         self.inferrer = inferrer
         self.cutoff_percentile = options.intensity_cutoff_percentile
+        self.nuc_weight_factor = options.composition_filter_weight_factor
 
     def predict(self):
         """Predict sequence."""
@@ -171,7 +172,7 @@ class Predictor:
             Predicted sequence and fragments.
 
         """
-        fragments, compositions = self.filter_by_composition(fragments)
+        fragments, compositions = self.filter_by_composition(fragments=fragments)
 
         skeleton_builder = SkeletonBuilder(
             compositions=compositions,
@@ -267,15 +268,21 @@ class Predictor:
         while old_alphabet_size != len(self.inferrer.alphabet):
             old_alphabet_size = len(self.inferrer.alphabet)
 
+            max_weight = (
+                self.inferrer.alphabet.max.nucleotide_mass * self.nuc_weight_factor
+            )
+
             # Roughly infer compositions for mass differences (to reduce the alphabet)
             # Note there may be faulty mass fragments leading to not truly existent values
             compositions = {
                 **singleton_compositions,
                 **fragments.start.collect_mass_difference_compositions(
                     inferrer=self.inferrer,
+                    max_weight=max_weight,
                 ),
                 **fragments.end.collect_mass_difference_compositions(
                     inferrer=self.inferrer,
+                    max_weight=max_weight,
                 ),
             }
 
@@ -329,7 +336,7 @@ class Predictor:
         return fragments, mapping
 
 
-def select_solver(solver: SolverType):
+def select_solver(solver: SolverType) -> str:
     """Select solver."""
     match solver:
         case SolverType.CBC:

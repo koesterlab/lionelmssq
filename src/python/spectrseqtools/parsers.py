@@ -188,6 +188,12 @@ class PredictionOptions(ddargparse.OptionsBase):
     intensity_cutoff_percentile: int = field(
         default=75, metadata={"help": "Intensity percentile used as cutoff"}
     )
+    composition_filter_weight_factor: float = field(
+        default=1.0,
+        metadata={
+            "help": "Nucleotide weight factor used during composition-based filtering."
+        },
+    )
 
 
 @dataclass
