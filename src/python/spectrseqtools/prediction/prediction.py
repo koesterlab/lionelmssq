@@ -16,7 +16,7 @@ from spectrseqtools.error_calculator import ErrorCalculator
 from spectrseqtools.fragments import RawFragments, StandardUnitFragments
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 from spectrseqtools.parsers import PredictionOptions
-from spectrseqtools.prediction.composition_inference import CompositionInferrer
+from spectrseqtools.prediction.composition_inference import MatrixBasedInferrer
 from spectrseqtools.prediction.fragment_classification import FragmentClassifier
 from spectrseqtools.prediction.sequence_inference import LinearProgramInstance
 from spectrseqtools.prediction.skeleton_building import SkeletonBuilder
@@ -94,7 +94,7 @@ class Predictor:
             alphabet=alphabet, compression_rate=int(options.compression_rate)
         )
 
-        inferrer = CompositionInferrer(
+        inferrer = MatrixBasedInferrer(
             alphabet=alphabet,
             error=error_calculator,
             matrix=matrix,

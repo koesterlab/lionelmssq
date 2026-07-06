@@ -5,7 +5,7 @@ from spectrseqtools.error_calculator import ErrorCalculator
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 from spectrseqtools.prediction.composition_inference import (
     CompositionInferrer,
-    infer_compositions_with_recursion,
+    MatrixBasedInferrer,
 )
 from spectrseqtools.prediction.traceback_matrix import TracebackMatrix
 
@@ -40,19 +40,13 @@ def test_infer_composition_with_recursion(seq, tolerance):
         modification_rate=MOD_RATE,
     )
 
-    matrix = TracebackMatrix.load_with_compression(
-        alphabet=alphabet,
-        compression_rate=32,
-    )
-
     inferrer = CompositionInferrer(
         alphabet=alphabet,
         error=error_calculator,
-        matrix=matrix,
         seq=seq_info,
     )
 
-    compositions = infer_compositions_with_recursion(mass=seq_weight, inferrer=inferrer)
+    compositions = inferrer.infer_compositions(mass=seq_weight)
 
     assert len(compositions) != 0
     assert Composition(*tuple(alphabet.get_idx(nuc) for nuc in seq)) in compositions
@@ -81,7 +75,7 @@ def test_infer_composition_with_matrix(seq, compression, tolerance, memo):
         compression_rate=compression,
     )
 
-    inferrer = CompositionInferrer(
+    inferrer = MatrixBasedInferrer(
         alphabet=alphabet,
         error=error_calculator,
         matrix=matrix,
