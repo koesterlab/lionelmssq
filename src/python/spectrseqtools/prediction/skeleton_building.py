@@ -15,6 +15,10 @@ from spectrseqtools.prediction.sequence_inference import LinearProgramInstance
 from spectrseqtools.sequence import SkeletonSequence
 
 
+class SkeletonBuildingError(Exception):
+    """Raised when a skeleton sequence cannot be built."""
+
+
 @dataclass
 class SkeletonBuilder:
     """Class to build skeleton sequence."""
@@ -316,7 +320,7 @@ class SkeletonBuilder:
                 best_len = len_cand
 
         if best_val < 0:
-            raise Exception(
+            raise SkeletonBuildingError(
                 "No sequence length fitting the given sequence mass could be estimated."
             )
 

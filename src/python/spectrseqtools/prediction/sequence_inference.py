@@ -29,6 +29,10 @@ from spectrseqtools.sequence import SkeletonSequence
 MILP_QUASI_ONE_THRESHOLD = 0.9
 
 
+class LinearProgramInferenceError(Exception):
+    """Raised when LP output cannot be converted into a prediction."""
+
+
 def milp_is_one(var, threshold=MILP_QUASI_ONE_THRESHOLD):
     """Return whether variable is over threshold."""
     # Due to the LP relaxation, the LP sometimes does not exactly output
@@ -288,9 +292,14 @@ class LinearProgramInstance:
         _ = lp_problem.solve(solver)
 
         # Interpret solution
-        return Prediction(
-            sequence=self._get_sequence(), fragments=self._get_fragments()
-        )
+        try:
+            return Prediction(
+                sequence=self._get_sequence(), fragments=self._get_fragments()
+            )
+        except (TypeError, ValueError) as error:
+            raise LinearProgramInferenceError(
+                "LP output could not be converted into a prediction."
+            ) from error
 
     def _get_sequence(self) -> Sequence:
         return Sequence(

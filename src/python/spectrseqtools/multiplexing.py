@@ -437,9 +437,6 @@ def pre_process_multiplexing(file_path,
                                                                                 ms1_mass_ms2_scans_list, 
                                                                                 ms2_decon_params)
 
-        if len(decon_ms2_peaks.peaks) == 0:
-            continue
-
         fragments = decon_ms2_peaks.to_fragments(options.tolerance)
         if len(fragments) == 0:
             continue
@@ -448,10 +445,9 @@ def pre_process_multiplexing(file_path,
         singleton_boundaries = SingletonBoundaries.from_alphabet(alphabet = alphabet,
                                                                 tolerance = options.tolerance,
                                                                 boundary_factor = options.boundary_factor)
-
         singletons = RawPeakList.from_scan(average_ms2_scan, singleton_boundaries).to_singletons(alphabet = alphabet, tolerance = options.tolerance, filter_cluster_score = False)
-
-        if singletons.height < 4:
+        
+        if singletons.height < 1:
             singletons = default_singletons.clone()
 
         intensity_cutoff = determine_intensity_percentiles(fragments).filter(pl.col("statistic") == "70%")["value"].to_list()[0]
@@ -466,9 +462,9 @@ def pre_process_multiplexing(file_path,
                 "intact_mass": intact_mass,
                 "adduct_types": adduct_types}
 
-    preprocessed_groups.append(PreprocessedGroup(fragments = fragments,
-                                                    singletons = singletons,
-                                                    meta = meta))
+        preprocessed_groups.append(PreprocessedGroup(fragments = fragments,
+                                                        singletons = singletons,
+                                                        meta = meta))
         
     return preprocessed_groups
 

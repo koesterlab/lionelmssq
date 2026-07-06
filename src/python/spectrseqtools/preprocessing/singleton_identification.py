@@ -176,6 +176,9 @@ class RawPeakList:
             .sort(["representative", "scan_time"])
         )
 
+        if len(peak_df) == 0:
+            return pl.DataFrame({"id": [], "cluster_score": [], "count": []})
+        
         # Map representative nucleotide, cluster score, and count to each nucleotide group
         peak_df = peak_df.group_by("names").map_groups(
             lambda x: pl.DataFrame(
