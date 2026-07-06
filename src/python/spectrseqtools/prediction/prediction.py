@@ -6,6 +6,7 @@ from typing import Set, Tuple
 import yaml
 
 from spectrseqtools.dataclasses import (
+    FilterParameters,
     Prediction,
     PredictionFileSettings,
     SequenceInformation,
@@ -21,6 +22,7 @@ from spectrseqtools.prediction.fragment_classification import FragmentClassifier
 from spectrseqtools.prediction.sequence_inference import LinearProgramInstance
 from spectrseqtools.prediction.skeleton_building import SkeletonBuilder
 from spectrseqtools.prediction.traceback_matrix import TracebackMatrix
+from spectrseqtools.sequence_length import SequenceLengthEstimator
 
 
 class Predictor:
@@ -65,9 +67,16 @@ class Predictor:
             meta = yaml.safe_load(f)
 
         # Set intensity cutoff
-        self.intensity_cutoff = None
+        intensity_cutoff = None
         if "intensity_cutoff" in meta:
-            self.intensity_cutoff = meta["intensity_cutoff"]
+            intensity_cutoff = meta["intensity_cutoff"]
+
+        # Set filter parameters
+        self.filter_params = FilterParameters(
+            intensity_cutoff=intensity_cutoff,
+            cutoff_percentile=options.intensity_cutoff_percentile,
+            nuc_weight_factor=options.composition_filter_weight_factor,
+        )
 
         # Initialize nucleotide alphabet
         alphabet = NucleotideAlphabet.from_file(
@@ -89,21 +98,23 @@ class Predictor:
             max_variance=options.max_intact_mass_variance,
         )
 
-        # Initialize CompositionInferrer class
+        # Initialize CompositionInferrer class with traceback matrix
         matrix = TracebackMatrix.load_with_compression(
             alphabet=alphabet, compression_rate=int(options.compression_rate)
         )
-
         inferrer = MatrixBasedInferrer(
             alphabet=alphabet,
             error=error_calculator,
             matrix=matrix,
             seq=seq_info,
         )
-
         self.inferrer = inferrer
-        self.cutoff_percentile = options.intensity_cutoff_percentile
-        self.nuc_weight_factor = options.composition_filter_weight_factor
+
+        self.estimator = SequenceLengthEstimator.with_metric(
+            metric=options.length_estimator_metric,
+            inferrer=self.inferrer,
+            solver_params=self.solver_params,
+        )
 
     def predict(self):
         """Predict sequence."""
@@ -116,10 +127,7 @@ class Predictor:
         fragments = RawFragments.from_file(
             input_path=self.file_settings.raw_fragment_path
         )
-        fragments.filter_by_intensity(
-            intensity_cutoff=self.intensity_cutoff,
-            cutoff_percentile=self.cutoff_percentile,
-        )
+        fragments.filter_by_intensity(filter_params=self.filter_params)
 
         # Classify raw fragments into SU-fragments
         fragments = self.classifier.classify(fragments=fragments)
@@ -182,7 +190,8 @@ class Predictor:
         # Build skeleton sequence from both sides and align them into final sequence
         try:
             skeleton_seq, fragments = skeleton_builder.build_skeleton(
-                fragments=fragments, solver_params=solver_params
+                fragments=fragments,
+                estimator=self.estimator,
             )
         # TODO: Replace generic Exception, within custom one
         except Exception:
@@ -269,7 +278,8 @@ class Predictor:
             old_alphabet_size = len(self.inferrer.alphabet)
 
             max_weight = (
-                self.inferrer.alphabet.max.nucleotide_mass * self.nuc_weight_factor
+                self.inferrer.alphabet.max.nucleotide_mass
+                * self.filter_params.nuc_weight_factor
             )
 
             # Roughly infer compositions for mass differences (to reduce the alphabet)

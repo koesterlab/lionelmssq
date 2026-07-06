@@ -7,7 +7,12 @@ from typing import Tuple
 
 import ddargparse
 
-from spectrseqtools.enums import AveragineBackbone, ErrorMetric, SolverType
+from spectrseqtools.enums import (
+    AveragineBackbone,
+    ErrorMetric,
+    LengthEstimatorMetric,
+    SolverType,
+)
 
 
 @dataclass
@@ -17,13 +22,13 @@ class PreprocessingOptions(ddargparse.OptionsBase):
     input: Path = field(
         metadata={"help": "Path to input file in RAW format"},
     )
-    meta: Path = field(metadata={"help": "Path to YAML with meta information"})
+    meta: Path = field(metadata={"help": "Path to YAML with meta information."})
     alphabet: Path | None = field(
         metadata={"help": "Path to file containing nucleotide alphabet."}
     )
     output_dir: Path | None = field(
         metadata={
-            "help": "Output directory (default: input directory)",
+            "help": "Output directory (default: input directory).",
         }
     )
     charge_range: Tuple[int, int] | None = field(
@@ -115,7 +120,7 @@ class PredictionOptions(ddargparse.OptionsBase):
     fragments: Path = field(
         metadata={"help": "Path to TSV table of observed fragments"},
     )
-    meta: Path = field(metadata={"help": "Path to YAML with meta information"})
+    meta: Path = field(metadata={"help": "Path to YAML with meta information."})
     alphabet: Path | None = field(
         metadata={
             "help": "Path to file containing nucleotide alphabet. If preprocessing was "
@@ -124,18 +129,18 @@ class PredictionOptions(ddargparse.OptionsBase):
     )
     fragment_predictions: Path = field(
         metadata={
-            "help": "Path to TSV table that shall contain the per fragment predictions"
+            "help": "Path to TSV table that shall contain the per fragment predictions."
         }
     )
     sequence_prediction: Path = field(
         metadata={
-            "help": "Path to FASTA file that shall contain the predicted sequence"
+            "help": "Path to FASTA file that shall contain the predicted sequence."
         }
     )
-    sequence_name: str = field(metadata={"help": "Header in FASTA output file"})
+    sequence_name: str = field(metadata={"help": "Header in FASTA output file."})
     output_dir: Path | None = field(
         metadata={
-            "help": "Output directory (default: input directory)",
+            "help": "Output directory (default: input directory).",
         }
     )
     tolerance: float = field(
@@ -168,25 +173,29 @@ class PredictionOptions(ddargparse.OptionsBase):
     modification_rate: float = field(
         default=0.5,
         metadata={
-            "help": "Maximum percentage of modification in sequence",
+            "help": "Maximum percentage of modification in sequence.",
         },
+    )
+    length_estimator_metric: LengthEstimatorMetric = field(
+        default=LengthEstimatorMetric.JACCARD,
+        metadata={"help": "Metric to use for sequence length estimation."},
     )
     solver: SolverType = field(
         default=SolverType.HIGHS,
-        metadata={"help": "Solver to use for optimization problem"},
+        metadata={"help": "Solver to use for optimization problem."},
     )
     lp_timeout_short: int = field(
-        default=5, metadata={"help": "Time-out for shorter solving of LP instances"}
+        default=5, metadata={"help": "Time-out for shorter solving of LP instances."}
     )
     lp_timeout_long: int = field(
-        default=60, metadata={"help": "Time-out for longer solving of LP instances"}
+        default=60, metadata={"help": "Time-out for longer solving of LP instances."}
     )
     threads: int = field(
         default=1,
-        metadata={"help": "Number of threads to use for the optimization problem"},
+        metadata={"help": "Number of threads to use for the optimization problem."},
     )
     intensity_cutoff_percentile: int = field(
-        default=75, metadata={"help": "Intensity percentile used as cutoff"}
+        default=75, metadata={"help": "Intensity percentile used as cutoff."}
     )
     composition_filter_weight_factor: float = field(
         default=1.0,

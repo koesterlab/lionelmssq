@@ -9,7 +9,11 @@ import numpy as np
 import polars as pl
 from loguru import logger
 
-from spectrseqtools.dataclasses import SequenceInformation, SolverParameters
+from spectrseqtools.dataclasses import (
+    FilterParameters,
+    SequenceInformation,
+    SolverParameters,
+)
 from spectrseqtools.error_calculator import ErrorCalculator
 from spectrseqtools.prediction.composition_inference import CompositionInferrer
 from spectrseqtools.prediction.sequence_inference import LinearProgramInstance
@@ -523,21 +527,17 @@ class RawFragments:
             ),
         )
 
-    def filter_by_intensity(
-        self, cutoff_percentile: int, intensity_cutoff: float = None
-    ) -> None:
+    def filter_by_intensity(self, filter_params: FilterParameters) -> None:
         """
         Filter out fragments with too low intensity.
 
         Parameters
         ----------
-        cutoff_percentile : int
-            Intensity cutoff percentile.
-        intensity_cutoff : float, optional
-            Fixed intensity cutoff. Default: None.
+        filter_params : FilterParameters
+            Parameters used for filtering steps.
 
         """
-        if intensity_cutoff is None:
+        if filter_params.intensity_cutoff is None:
             # Get intensity cutoffs for all percentiles (in increments of 5%)
             percentile_df = self.fragments.get_column("intensity").describe(
                 percentiles=np.linspace(0, 0.95, 20),
@@ -545,13 +545,13 @@ class RawFragments:
             )
 
             # Set intensity cutoff (if not given in metadata) based on desired percentile
-            intensity_cutoff = percentile_df.filter(
-                pl.col("statistic") == f"{cutoff_percentile}%"
+            filter_params.intensity_cutoff = percentile_df.filter(
+                pl.col("statistic") == f"{filter_params.cutoff_percentile}%"
             )["value"].to_list()[0]
 
         if self.fragments.select("intensity").min().item() > -1:
             self.fragments = self.fragments.filter(
-                pl.col("intensity") >= intensity_cutoff
+                pl.col("intensity") >= filter_params.intensity_cutoff
             )
 
     def standardize(

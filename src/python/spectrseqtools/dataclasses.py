@@ -18,6 +18,15 @@ _NUCLEOSIDE_RE = re.compile(r"\d*[ACGU]")
 
 
 @dataclass
+class FilterParameters:
+    """Class for parameters used during filtering steps."""
+
+    intensity_cutoff: float | None
+    cutoff_percentile: int
+    nuc_weight_factor: float
+
+
+@dataclass
 class SolverParameters:
     """Class for parameters used to solve optimization problems."""
 

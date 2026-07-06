@@ -5,8 +5,6 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 from spectrseqtools.compositions import CompositionList
-from spectrseqtools.dataclasses import SolverParameters
-from spectrseqtools.enums import LengthEstimatorMetric
 from spectrseqtools.fragments import StandardUnitFragments
 from spectrseqtools.prediction.composition_inference import CompositionInferrer
 from spectrseqtools.sequence import SkeletonSequence
@@ -21,7 +19,9 @@ class SkeletonBuilder:
     inferrer: CompositionInferrer
 
     def build_skeleton(
-        self, fragments: StandardUnitFragments, solver_params: SolverParameters
+        self,
+        fragments: StandardUnitFragments,
+        estimator: SequenceLengthEstimator,
     ) -> Tuple[SkeletonSequence, StandardUnitFragments]:
         """
         Build skeleton from given fragments.
@@ -30,8 +30,8 @@ class SkeletonBuilder:
         ----------
         fragments : StandardUnitFragments
             SU-fragments to build skeleton.
-        solver_params : SolverParameters
-            Solver parameter.
+        estimator: SequenceLengthEstimator
+            Sequence length estimator.
 
         Returns
         -------
@@ -66,28 +66,12 @@ class SkeletonBuilder:
         print("Skeleton sequence (3'-end)\t= ", end_skeleton)
 
         # Select best sequence length with LP
-        estimator = SequenceLengthEstimator.with_metric(
-            metric=LengthEstimatorMetric.LP,
-            inferrer=self.inferrer,
-            solver_params=solver_params,
-        )
         seq_len = estimator.select_sequence_length(
             start_fragments=start_fragments,
             end_fragments=end_fragments,
             start_skeleton=start_skeleton,
             end_skeleton=end_skeleton,
         )
-        if seq_len < 1:
-            # Use Jaccard-based method as backup (in case LP does not work)
-            estimator = SequenceLengthEstimator.with_metric(
-                metric=LengthEstimatorMetric.JACCARD, inferrer=self.inferrer
-            )
-            seq_len = estimator.select_sequence_length(
-                start_fragments=start_fragments,
-                end_fragments=end_fragments,
-                start_skeleton=start_skeleton,
-                end_skeleton=end_skeleton,
-            )
 
         # Combine both skeleton sequences
         skeleton_seq = start_skeleton.merge(other=end_skeleton, seq_len=seq_len)
