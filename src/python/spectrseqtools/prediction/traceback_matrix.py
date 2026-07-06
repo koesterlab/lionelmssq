@@ -1,20 +1,15 @@
 # -*- coding: utf-8 -*-
 """Module for traceback matrix."""
 
-import os
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Self, Tuple
 
 import numpy as np
-from platformdirs import user_cache_dir
 
+from spectrseqtools.file_settings import set_matrix_path
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
-
-# Set OS-independent cache directory for traceback matrix
-MATRIX_DIR = user_cache_dir(
-    appname="spectrseqtools/traceback_matrix", version="1.1", ensure_exists=True
-)
 
 # Set maximum sequence length to be represented in traceback matrix
 MAX_SEQ_LENGTH = 35
@@ -30,15 +25,16 @@ class TracebackMatrix:
     """Class for traceback matrix implicitly containing all compositions."""
 
     matrix: np.ndarray
-    compression_rate: int
 
     def __len__(self):
         return len(self.matrix)
 
     @classmethod
-    def load(cls, alphabet: NucleotideAlphabet, compression_rate: int) -> Self:
+    def load_with_compression(
+        cls, alphabet: NucleotideAlphabet, compression_rate: int
+    ) -> Self:
         """
-        Load traceback matrix if it exists and compute it otherwise.
+        Load traceback matrix from file if it exists and compute it otherwise.
 
         Parameters
         ----------
@@ -48,31 +44,63 @@ class TracebackMatrix:
             Compression per matrix cell.
 
         """
-        # Set matrix path
-        path = set_matrix_path(alphabet.precision, compression_rate)
+        # Set matrix cache path
+        path = set_matrix_path(
+            num_places=alphabet.decimal_places, compression_rate=compression_rate
+        )
+        match compression_rate:
+            case 1:
+                return cls.load(alphabet=alphabet, path=path)
+            case 4:
+                return MatrixWith4PerCellCompression.load(alphabet=alphabet, path=path)
+            case 8:
+                return MatrixWith8PerCellCompression.load(alphabet=alphabet, path=path)
+            case 16:
+                return MatrixWith16PerCellCompression.load(alphabet=alphabet, path=path)
+            case 32:
+                return MatrixWith32PerCellCompression.load(alphabet=alphabet, path=path)
+            case _:
+                raise ValueError(
+                    f"The compression rate {compression_rate} is "
+                    f"not compatible with the matrix setup."
+                )
 
-        # Compute and save bit-representation matrix if not existing
+    @classmethod
+    def load(cls, alphabet: NucleotideAlphabet, path: Path) -> Self:
+        """
+        Load traceback matrix if it exists and compute it otherwise.
+
+        Parameters
+        ----------
+        alphabet : NucleotideAlphabet
+            Alphabet of considered nucleotides.
+        path : Path
+            Path to cached matrix file.
+
+        """
+        # For non-default alphabet, build matrix directly
+        if not alphabet.is_default:
+            print("Custom alphabet detected. Setting up new traceback matrix.\n")
+            matrix = cls(matrix=None)
+            matrix.rebuild(alphabet=alphabet)
+            return matrix
+
+        # Build and save bit-representation matrix if not existing
+        print("Default alphabet detected. Trying to load traceback matrix.\n")
         if not Path(f"{path}.npy").is_file():
-            print("Matrix not found")
-            matrix = (
-                cls.set_up_matrix(alphabet)
-                if compression_rate == 1
-                else cls.set_up_bit_matrix(alphabet, compression_rate)
-            )
+            print("Matrix not found. Building matrix...")
+            matrix = cls(matrix=None)
+            matrix.rebuild(alphabet=alphabet)
+            print("Building complete. Save default matrix.")
             matrix.save(file_path=path)
             return matrix
 
         # Read traceback matrix
-        return cls(matrix=np.load(f"{path}.npy"), compression_rate=compression_rate)
+        return cls(matrix=np.load(f"{path}.npy"))
 
-    def save(self, file_path: Path) -> None:
-        """Save matrix in given file path."""
-        np.save(file=file_path, arr=self.matrix)
-
-    @classmethod
-    def set_up_matrix(cls, alphabet: NucleotideAlphabet) -> Self:
+    def rebuild(self, alphabet: NucleotideAlphabet) -> None:
         """
-        Calculate complete matrix with dynamic programming.
+        Rebuild complete matrix with dynamic programming.
 
         Parameters
         ----------
@@ -104,69 +132,11 @@ class TracebackMatrix:
                     matrix[i, j + alphabet.get(i - 1).mass] += 2.0
 
         # Remove first row (as it is no longer needed)
-        return cls(matrix=np.delete(matrix, 0, axis=0), compression_rate=1)
+        self.matrix = np.delete(matrix, 0, axis=0)
 
-    @classmethod
-    def set_up_bit_matrix(
-        cls, alphabet: NucleotideAlphabet, compression_rate: int
-    ) -> Self:
-        """
-        Calculate complete bit-representation matrix with dynamic programming.
-
-        Parameters
-        ----------
-        alphabet : NucleotideAlphabet
-            Alphabet of considered nucleotides.
-        compression_rate : int
-            Compression per matrix cell.
-
-        """
-        settings = select_matrix_building_settings(compression_rate)
-
-        # Select maximum integer mass for which matrix should be built
-        max_mass = alphabet.max.integer_mass * MAX_SEQ_LENGTH
-
-        # Initialize bit-representation matrix as numpy table (+ additional first row
-        # for easier indexing)
-        max_col = int(np.ceil((max_mass + 1) / compression_rate))
-        matrix = np.zeros((len(alphabet) + 1, max_col), dtype=settings["type"])
-        matrix[0, 0] = settings["init"]
-
-        # Fill traceback matrix row-wise
-        for i in range(1, len(alphabet) + 1):
-            # Case: Start new row (i.e. move on to new nucleotide)
-            # by initializing reachable cells from before
-            matrix[i] = [
-                ((val | (val >> 1)) & settings["alt_sec"]) for val in matrix[i - 1]
-            ]
-
-            # Define number of cells to move (step) and bit shift in a cell (shift)
-            step = int(alphabet.get(i - 1).mass / compression_rate)
-            shift = alphabet.get(i - 1).mass % compression_rate
-
-            # Case: Add more of current nucleotide
-            for j in range(max_col):
-                # Consider cell defined by step
-                if step + j < max_col:
-                    matrix[i, j + step] |= settings["alt_first"] & (
-                        (matrix[i, j] >> (2 * shift) << 1)
-                        | (matrix[i, j] >> (2 * shift))
-                    )
-
-                # If shift is needed, consider the next cell as well
-                if shift != 0 and j + step + 1 < max_col:
-                    matrix[i, j + step + 1] |= settings["alt_first"] & (
-                        (matrix[i, j] << 2 * (compression_rate - shift) << 1)
-                        | (matrix[i, j] << 2 * (compression_rate - shift))
-                    )
-
-        # Adjust last column for unused cells
-        matrix[:, -1] &= settings["full"] << 2 * (max_col - (max_mass + 1) % max_col)
-
-        # Remove first row (as it is no longer needed)
-        return cls(
-            matrix=np.delete(matrix, 0, axis=0), compression_rate=compression_rate
-        )
+    def save(self, file_path: Path) -> None:
+        """Save matrix in given file path."""
+        np.save(file=file_path, arr=self.matrix)
 
     def allowed_movement(self, mass: int, nuc_idx: int) -> Tuple[bool, bool]:
         """
@@ -175,7 +145,7 @@ class TracebackMatrix:
         Parameters
         ----------
         mass : int
-            Given integer mass value (i.e column index).
+            Given integer mass value (i.e. column index).
         nuc_idx : int
             Given nucleotide index (i.e. row index).
 
@@ -188,6 +158,99 @@ class TracebackMatrix:
 
         """
         # Raise error if mass is not in matrix (due to its size)
+        if mass >= len(self.matrix[0]):
+            raise NotImplementedError(
+                f"The value {mass} is not in the traceback matrix. "
+                f"Extend its size if you want to compute larger masses."
+            )
+
+        # Allow no movement for cells outside of matrix
+        if mass < 0 or nuc_idx < 0:
+            return False, False
+
+        # Get current value
+        current_value = self.matrix[nuc_idx, mass]
+
+        # Determine possible movements from current value
+        vertical_move = current_value % 2 == 1
+        horizontal_move = (current_value >> 1) % 2 == 1
+
+        return vertical_move, horizontal_move
+
+
+class CompressedTracebackMatrix(TracebackMatrix, ABC):
+    """Abstract class for compressed traceback matrix."""
+
+    @property
+    @abstractmethod
+    def compression_rate(self) -> int:
+        """Return compression rate used in traceback matrix."""
+
+    @property
+    @abstractmethod
+    def build_settings(self) -> dict:
+        """Return dictionary with settings for matrix building."""
+
+    def rebuild(self, alphabet: NucleotideAlphabet) -> None:
+        """
+        Rebuild complete bit-representation matrix with dynamic programming.
+
+        Parameters
+        ----------
+        alphabet : NucleotideAlphabet
+            Alphabet of considered nucleotides.
+
+        """
+        settings = self.build_settings
+
+        # Select maximum integer mass for which matrix should be built
+        max_mass = alphabet.max.integer_mass * MAX_SEQ_LENGTH
+
+        # Initialize bit-representation matrix as numpy table (+ additional first row
+        # for easier indexing)
+        max_col = int(np.ceil((max_mass + 1) / self.compression_rate))
+        matrix = np.zeros((len(alphabet) + 1, max_col), dtype=settings["dtype"])
+        matrix[0, 0] = settings["initial_mask"]
+
+        # Fill traceback matrix row-wise
+        for i in range(1, len(alphabet) + 1):
+            # Case: Start new row (i.e. move on to new nucleotide)
+            # by initializing reachable cells from before
+            matrix[i] = [
+                ((val | (val >> 1)) & settings["alt_mask_second"])
+                for val in matrix[i - 1]
+            ]
+
+            # Define number of cells to move (step) and bit shift in a cell (shift)
+            step = int(alphabet.get(i - 1).mass / self.compression_rate)
+            shift = alphabet.get(i - 1).mass % self.compression_rate
+
+            # Case: Add more of current nucleotide
+            for j in range(max_col):
+                # Consider cell defined by step
+                if step + j < max_col:
+                    matrix[i, j + step] |= settings["alt_mask_first"] & (
+                        (matrix[i, j] >> (2 * shift) << 1)
+                        | (matrix[i, j] >> (2 * shift))
+                    )
+
+                # If shift is needed, consider the next cell as well
+                if shift != 0 and j + step + 1 < max_col:
+                    matrix[i, j + step + 1] |= settings["alt_mask_first"] & (
+                        (matrix[i, j] << 2 * (self.compression_rate - shift) << 1)
+                        | (matrix[i, j] << 2 * (self.compression_rate - shift))
+                    )
+
+        # Adjust last column for unused cells
+        matrix[:, -1] &= settings["full_mask"] << 2 * (
+            max_col - (max_mass + 1) % max_col
+        )
+
+        # Remove first row (as it is no longer needed)
+        self.matrix = np.delete(matrix, 0, axis=0)
+
+    def allowed_movement(self, mass: int, nuc_idx: int) -> Tuple[bool, bool]:
+        # Raise error if mass is not in matrix (due to its size)
         if mass >= len(self.matrix[0]) * self.compression_rate:
             raise NotImplementedError(
                 f"The value {mass} is not in the traceback matrix. "
@@ -199,11 +262,8 @@ class TracebackMatrix:
             return False, False
 
         # Get current value
-        current_value = (
-            self.matrix[nuc_idx, mass]
-            if self.compression_rate == 1
-            else self.matrix[nuc_idx, mass // self.compression_rate]
-            >> 2 * (self.compression_rate - 1 - mass % self.compression_rate)
+        current_value = self.matrix[nuc_idx, mass // self.compression_rate] >> 2 * (
+            self.compression_rate - 1 - mass % self.compression_rate
         )
 
         # Determine possible movements from current value
@@ -213,84 +273,73 @@ class TracebackMatrix:
         return vertical_move, horizontal_move
 
 
-def set_matrix_path(precision: float, compression_rate: int) -> str:
-    """
-    Set path to traceback matrix.
+class MatrixWith4PerCellCompression(CompressedTracebackMatrix):
+    """Class for compressed traceback matrix with 4 entries per cell."""
 
-    Parameters
-    ----------
-    precision : float
-        Precision used for (nucleotide) masses.
-    compression_rate : int
-        Compression per matrix cell.
+    @property
+    def compression_rate(self):
+        return 4
 
-    Returns
-    -------
-    path : str
-        Path to traceback matrix.
-
-    """
-    # Set path for traceback matrix
-    path = f"{MATRIX_DIR}/tol_{precision:.0E}.{compression_rate}_per_cell"
-
-    # Create directory for traceback matrix if it does not already exist
-    subdir = "/".join(path.split("/")[:-1])
-    if not os.path.exists(subdir):
-        os.makedirs(subdir)
-
-    return path
+    @property
+    def build_settings(self) -> dict:
+        return {
+            "dtype": np.uint8,
+            "initial_mask": 0xC0,
+            "alt_mask_first": 0xAA,
+            "alt_mask_second": 0x55,
+            "full_mask": np.uint8(0xFF),
+        }
 
 
-def select_matrix_building_settings(compression_rate: int) -> dict:
-    """
-    Select parameters to build traceback matrix based on compression rate.
+class MatrixWith8PerCellCompression(CompressedTracebackMatrix):
+    """Class for compressed traceback matrix with 8 entries per cell."""
 
-    Parameters
-    ----------
-    compression_rate : int
-        Compression per matrix cell.
+    @property
+    def compression_rate(self):
+        return 8
 
-    Returns
-    -------
-    dict
-        Dictionary containing building settings.
+    @property
+    def build_settings(self) -> dict:
+        return {
+            "dtype": np.uint16,
+            "initial_mask": 0xC000,
+            "alt_mask_first": 0xAAAA,
+            "alt_mask_second": 0x5555,
+            "full_mask": np.uint16(0xFFFF),
+        }
 
-    """
-    match compression_rate:
-        case 4:
-            return {
-                "type": np.uint8,
-                "init": 0xC0,
-                "alt_first": 0xAA,
-                "alt_sec": 0x55,
-                "full": np.uint8(0xFF),
-            }
-        case 8:
-            return {
-                "type": np.uint16,
-                "init": 0xC000,
-                "alt_first": 0xAAAA,
-                "alt_sec": 0x5555,
-                "full": np.uint16(0xFFFF),
-            }
-        case 16:
-            return {
-                "type": np.uint32,
-                "init": 0xC0000000,
-                "alt_first": 0xAAAAAAAA,
-                "alt_sec": 0x55555555,
-                "full": np.uint32(0xFFFFFFFF),
-            }
-        case 32:
-            return {
-                "type": np.uint64,
-                "init": 0xC000000000000000,
-                "alt_first": 0xAAAAAAAAAAAAAAAA,
-                "alt_sec": 0x5555555555555555,
-                "full": np.uint64(0xFFFFFFFFFFFFFFFF),
-            }
-        case _:
-            raise ValueError(
-                f"The compression rate {compression_rate} is "
-                f"not compatible with the matrix setup."
-            )
+
+class MatrixWith16PerCellCompression(CompressedTracebackMatrix):
+    """Class for compressed traceback matrix with 16 entries per cell."""
+
+    @property
+    def compression_rate(self):
+        return 16
+
+    @property
+    def build_settings(self) -> dict:
+        return {
+            "dtype": np.uint32,
+            "initial_mask": 0xC0000000,
+            "alt_mask_first": 0xAAAAAAAA,
+            "alt_mask_second": 0x55555555,
+            "full_mask": np.uint32(0xFFFFFFFF),
+        }
+
+
+class MatrixWith32PerCellCompression(CompressedTracebackMatrix):
+    """Class for compressed traceback matrix with 32 entries per cell."""
+
+    @property
+    def compression_rate(self):
+        return 32
+
+    @property
+    def build_settings(self) -> dict:
+        return {
+            "dtype": np.uint64,
+            "initial_mask": 0xC000000000000000,
+            "alt_mask_first": 0xAAAAAAAAAAAAAAAA,
+            "alt_mask_second": 0x5555555555555555,
+            "full_mask": np.uint64(0xFFFFFFFFFFFFFFFF),
+        }

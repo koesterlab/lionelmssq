@@ -5,29 +5,24 @@ from typing import Set, Tuple
 
 import yaml
 
-from spectrseqtools.common import set_output_path
-from spectrseqtools.dataclasses import Prediction, SequenceInformation, SolverParameters
+from spectrseqtools.dataclasses import (
+    FilterParameters,
+    Prediction,
+    PredictionFileSettings,
+    SequenceInformation,
+    SolverParameters,
+)
 from spectrseqtools.enums import SolverType
+from spectrseqtools.error_calculator import ErrorCalculator
 from spectrseqtools.fragments import RawFragments, StandardUnitFragments
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 from spectrseqtools.parsers import PredictionOptions
-from spectrseqtools.prediction.composition_inference import CompositionInferrer
+from spectrseqtools.prediction.composition_inference import MatrixBasedInferrer
 from spectrseqtools.prediction.fragment_classification import FragmentClassifier
 from spectrseqtools.prediction.sequence_inference import LinearProgramInstance
 from spectrseqtools.prediction.skeleton_building import SkeletonBuilder
-
-# Set default value for intensity cutoff
-DEFAULT_INTENSITY_CUTOFF = 115000
-
-# Set relative tolerance such that we consider
-# abs(sum(masses)/target_mass - 1) < TOLERANCE for matching
-# Note that the error is on the higher side than would be for a good
-# calibrated machine (10 ppm), but in the absence of an experimental
-# measurement of this error, this conservative value works well
-TOLERANCE = 10e-6
-
-# Set number of binary-compressed masses per integer cell in traceback matrix
-COMPRESSION_RATE = 32
+from spectrseqtools.prediction.traceback_matrix import TracebackMatrix
+from spectrseqtools.sequence_length import SequenceLengthEstimator
 
 
 class Predictor:
@@ -43,31 +38,56 @@ class Predictor:
             time_limit_long=options.lp_timeout_long,
         )
 
-        self.fragment_dir, self.file_prefix = set_output_path(
-            input_path=options.fragments, output_dir=options.output_dir
+        # Set file-related settings
+        self.file_settings = PredictionFileSettings(
+            input_path=options.fragments,
+            meta_path=options.meta,
+            alphabet_path=options.alphabet,
+            output_dir=options.output_dir,
+            predicted_fragment_path=options.fragment_predictions,
+            sequence_path=options.sequence_prediction,
+            sequence_header=options.sequence_name,
+        )
+
+        # Initialize error calculator with desired metric
+        error_calculator = ErrorCalculator.with_metric(
+            metric=options.error_metric,
+            tolerance=options.tolerance,
+            decimal_places=options.num_decimal_places,
         )
 
         # Initialize fragment classifier
-        self.classifier = FragmentClassifier(file_path=options.meta)
+        self.classifier = FragmentClassifier(
+            file_path=self.file_settings.meta_path,
+            error=error_calculator,
+            reduced=options.reduce_fragmentation_dict,
+        )
 
-        with open(options.meta, "r", encoding="utf-8") as f:
+        with open(self.file_settings.meta_path, "r", encoding="utf-8") as f:
             meta = yaml.safe_load(f)
 
-        self.intensity_cutoff = meta.setdefault(
-            "intensity_cutoff", DEFAULT_INTENSITY_CUTOFF
+        # Set intensity cutoff
+        intensity_cutoff = None
+        if "intensity_cutoff" in meta:
+            intensity_cutoff = meta["intensity_cutoff"]
+
+        # Set filter parameters
+        self.filter_params = FilterParameters(
+            intensity_cutoff=intensity_cutoff,
+            cutoff_percentile=options.intensity_cutoff_percentile,
+            nuc_weight_factor=options.composition_filter_weight_factor,
         )
 
         # Initialize nucleotide alphabet
         alphabet = NucleotideAlphabet.from_file(
-            modification_rate=options.modification_rate
+            modification_rate=options.modification_rate,
+            input_path=self.file_settings.alphabet_path,
+            error=error_calculator,
         )
-        alphabet.filter_by_singletons(singleton_path=options.singletons)
 
         # Standardize intact sequence mass by removing START_END fragmentation to gain SU mass
         seq_mass_obs = meta["intact_mass"]
-        seq_mass_su = (
-            seq_mass_obs - self.classifier.start_end_fragmentation * alphabet.precision
-        )
+        seq_mass_su = seq_mass_obs - self.classifier.start_end_fragmentation
 
         # Initialize SequenceInformation class
         seq_info = SequenceInformation(
@@ -75,21 +95,26 @@ class Predictor:
             su_mass=seq_mass_su,
             obs_mass=seq_mass_obs,
             modification_rate=options.modification_rate,
+            max_variance=options.max_intact_mass_variance,
         )
 
-        # Initialize CompositionInferrer class
-        inferrer = CompositionInferrer(
+        # Initialize CompositionInferrer class with traceback matrix
+        matrix = TracebackMatrix.load_with_compression(
+            alphabet=alphabet, compression_rate=int(options.compression_rate)
+        )
+        inferrer = MatrixBasedInferrer(
             alphabet=alphabet,
-            compression_rate=int(COMPRESSION_RATE),
-            tolerance=TOLERANCE,
+            error=error_calculator,
+            matrix=matrix,
             seq=seq_info,
         )
-
         self.inferrer = inferrer
-        self.fragment_path = options.fragments
-        self.predict_path = options.fragment_predictions
-        self.sequence_path = options.sequence_prediction
-        self.sequence_name = options.sequence_name
+
+        self.estimator = SequenceLengthEstimator.with_metric(
+            metric=options.length_estimator_metric,
+            inferrer=self.inferrer,
+            solver_params=self.solver_params,
+        )
 
     def predict(self):
         """Predict sequence."""
@@ -99,8 +124,10 @@ class Predictor:
         print()
 
         # Initialize raw fragments
-        fragments = RawFragments.from_file(input_path=self.fragment_path)
-        fragments.filter_by_intensity(cutoff=self.intensity_cutoff)
+        fragments = RawFragments.from_file(
+            input_path=self.file_settings.raw_fragment_path
+        )
+        fragments.filter_by_intensity(filter_params=self.filter_params)
 
         # Classify raw fragments into SU-fragments
         fragments = self.classifier.classify(fragments=fragments)
@@ -109,10 +136,7 @@ class Predictor:
         fragments.filter_with_traceback_matrix(inferrer=self.inferrer)
 
         # Save SU-fragments
-        fragments.save(
-            output_path=self.fragment_dir
-            / f"{self.file_prefix}.standard_unit_fragments.tsv"
-        )
+        fragments.save(output_path=self.file_settings.su_fragment_path)
 
         fragments.index()
 
@@ -129,9 +153,7 @@ class Predictor:
 
         # Save prediction results
         prediction.save(
-            fragment_path=self.predict_path,
-            sequence_path=self.sequence_path,
-            sequence_name=self.sequence_name,
+            file_settings=self.file_settings,
             alphabet=self.inferrer.alphabet,
         )
 
@@ -158,7 +180,7 @@ class Predictor:
             Predicted sequence and fragments.
 
         """
-        fragments, compositions = self.filter_by_composition(fragments)
+        fragments, compositions = self.filter_by_composition(fragments=fragments)
 
         skeleton_builder = SkeletonBuilder(
             compositions=compositions,
@@ -168,7 +190,8 @@ class Predictor:
         # Build skeleton sequence from both sides and align them into final sequence
         try:
             skeleton_seq, fragments = skeleton_builder.build_skeleton(
-                fragments=fragments, solver_params=solver_params
+                fragments=fragments,
+                estimator=self.estimator,
             )
         # TODO: Replace generic Exception, within custom one
         except Exception:
@@ -254,15 +277,22 @@ class Predictor:
         while old_alphabet_size != len(self.inferrer.alphabet):
             old_alphabet_size = len(self.inferrer.alphabet)
 
+            max_weight = (
+                self.inferrer.alphabet.max.nucleotide_mass
+                * self.filter_params.nuc_weight_factor
+            )
+
             # Roughly infer compositions for mass differences (to reduce the alphabet)
             # Note there may be faulty mass fragments leading to not truly existent values
             compositions = {
                 **singleton_compositions,
                 **fragments.start.collect_mass_difference_compositions(
                     inferrer=self.inferrer,
+                    max_weight=max_weight,
                 ),
                 **fragments.end.collect_mass_difference_compositions(
                     inferrer=self.inferrer,
+                    max_weight=max_weight,
                 ),
             }
 
@@ -276,7 +306,9 @@ class Predictor:
             observed_nucleotides = {
                 nuc for comp in compositions.values() for nuc in comp.nucleotides
             }
-            fragments, _ = self._reduce_alphabet(observed_nucleotides, fragments)
+            fragments, _ = self._reduce_alphabet(
+                nucleotide_list=observed_nucleotides, fragments=fragments
+            )
 
         print("Alphabet after composition-based reduction:")
         self.inferrer.print_alphabet()
@@ -285,14 +317,14 @@ class Predictor:
         return fragments, compositions
 
     def _reduce_alphabet(
-        self, nucleotide_list: Set[str], fragments: StandardUnitFragments
+        self, nucleotide_list: Set[int], fragments: StandardUnitFragments
     ) -> Tuple[StandardUnitFragments, dict]:
         """
         Reduce nucleotide alphabet (and fragments) by list of valid nucleotides.
 
         Parameters
         ----------
-        nucleotide_list : Set[str]
+        nucleotide_list : Set[int]
             List of valid nucleotides.
         fragments : StandardUnitFragments
             SU-fragments before reduction.
@@ -306,11 +338,7 @@ class Predictor:
 
         """
         # Reduce nucleotide alphabet
-        mapping = (
-            self.inferrer.adapt_individual_modification_rates_by_alphabet_reduction(
-                nucleotide_list
-            )
-        )
+        mapping = self.inferrer.reduce_alphabet(new_alphabet=nucleotide_list)
 
         # Filter out all fragments with no valid composition
         fragments.filter_with_traceback_matrix(inferrer=self.inferrer)
@@ -318,7 +346,7 @@ class Predictor:
         return fragments, mapping
 
 
-def select_solver(solver: SolverType):
+def select_solver(solver: SolverType) -> str:
     """Select solver."""
     match solver:
         case SolverType.CBC:

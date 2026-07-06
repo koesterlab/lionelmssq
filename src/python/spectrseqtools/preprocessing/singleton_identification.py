@@ -2,6 +2,7 @@
 """Singleton selection from raw mass spectrometry data."""
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import List, Self
 
 import ms_deisotope as ms_ditp
@@ -11,6 +12,8 @@ from clr_loader import get_mono
 from dbscan1d.core import DBSCAN1D
 from sklearn.metrics import silhouette_score
 
+from spectrseqtools.error_calculator import ErrorCalculator
+from spectrseqtools.file_settings import load_alphabet
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 
 rt = get_mono()
@@ -33,13 +36,26 @@ class SingletonBoundaries:
     max_mz: float
 
     @classmethod
-    def from_alphabet(
-        cls, alphabet: pl.DataFrame, tolerance: float, boundary_factor: float
+    def from_alphabet_file(
+        cls, input_path: Path | None, error: ErrorCalculator, boundary_factor: float
     ) -> Self:
-        """Set singleton boundaries based on nucleotide alphabet."""
+        """
+        Set singleton boundaries based on nucleotide alphabet in given file.
+
+        Parameters
+        ----------
+        input_path : Path | None
+            Path to alphabet of considered nucleotides.
+        error : ErrorCalculator
+            Error calculator.
+        boundary_factor : int
+            Factor for scaling theoretical singleton boundaries.
+
+        """
+        alphabet = NucleotideAlphabet.from_file(input_path=input_path, error=error)
         return SingletonBoundaries(
-            min_mz=alphabet.min.singleton_mz * (1 - boundary_factor * tolerance),
-            max_mz=alphabet.max.singleton_mz * (1 + boundary_factor * tolerance),
+            min_mz=alphabet.min.singleton_mz * (1 - boundary_factor * error.tolerance),
+            max_mz=alphabet.max.singleton_mz * (1 + boundary_factor * error.tolerance),
         )
 
 
@@ -118,7 +134,7 @@ class RawPeakList:
         return RawPeakList(peaks=peak_list)
 
     def to_singletons(
-        self, alphabet: NucleotideAlphabet, tolerance: float
+        self, alphabet_path: Path, error: ErrorCalculator
     ) -> pl.DataFrame:
         """
         Select candidate singletons based on raw peaks.
@@ -128,10 +144,10 @@ class RawPeakList:
 
         Parameters
         ----------
-        alphabet : NucleotideAlphabet
-            Alphabet of considered nucleotides.
-        tolerance : float
-            Error tolerance for individual masses.
+        alphabet_path : Path
+            Path to alphabet of considered nucleotides.
+        error : ErrorCalculator
+            Error calculator.
 
         Returns
         -------
@@ -139,10 +155,9 @@ class RawPeakList:
             Dataframe containing singleton candidates.
 
         """
-        alphabet_df = alphabet.to_dataframe()
-        alphabet_df = alphabet_df.with_columns(
-            pl.col("names").first().alias("representative")
-        )
+        alphabet_df = NucleotideAlphabet.from_file(
+            input_path=alphabet_path, error=error
+        ).to_dataframe()
 
         # Build dataframe from peak list
         peak_df = pl.DataFrame(
@@ -167,11 +182,11 @@ class RawPeakList:
                 (abs(pl.col("mz") - pl.col("singleton_mz")) / pl.col("mz"))
                 .fill_null(0)
                 .fill_nan(0)
-                .lt(tolerance)
+                .lt(error.tolerance)
                 .alias("is_match")
             )
             .filter(pl.col("is_match"))
-            .sort(["representative", "scan_time"])
+            .sort("scan_time")
         )
 
         # Map representative nucleotide, cluster score, and count to each nucleotide group
@@ -186,11 +201,16 @@ class RawPeakList:
         )
 
         # Filter candidate singletons by cluster score
-        return (
+        singletons = (
             peak_df.filter(pl.col("cluster_score") >= 0).select(
                 ["id", "count", "cluster_score"]
             )
         ).sort("count", descending=True)
+
+        # Only select singletons for new alphabet
+        return load_alphabet(input_path=alphabet_path).join(
+            singletons, on="id", how="inner"
+        )
 
 
 def calculate_cluster_score(scan_times: pl.Series) -> float:

@@ -4,15 +4,14 @@
 import importlib.resources
 
 import ms_deisotope as ms_ditp
-import numpy as np
 import polars as pl
 import tqdm
 import yaml
 from clr_loader import get_mono
 
-from spectrseqtools.common import set_output_path
 from spectrseqtools.enums import AveragineBackbone
-from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
+from spectrseqtools.error_calculator import ErrorCalculator
+from spectrseqtools.file_settings import PreprocessingFileSettings
 from spectrseqtools.parsers import PreprocessingOptions
 from spectrseqtools.preprocessing.deconvolution import (
     DeconvolutionParameters,
@@ -30,21 +29,23 @@ class Preprocessor:
     """Class for preprocessing of raw MS data."""
 
     def __init__(self, options: PreprocessingOptions) -> None:
-        self.alphabet = NucleotideAlphabet.from_file(input_path=options.alphabet)
-        self.tolerance = options.tolerance
-        self.singleton_boundaries = SingletonBoundaries.from_alphabet(
-            alphabet=self.alphabet,
+        self.file_settings = PreprocessingFileSettings(
+            input_path=options.input,
+            meta_path=options.meta,
+            alphabet_path=options.alphabet,
+            output_dir=options.output_dir,
+        )
+        self.error = ErrorCalculator.with_metric(
+            tolerance=options.tolerance,
+            decimal_places=options.num_decimal_places,
+        )
+        self.singleton_boundaries = SingletonBoundaries.from_alphabet_file(
+            input_path=self.file_settings.alphabet_path,
             boundary_factor=options.boundary_factor,
-            tolerance=self.tolerance,
+            error=self.error,
         )
-        self.input_path = options.input
-        self.output_dir, self.output_id = set_output_path(
-            input_path=options.input, output_dir=options.output_dir
-        )
-        self.output_prefix = self.output_dir / self.output_id
-        with open(options.meta, "r", encoding="utf-8") as f:
+        with open(self.file_settings.meta_path, "r", encoding="utf-8") as f:
             self.meta_params = yaml.safe_load(f)
-        self.cutoff_percentile = options.cutoff_percentile
 
         self.deconvolution_params = DeconvolutionParameters(
             min_precursor_charge=options.min_precursor_charge,
@@ -80,31 +81,20 @@ class Preprocessor:
 
         # Update meta parameters (if needed)
         meta_params = self.meta_params
-        meta_params.setdefault("identity", self.output_id)
+        meta_params.setdefault("identity", self.file_settings.file_prefix)
         meta_params.setdefault("intact_mass", self.select_intact_mass(fragments))
         meta_params.setdefault("true_sequence", None)
 
-        # Set intensity cutoff
-        meta_params["intensity_cutoff"] = (
-            determine_intensity_percentiles(fragments)
-            .filter(pl.col("statistic") == f"{self.cutoff_percentile}%")["value"]
-            .to_list()[0]
-        )
-
         # Save updated meta data
-        with open(
-            f"{self.output_prefix}.preprocessed.meta.yaml", "w", encoding="utf-8"
-        ) as f:
+        with open(self.file_settings.updated_meta_path, "w", encoding="utf-8") as f:
             yaml.dump(meta_params, f)
 
         # Save preprocessed fragments
-        fragments.write_csv(f"{self.output_prefix}.tsv", separator="\t")
+        fragments.write_csv(self.file_settings.fragment_path, separator="\t")
 
-        # Identify singletons
+        # Save singletons detected from raw data as new nucleotide alphabet
         singletons = self.identify_singletons()
-
-        # Save singletons detected from raw data
-        singletons.write_csv(f"{self.output_prefix}.singletons.tsv", separator="\t")
+        singletons.write_csv(self.file_settings.updated_alphabet_path, separator="\t")
 
         print("Preprocessing completed!\n")
 
@@ -119,7 +109,9 @@ class Preprocessor:
 
         """
         # Initialize iterator for RAW file
-        raw_file_read = initialize_raw_file_iterator(file_path=str(self.input_path))
+        raw_file_read = initialize_raw_file_iterator(
+            file_path=str(self.file_settings.input_path)
+        )
 
         peak_list = DeisotopedPeakList.default()
         for _ in tqdm.tqdm(range(len(raw_file_read) - 1), desc="Deisotoping MS2 scans"):
@@ -135,7 +127,7 @@ class Preprocessor:
                 scan=scan, params=self.deconvolution_params
             )
 
-        return peak_list.to_fragments(tolerance=self.tolerance)
+        return peak_list.to_fragments(tolerance=self.error.tolerance)
 
     def identify_singletons(self) -> pl.DataFrame:
         """
@@ -148,7 +140,9 @@ class Preprocessor:
 
         """
         # Initialize iterator for RAW file
-        raw_file_read = initialize_raw_file_iterator(file_path=str(self.input_path))
+        raw_file_read = initialize_raw_file_iterator(
+            file_path=str(self.file_settings.input_path)
+        )
 
         peak_list = RawPeakList.default()
         for _ in tqdm.tqdm(
@@ -166,7 +160,10 @@ class Preprocessor:
                 scan=scan, boundaries=self.singleton_boundaries
             )
 
-        return peak_list.to_singletons(tolerance=self.tolerance, alphabet=self.alphabet)
+        return peak_list.to_singletons(
+            alphabet_path=self.file_settings.alphabet_path,
+            error=self.error,
+        )
 
     def select_intact_mass(self, fragments: pl.DataFrame) -> float:
         """
@@ -298,23 +295,3 @@ def set_averagine(backbone: AveragineBackbone) -> dict:
             )
 
     return average_composition
-
-
-def determine_intensity_percentiles(fragments: pl.DataFrame) -> pl.DataFrame:
-    """
-    Determine percentile values for intensities in given dataframe.
-
-    Parameters
-    ----------
-    fragments : polars.DataFrame
-        Dataframe containing deconvoluted fragments.
-
-    Returns
-    -------
-    polars.DataFrame
-        Dataframe containing intensity percentile values.
-    """
-    return fragments.get_column("intensity").describe(
-        percentiles=np.linspace(0, 0.95, 20),
-        interpolation="midpoint",
-    )

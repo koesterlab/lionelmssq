@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """Module for dataclasses."""
 
-import importlib.resources
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -11,17 +10,20 @@ from typing import List, Self
 import numpy as np
 import polars as pl
 
+from spectrseqtools.file_settings import PredictionFileSettings, load_alphabet
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 from spectrseqtools.sequence import SkeletonSequence
 
 _NUCLEOSIDE_RE = re.compile(r"\d*[ACGU]")
-MASSES = pl.read_csv(
-    (importlib.resources.files(__package__) / "assets" / "masses.tsv"),
-    separator="\t",
-)
 
-# Maximum variance for intact mass
-MAX_VARIANCE = 1
+
+@dataclass
+class FilterParameters:
+    """Class for parameters used during filtering steps."""
+
+    intensity_cutoff: float | None
+    cutoff_percentile: int
+    nuc_weight_factor: float
 
 
 @dataclass
@@ -71,7 +73,7 @@ class SequenceInformation:
     obs_mass: float
     max_len: int
     min_len: int = 0
-    max_variance: int = MAX_VARIANCE
+    max_variance: int = 1
 
     @property
     def max_modifications(self) -> int:
@@ -176,10 +178,12 @@ class Sequence:
         """
         return "".join(nucleotide_alphabet.fmt(rep=nuc) for nuc in self.sequence)
 
-    def to_encoding(self) -> List[str]:
+    def to_encoding(self, masses: pl.DataFrame | None = None) -> List[str]:
         """Format sequence to use encoding."""
+        if masses is None:
+            masses = load_alphabet()
         return [
-            MASSES.row(named=True, by_predicate=pl.col("id") == val)["encoding"]
+            masses.row(named=True, by_predicate=pl.col("id") == val)["encoding"]
             for val in self.sequence
         ]
 
@@ -292,9 +296,7 @@ class Prediction:
 
     def save(
         self,
-        fragment_path: Path,
-        sequence_path: Path,
-        sequence_name: str,
+        file_settings: PredictionFileSettings,
         alphabet: NucleotideAlphabet,
     ) -> None:
         """
@@ -302,23 +304,19 @@ class Prediction:
 
         Parameters
         ----------
-        fragment_path : Path
-            Path to output file for fragments in TSV format.
-        sequence_path : Path
-            Path to output file for sequence in FASTA format.
-        sequence_name : str
-            Name of sequence in FASTA header.
+        file_settings : PredictionFileSettings
+            File-related settings for prediction phase.
         alphabet : NucleotideAlphabet
             Alphabet of considered nucleotides.
 
         """
         # Save fragment predictions
-        self.fragments.save(output_path=fragment_path)
+        self.fragments.save(output_path=file_settings.predicted_fragment_path)
 
         # Save predicted sequence
         self.sequence.save(
-            output_path=sequence_path,
-            sequence_name=sequence_name,
+            output_path=file_settings.sequence_path,
+            sequence_name=file_settings.sequence_header,
             alphabet=alphabet,
         )
 

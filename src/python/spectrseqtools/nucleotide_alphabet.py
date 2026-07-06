@@ -1,28 +1,16 @@
 # -*- coding: utf-8 -*-
 """Module for nucleotide alphabet."""
 
-import importlib.resources
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Self
+from typing import List, Self, Set
 
-import numpy as np
 import polars as pl
 
-from spectrseqtools.masses import DECIMAL_PLACES, ELEMENT_MASSES, PRECISION
+from spectrseqtools.error_calculator import ErrorCalculator
+from spectrseqtools.file_settings import ELEMENT_MASSES, load_alphabet
 
-# TODO: Currently, the list of unmodified bases is only defined for RNA;
-#  make it universally applicable
-UNMODIFIED_BASES = ["A", "C", "G", "U"]
-
-_DF_COLS = [
-    "id",
-    "canonical_name",
-    "monoisotopic_mass",
-    "modification_rate",
-    "encoding",
-]
 _ALPHABET_COLS = [
     "integer_mass",
     "nucleoside_mass",
@@ -83,7 +71,6 @@ class NucleotideAlphabet:
     """Class for considered nucleotide alphabet."""
 
     alphabet: List[NucleotideMass]
-    precision: float
 
     def __repr__(self) -> str:
         return self.to_dataframe().__repr__()
@@ -91,7 +78,7 @@ class NucleotideAlphabet:
     @classmethod
     def from_file(
         cls,
-        precision: float = PRECISION,
+        error: ErrorCalculator,
         modification_rate: float = 0.5,
         input_path: Path = None,
     ) -> Self:
@@ -102,21 +89,14 @@ class NucleotideAlphabet:
         ----------
         modification_rate : float
             Maximum percentage of modification in sequence.
-        precision : float
-            Precision used for (nucleotide) masses.
-        input_path : Path
+        error : ErrorCalculator
+            Error calculator.
+        input_path : Path | None
             Path to file with nucleoside information.
 
         """
-        # If input path is None, set default
-        if input_path is None:
-            input_path = (
-                importlib.resources.files(__package__) / "assets" / "masses.tsv"
-            )
-
         # Read nucleoside masses from file
-        masses = pl.read_csv(input_path, separator="\t")
-        assert masses.columns == _DF_COLS
+        masses = load_alphabet(input_path=input_path)
 
         # Set mass for phosphate link between bases
         phosphate_link = (
@@ -135,17 +115,17 @@ class NucleotideAlphabet:
         # from nucleotide) and integer masses for the DP algorithm
         masses = masses.with_columns(
             pl.col("nucleotide_mass").add(-ELEMENT_MASSES["H+"]).alias("singleton_mz"),
-            (pl.col("nucleotide_mass") * 10**DECIMAL_PLACES)
+            (pl.col("nucleotide_mass") / error.precision)
             .round(0)
             .cast(pl.Int64)
             .alias("integer_mass"),
         )
 
-        # Round masses using DECIMAL_PLACES+1 since errors propagate at last digit
+        # Round masses
         masses = masses.with_columns(
-            pl.col("nucleoside_mass").round(DECIMAL_PLACES + 1),
-            pl.col("nucleotide_mass").round(DECIMAL_PLACES + 1),
-            pl.col("singleton_mz").round(DECIMAL_PLACES + 1),
+            pl.col("nucleoside_mass").round(error.decimal_places),
+            pl.col("nucleotide_mass").round(error.decimal_places),
+            pl.col("singleton_mz").round(error.decimal_places),
         )
 
         # Group nucleotides by their mass, select a representative for each
@@ -157,38 +137,12 @@ class NucleotideAlphabet:
             pl.col("singleton_mz").max(),
             pl.col("id").unique().alias("id_list"),
             pl.col("modification_rate").max(),
+            pl.col("is_modification").all(),
         )
 
-        # Add modification flag
-        masses = masses.with_columns(
-            ~pl.col("representative").is_in(UNMODIFIED_BASES).alias("is_modification")
-        )
-
-        return cls.from_dataframe(
-            nucleotide_df=masses,
-            modification_rate=modification_rate,
-            precision=precision,
-        )
-
-    @classmethod
-    def from_dataframe(
-        cls, nucleotide_df: pl.DataFrame, modification_rate: float, precision: float
-    ) -> Self:
-        """
-        Initialize nucleotide alphabet from file.
-
-        Parameters
-        ----------
-        nucleotide_df : polars.DataFrame
-            Polars dataframe containing nucleoside information.
-        modification_rate : float
-            Maximum percentage of modification in sequence.
-        precision : float
-            Precision used for (nucleotide) masses.
-
-        """
+        # Adapt individual modification rates to global one (and update columns)
         new_df = (
-            nucleotide_df.sort("integer_mass")
+            masses.sort("integer_mass")
             .rename({"id_list": "names"})
             .drop("representative")
             .with_columns(
@@ -197,14 +151,26 @@ class NucleotideAlphabet:
                 .otherwise(pl.col("modification_rate"))
             )
         )
+
+        # Return alphabet over all nucleotides that can occur in a sequence
         return cls(
-            alphabet=[NucleotideMass(**row) for row in new_df.rows(named=True)],
-            precision=precision,
+            alphabet=[
+                NucleotideMass(**row)
+                for row in new_df.filter(pl.col("modification_rate") > 0).rows(
+                    named=True
+                )
+            ],
         )
 
     def __len__(self) -> int:
         """Return alphabet size."""
         return len(self.alphabet)
+
+    @property
+    def decimal_places(self) -> int:
+        """Determine number of decimal places from first nucleotide in alphabet."""
+        value = self.alphabet[0]
+        return len(str(value.mass)) - len(str(int(value.nucleotide_mass)))
 
     @property
     def min(self) -> NucleotideMass:
@@ -215,6 +181,13 @@ class NucleotideAlphabet:
     def max(self) -> NucleotideMass:
         """Return heaviest nucleotide in alphabet."""
         return self.alphabet[-1]
+
+    @property
+    def is_default(self) -> bool:
+        """Return whether default alphabet was used."""
+        return self == NucleotideAlphabet.from_file(
+            error=ErrorCalculator.with_metric(decimal_places=self.decimal_places)
+        )
 
     def get(self, idx: int) -> NucleotideMass:
         """Return nucleotide at index in alphabet."""
@@ -233,14 +206,6 @@ class NucleotideAlphabet:
             if rep == nuc.names[0]:
                 return idx
         return -1
-
-    def set_threshold(self, value: float) -> int:
-        """Return precision-adapted inference threshold."""
-        return int(np.ceil(value / self.precision))
-
-    def set_target(self, value: float) -> int:
-        """Return precision-adapted inference target."""
-        return int(round(value / self.precision, 0))
 
     def filter_by_singletons(self, singleton_path: Path) -> None:
         """Filter out nucleotides not found during singleton identification.
@@ -271,14 +236,14 @@ class NucleotideAlphabet:
             if len(set(nuc.names) & singleton_names) == 0 and nuc.is_modification:
                 nuc.modification_rate = 0.0
 
-    def adapt_individual_modification_rates_by_alphabet(self, alphabet: List) -> dict:
+    def reduce(self, new_alphabet: Set[int]) -> dict:
         """
-        Set individual modification rate to 0 if nucleotide not in new alphabet.
+        Reduce alphabet by removing nucleotides not in new alphabet.
 
         Parameters
         ----------
-        alphabet : List
-            List of nucleotide names in new alphabet.
+        new_alphabet : Set[int]
+            Set of nucleotide indices to keep in new alphabet.
 
         Returns
         -------
@@ -287,14 +252,20 @@ class NucleotideAlphabet:
 
         """
         mapping = {idx: idx for idx in range(len(self))}
+
+        # Set modification rate of all superfluous nucleotides to 0 and adapt mapping
         for idx, nucleotide_mass in enumerate(self.alphabet):
-            if nucleotide_mass.is_modification and idx not in alphabet:
+            if nucleotide_mass.is_modification and idx not in new_alphabet:
                 mapping = {
                     key: value - 1 if idx < key else value
                     for (key, value) in (mapping.items())
                     if key != idx
                 }
                 nucleotide_mass.modification_rate = 0.0
+
+        # Remove all modifications that cannot occur in sequence
+        self.alphabet = [mass for mass in self.alphabet if mass.modification_rate > 0.0]
+
         return mapping
 
     def get_seq_weight(self, seq: tuple) -> float:
@@ -317,10 +288,6 @@ class NucleotideAlphabet:
         }
 
         return round(sum(mass_dict[nuc] for nuc in seq), 5)
-
-    def reduce(self) -> None:
-        """Reduce alphabet by removing nucleotides that cannot be in sequence."""
-        self.alphabet = [mass for mass in self.alphabet if mass.modification_rate > 0.0]
 
     def to_dataframe(self) -> pl.DataFrame:
         """Return nucleotide alphabet as Polars dataframe."""

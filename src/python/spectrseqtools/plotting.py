@@ -4,6 +4,7 @@ import altair as alt
 import polars as pl
 
 from spectrseqtools.dataclasses import Sequence
+from spectrseqtools.file_settings import load_alphabet
 from spectrseqtools.prediction.prediction import Prediction
 
 STATUS_COLORS = {
@@ -12,19 +13,15 @@ STATUS_COLORS = {
 }
 
 
-def encode_seq(seq: str) -> List[str]:
-    """Format sequence to use nucleotide encoding."""
-    seq = Sequence.from_str(input_seq=seq)
-    return seq.to_encoding()
-
-
 def plot_prediction(
     prediction: Prediction,
     true_seq: Sequence,
     simulation: pl.DataFrame = None,
+    alphabet_path=None,
 ) -> alt.Chart:
-    true_seq = true_seq.to_encoding()
-    pred_seq = prediction.sequence.to_encoding()
+    alphabet_df = load_alphabet(input_path=alphabet_path)
+    true_seq = true_seq.to_encoding(masses=alphabet_df)
+    pred_seq = prediction.sequence.to_encoding(masses=alphabet_df)
     seq_data = pl.DataFrame(
         {
             "nuc": true_seq + pred_seq,
@@ -32,6 +29,11 @@ def plot_prediction(
             "type": ["truth"] * len(true_seq) + ["predicted"] * len(pred_seq),
         }
     )
+
+    def encode_seq(seq: str) -> List[str]:
+        """Format sequence to use nucleotide encoding."""
+        seq = Sequence.from_str(input_seq=seq)
+        return seq.to_encoding(masses=alphabet_df)
 
     def fmt_mass(cols):
         return pl.Series([f"{row[0]:.2f} ({row[1]:.2f})" for row in zip(*cols)])
@@ -44,7 +46,12 @@ def plot_prediction(
     def create_range(left, right):
         return list(range(left, right))
 
-    fragment_predictions = prediction.fragments.fragments
+    fragment_predictions = prediction.fragments.fragments.with_columns(
+        pl.col("observed_mass").round(2),
+        pl.col("standard_unit_mass").round(2),
+        pl.col("predicted_mass").round(2),
+        pl.col("predicted_diff").round(2),
+    )
 
     fragment_predictions = fragment_predictions.with_columns(
         pl.col("left") - 0.5,
@@ -108,14 +115,20 @@ def plot_prediction(
         ).alias("ppm_info"),
     )
 
-    # new = data.with_columns(pl.col("range").map_elements(lambda x: len(x)).alias("len_range")).with_columns(pl.col("fragment_seq").map_elements(lambda x: len(x)).alias("len_fragment_seq"))
+    # new = data.with_columns(
+    #     pl.col("range").map_elements(lambda x: len(x)).alias("len_range")
+    # ).with_columns(
+    #     pl.col("fragment_seq").map_elements(lambda x: len(x)).alias("len_fragment_seq")
+    # )
     # with pl.Config(tbl_rows=-1):
-    #    print(new)
+    #     print(new)
 
     data_seq = data.filter(pl.col("fragment_seq").list.len() > 0).explode(
         ["fragment_seq", "range"]
     )
-    # Remove the rows with empty sets for fragment_seq! This may happen when the LP_relaxation_threshold is too high and because of the LP relaxation, the pribability is low!
+    # Remove the rows with empty sets for fragment_seq! This may happen when the
+    # LP_relaxation_threshold is too high and because of the LP relaxation,
+    # the probability is low!
 
     max_value = data_seq["right"].max()
     data = data.with_columns(pl.lit(2 * ((max_value + 2) // 2)).alias("max_value"))

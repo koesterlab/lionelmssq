@@ -6,12 +6,9 @@ from pathlib import Path
 
 import yaml
 
+from spectrseqtools.error_calculator import ErrorCalculator
+from spectrseqtools.file_settings import ELEMENT_MASSES
 from spectrseqtools.fragments import RawFragments, StandardUnitFragments
-from spectrseqtools.masses import ELEMENT_MASSES, PRECISION
-
-# Set fragmentation dict mode (full vs only c/y)
-REDUCED_FRAGMENTATION_DICT = True
-
 
 # METHOD: Precompute all weight changes caused by fragmentation and adapt the
 # target masses accordingly while finding compositions explaining it.
@@ -28,8 +25,8 @@ class FragmentClassifier:
     def __init__(
         self,
         file_path: Path,
-        reduced: bool = REDUCED_FRAGMENTATION_DICT,
-        precision: float = PRECISION,
+        error: ErrorCalculator,
+        reduced: bool = True,
     ):
         """
         Initialize classifier by building dictionary over fragmentation options.
@@ -38,12 +35,14 @@ class FragmentClassifier:
         ----------
         file_path : Path
             Path to meta file.
+        error : ErrorCalculator
+            Error Calculator.
         reduced : bool
             Flag whether reduced fragmentation list (i.e. only c/y) is used.
-        precision : float
-            Precision used for (fragmentation) masses.
 
         """
+        self.error = error
+
         element_masses = ELEMENT_MASSES
 
         with open(file_path, "r", encoding="utf-8") as f:
@@ -95,7 +94,7 @@ class FragmentClassifier:
         # Collect all unique fragmentation-related mass combinations in dict
         fragmentation_dict = {}
         for start, end in list(product(start_dict, end_dict)):
-            val = int((start_dict[start] + end_dict[end]) / precision)
+            val = int((start_dict[start] + end_dict[end]) / error.precision)
             if val not in fragmentation_dict:
                 fragmentation_dict[val] = []
             fragmentation_dict[val] += [f"{start}_{end}"]
@@ -109,7 +108,7 @@ class FragmentClassifier:
             mass
             for mass, fragmentation in self.fragmentation_options.items()
             if "START_END" in fragmentation
-        ][0]
+        ][0] * self.error.precision
 
     def classify(self, fragments: RawFragments) -> StandardUnitFragments:
         """
@@ -126,4 +125,6 @@ class FragmentClassifier:
             SU-fragments.
 
         """
-        return fragments.standardize(fragmentation_dict=self.fragmentation_options)
+        return fragments.standardize(
+            fragmentation_dict=self.fragmentation_options, error=self.error
+        )
