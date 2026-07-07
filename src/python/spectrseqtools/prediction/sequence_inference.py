@@ -174,7 +174,7 @@ class LinearProgramInstance:
             for j in range(len(self.fragments))
         ]
 
-    def _define_lp_problem(self):
+    def _define_lp_problem(self, full_problem: bool = True):
         """Return linear-problem instance."""
         problem = LpProblem("fragment_filter", LpMinimize)
 
@@ -233,6 +233,26 @@ class LinearProgramInstance:
                         [self.x[j][k_between] for k_between in range(k1 + 1, k2)]
                     )
 
+        # Ensure that predicted sequence matches intact mass (for full LP)
+        if full_problem:
+            problem += (
+                lpSum(
+                    [
+                        self.y[i][k] * self.alphabet.get(i).nucleotide_mass
+                        for k in range(self.seq.max_len)
+                        for i in range(len(self.alphabet))
+                    ]
+                )
+                >= self.seq.su_mass - self.seq.max_variance
+            )
+            problem += self.seq.su_mass + self.seq.max_variance >= lpSum(
+                [
+                    self.y[i][k] * self.alphabet.get(i).nucleotide_mass
+                    for k in range(self.seq.max_len)
+                    for i in range(len(self.alphabet))
+                ]
+            )
+
         # Constrain predicted_mass_diff_abs to be the absolute value of predicted_mass_diff
         for j in range(len(self.fragments)):
             problem += predicted_mass_diff_abs[j] >= self.predicted_mass_diff[j]
@@ -258,7 +278,7 @@ class LinearProgramInstance:
         # Initialize solver
         solver = getSolver(**solver_params.to_dict(filter_only=True))
 
-        lp_problem = self._define_lp_problem()
+        lp_problem = self._define_lp_problem(full_problem=False)
         _ = lp_problem.solve(solver)
         score = lp_problem.objective.value()
         return np.inf if score is None else score
