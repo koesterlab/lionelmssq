@@ -104,10 +104,17 @@ class PreprocessingOptions(ddargparse.OptionsBase):
             "(used in ms_deisotope package as 'error_tol')."
         },
     )
-    truncate_after: float = field(
+    ms1_truncate_after: float = field(
+        default=0.95,
+        metadata={
+            "help": "Percentage of included isotopic patterns for MS1 scans "
+            "(used in ms_deisotope package)."
+        },
+    )
+    ms2_truncate_after: float = field(
         default=0.9,
         metadata={
-            "help": "Percentage of included isotopic patterns "
+            "help": "Percentage of included isotopic patterns for MS2 scans "
             "(used in ms_deisotope package)."
         },
     )

@@ -41,22 +41,28 @@ class DeconvolutionParameters:
 
     min_precursor_charge: int
     isotopic_shift_factor: int
-    charge_range: Tuple[int, int]
-    minimum_intensity: float
-    scorer: ms_ditp.MSDeconVFitter
+    charge_range: Tuple[int, int] | None
+    minimum_intensity: float | None
     averagine: ms_ditp.Averagine
     max_missed_peaks: int
     scale_method: str
     error_tol: float
-    truncate_after: float
+    ms1_scorer: ms_ditp.PenalizedMSDeconVFitter
+    ms2_scorer: ms_ditp.MSDeconVFitter
+    ms1_truncate_after: float
+    ms2_truncate_after: float
 
-    def to_scan_dependent_dict(self, scan: ms_ditp.data_source.Scan) -> dict:
+    def to_scan_dependent_dict(
+        self, scan: ms_ditp.data_source.Scan, is_ms1: bool = False
+    ) -> dict:
         """Return dictionary of deconvolution parameters for the given scan.
 
         Parameters
         ----------
         scan : ms_deisotope.data_source.Scan
             ThermoFisher scan.
+        is_ms1 : bool, optional
+            Flag whether scan is MS1. Default: False.
 
         Returns
         -------
@@ -67,6 +73,14 @@ class DeconvolutionParameters:
         # Retrieve parameters from class
         output_dict = self.__dict__.copy()
 
+        # Select level-dependent parameters
+        if is_ms1:
+            output_dict["scorer"] = self.ms1_scorer
+            output_dict["truncate_after"] = self.ms1_truncate_after
+        else:
+            output_dict["scorer"] = self.ms2_scorer
+            output_dict["truncate_after"] = self.ms2_truncate_after
+
         # Set scan-dependent parameters
         output_dict["peaklist"] = scan
         output_dict["charge_range"] = self.select_charge_range(scan=scan)
@@ -75,6 +89,10 @@ class DeconvolutionParameters:
         # Pop parameters not used by ms_deisotope
         output_dict.pop("min_precursor_charge")
         output_dict.pop("isotopic_shift_factor")
+        output_dict.pop("ms1_scorer")
+        output_dict.pop("ms2_scorer")
+        output_dict.pop("ms1_truncate_after")
+        output_dict.pop("ms2_truncate_after")
 
         return output_dict
 

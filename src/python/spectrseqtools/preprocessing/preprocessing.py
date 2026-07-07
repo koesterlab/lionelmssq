@@ -52,17 +52,22 @@ class Preprocessor:
             isotopic_shift_factor=options.isotopic_shift_factor,
             charge_range=options.charge_range,
             minimum_intensity=options.min_intensity,
-            scorer=ms_ditp.MSDeconVFitter(
-                minimum_score=options.envelope_min_score,
-                mass_error_tolerance=options.envelope_error_tol,
-            ),
             averagine=ms_ditp.Averagine(
                 base_composition=set_averagine(backbone=options.averagine_backbone)
             ),
             max_missed_peaks=options.max_missed_peaks,
             scale_method=options.scale_method,
             error_tol=options.peak_error_tol,
-            truncate_after=options.truncate_after,
+            ms1_scorer=ms_ditp.PenalizedMSDeconVFitter(
+                minimum_score=options.envelope_min_score,
+                mass_error_tolerance=options.envelope_error_tol,
+            ),
+            ms2_scorer=ms_ditp.MSDeconVFitter(
+                minimum_score=options.envelope_min_score,
+                mass_error_tolerance=options.envelope_error_tol,
+            ),
+            ms1_truncate_after=options.ms1_truncate_after,
+            ms2_truncate_after=options.ms2_truncate_after,
         )
 
     def preprocess(self) -> None:
