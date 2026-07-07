@@ -123,8 +123,11 @@ class DeconvolutionParameters:
             return self.charge_range
 
         # Select charge (or use default if not given)
-        charge = scan.precursor_information.charge
-        if not isinstance(charge, int):
+        if scan.precursor_information is not None and isinstance(
+            scan.precursor_information.charge, int
+        ):
+            charge = scan.precursor_information.charge
+        else:
             charge = DEFAULT_CHARGE_VALUE
 
         # Return charge with consideration to polarity
@@ -194,19 +197,22 @@ class DeisotopedPeakList:
 
     def __add__(self, other) -> Self:
         """Add another peak list."""
-        return DeisotopedPeakList(self.peaks + other.peaks)
+        return self.__class__(self.peaks + other.peaks)
 
     @classmethod
     def default(cls) -> Self:
         """Return empty peak list"""
-        return DeisotopedPeakList(peaks=[])
+        return cls(peaks=[])
 
     @classmethod
     def from_scan(
-        cls, scan: ms_ditp.data_source.Scan, params: DeconvolutionParameters
+        cls,
+        scan: ms_ditp.data_source.Scan,
+        params: DeconvolutionParameters,
+        scan_level: int,
     ) -> Self:
         """
-        Obtain deconvoluted peaks from MS2 scan.
+        Obtain deconvoluted peaks from MS scan of certain level.
 
         Parameters
         ----------
@@ -214,6 +220,8 @@ class DeisotopedPeakList:
             ThermoFisher scan.
         params : DeconvolutionParameters
             Deconvolution parameters (mainly used by ms_deisotope).
+        scan_level : int
+            MS scan level.
 
         Returns
         -------
@@ -226,59 +234,15 @@ class DeisotopedPeakList:
         originally implemented by Moshir Harsh (btemoshir@gmail.com).
 
         """
-        # Return default if precursor charge is too low for consideration
-        if (
-            not isinstance(scan.precursor_information.charge, int)
-            or scan.precursor_information.charge < params.min_precursor_charge
-        ):
-            return DeisotopedPeakList.default()
-
-        # Convert scan to centroid data
-        scan.pick_peaks()
-
-        # Deconvolute/deisotope with ms_deisotope
-        peak_set = ms_ditp.deconvolute_peaks(
-            **params.to_scan_dependent_dict(scan)
-        ).peak_set
-
-        # Return default if scan does not contain any deisotoped peaks
-        if len(peak_set) <= 0:
-            return DeisotopedPeakList.default()
-
-        # Obtain scan time and scan ID
-        scan_time = scan.scan_time
-        scan_id = int(scan.scan_id.split("scan=")[-1])
-
-        # Calculate m/z of precursor and accepted m/z range
-        precursor_mz = scan.precursor_information.mz
-        min_mz = scan.isolation_window.target - (1 * scan.isolation_window.lower)
-        max_mz = scan.isolation_window.target + (1 * scan.isolation_window.upper)
-
-        # Iterate through the deisotoped scan
-        peak_list = [DeisotopedPeak.default()] * len(peak_set)
-        for idx in range(len(peak_set)):
-            mz = peak_set.peaks[idx].mz
-            is_precursor = min_mz <= mz <= max_mz
-            peak_list[idx] = DeisotopedPeak(
-                scan_id=scan_id,
-                scan_time=scan_time,
-                peak_idx=idx,
-                intensity=peak_set.peaks[idx].intensity,
-                neutral_mass=peak_set.peaks[idx].neutral_mass,
-                is_precursor_deisotoped=(
-                    False
-                    if not is_precursor
-                    else precursor_mz
-                    - abs(
-                        params.isotopic_shift_factor
-                        * ms_ditp.averagine.isotopic_shift(peak_set.peaks[idx].charge)
-                    )
-                    <= mz
-                    <= precursor_mz
-                ),
-                mz=mz,
-            )
-        return DeisotopedPeakList(peaks=peak_list)
+        match scan_level:
+            case 1:
+                return MS1PeakList.from_scan(scan=scan, params=params)
+            case 2:
+                return MS2PeakList.from_scan(scan=scan, params=params)
+            case _:
+                raise NotImplementedError(
+                    f"No implementation for MS{scan_level} scans."
+                )
 
     def to_fragments(self, tolerance: float) -> pl.DataFrame:
         """
@@ -338,3 +302,166 @@ class DeisotopedPeakList:
             )
             .sort("neutral_mass")
         )
+
+
+class MS1PeakList(DeisotopedPeakList):
+    """Class for list of deisotoped peaks from MS1 spectra."""
+
+    @classmethod
+    def from_scan(
+        cls,
+        scan: ms_ditp.data_source.Scan,
+        params: DeconvolutionParameters,
+        scan_level: int = 1,
+    ) -> Self:
+        """
+        Obtain deconvoluted peaks from MS1 scan.
+
+        Parameters
+        ----------
+        scan : ms_deisotope.data_source.Scan
+            ThermoFisher scan.
+        params : DeconvolutionParameters
+            Deconvolution parameters (mainly used by ms_deisotope).
+        scan_level : int
+            MS scan level.
+
+        Returns
+        -------
+        MS1PeakList
+            Object containing deconvoluted MS1 peak data.
+
+        Notes
+        -----
+        This function is inspired by https://github.com/koesterlab/oliglow,
+        originally implemented by Moshir Harsh (btemoshir@gmail.com).
+
+        """
+        # TODO: Ask Juan about charge for MS1 scans
+        # # Return default if precursor charge is too low for consideration
+        # if (
+        #     not isinstance(scan.precursor_information.charge, int)
+        #     or scan.precursor_information.charge < params.min_precursor_charge
+        # ):
+        #     return cls.default()
+
+        # Convert scan to centroid data
+        scan.pick_peaks()
+
+        # Deconvolute/deisotope with ms_deisotope
+        peak_set = ms_ditp.deconvolute_peaks(
+            **params.to_scan_dependent_dict(scan=scan, is_ms1=True)
+        ).peak_set
+        # print(scan, peak_set)
+
+        # Return default if scan does not contain any deisotoped peaks
+        if len(peak_set) <= 0:
+            return cls.default()
+
+        # Obtain scan time and scan ID
+        scan_time = scan.scan_time
+        scan_id = int(scan.scan_id.split("scan=")[-1])
+
+        # Iterate through the deisotoped scan
+        peak_list = [DeisotopedPeak.default()] * len(peak_set)
+        for idx in range(len(peak_set)):
+            mz = peak_set.peaks[idx].mz
+            peak_list[idx] = DeisotopedPeak(
+                scan_id=scan_id,
+                scan_time=scan_time,
+                peak_idx=idx,
+                intensity=peak_set.peaks[idx].intensity,
+                neutral_mass=peak_set.peaks[idx].neutral_mass,
+                is_precursor_deisotoped=True,
+                mz=mz,
+            )
+
+        return cls(peaks=peak_list)
+
+
+class MS2PeakList(DeisotopedPeakList):
+    """Class for list of deisotoped peaks from MS2 spectra."""
+
+    @classmethod
+    def from_scan(
+        cls,
+        scan: ms_ditp.data_source.Scan,
+        params: DeconvolutionParameters,
+        scan_level: int = 2,
+    ) -> Self:
+        """
+        Obtain deconvoluted peaks from MS2 scan.
+
+        Parameters
+        ----------
+        scan : ms_deisotope.data_source.Scan
+            ThermoFisher scan.
+        params : DeconvolutionParameters
+            Deconvolution parameters (mainly used by ms_deisotope).
+        scan_level : int
+            MS scan level.
+
+        Returns
+        -------
+        MS2PeakList
+            Object containing deconvoluted MS2 peak data.
+
+        Notes
+        -----
+        This function is inspired by https://github.com/koesterlab/oliglow,
+        originally implemented by Moshir Harsh (btemoshir@gmail.com).
+
+        """
+        # Return default if precursor charge is too low for consideration
+        if (
+            not isinstance(scan.precursor_information.charge, int)
+            or scan.precursor_information.charge < params.min_precursor_charge
+        ):
+            return cls.default()
+
+        # Convert scan to centroid data
+        scan.pick_peaks()
+
+        # Deconvolute/deisotope with ms_deisotope
+        peak_set = ms_ditp.deconvolute_peaks(
+            **params.to_scan_dependent_dict(scan=scan)
+        ).peak_set
+
+        # Return default if scan does not contain any deisotoped peaks
+        if len(peak_set) <= 0:
+            return cls.default()
+
+        # Obtain scan time and scan ID
+        scan_time = scan.scan_time
+        scan_id = int(scan.scan_id.split("scan=")[-1])
+
+        # Calculate m/z of precursor and accepted m/z range
+        precursor_mz = scan.precursor_information.mz
+        min_mz = scan.isolation_window.target - (1 * scan.isolation_window.lower)
+        max_mz = scan.isolation_window.target + (1 * scan.isolation_window.upper)
+
+        # Iterate through the deisotoped scan
+        peak_list = [DeisotopedPeak.default()] * len(peak_set)
+        for idx in range(len(peak_set)):
+            mz = peak_set.peaks[idx].mz
+            is_precursor = min_mz <= mz <= max_mz
+            peak_list[idx] = DeisotopedPeak(
+                scan_id=scan_id,
+                scan_time=scan_time,
+                peak_idx=idx,
+                intensity=peak_set.peaks[idx].intensity,
+                neutral_mass=peak_set.peaks[idx].neutral_mass,
+                is_precursor_deisotoped=(
+                    False
+                    if not is_precursor
+                    else precursor_mz
+                    - abs(
+                        params.isotopic_shift_factor
+                        * ms_ditp.averagine.isotopic_shift(peak_set.peaks[idx].charge)
+                    )
+                    <= mz
+                    <= precursor_mz
+                ),
+                mz=mz,
+            )
+        return cls(peaks=peak_list)

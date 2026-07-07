@@ -82,7 +82,7 @@ class Preprocessor:
         print("RAW file found. Preprocessing raw data...")
 
         # Deconvolute raw data from file
-        fragments = self.deconvolute()
+        fragments = self.deconvolute(scan_level=2)
 
         # Update meta parameters (if needed)
         meta_params = self.meta_params
@@ -103,7 +103,7 @@ class Preprocessor:
 
         print("Preprocessing completed!\n")
 
-    def deconvolute(self) -> pl.DataFrame:
+    def deconvolute(self, scan_level: int) -> pl.DataFrame:
         """
         Deconvolute/deisotope peaks in MS2 scans from ThermoFisher RAW file.
 
@@ -119,17 +119,21 @@ class Preprocessor:
         )
 
         peak_list = DeisotopedPeakList.default()
-        for _ in tqdm.tqdm(range(len(raw_file_read) - 1), desc="Deisotoping MS2 scans"):
+        for _ in tqdm.tqdm(
+            range(len(raw_file_read) - 1), desc=f"Deisotoping MS{scan_level} scans"
+        ):
             # Select next scan
             scan = next(raw_file_read)
 
-            # Skip scan if it is no MS2 scan
-            if scan.ms_level != 2:
+            # Skip scan if it wrong-level scan
+            if scan.ms_level != scan_level:
                 continue
 
             # Deconvolute scan to get list of deisotoped peaks
             peak_list += DeisotopedPeakList.from_scan(
-                scan=scan, params=self.deconvolution_params
+                scan=scan,
+                params=self.deconvolution_params,
+                scan_level=scan_level,
             )
 
         return peak_list.to_fragments(tolerance=self.error.tolerance)
@@ -193,7 +197,6 @@ class Preprocessor:
         originally implemented by Moshir Harsh (btemoshir@gmail.com).
 
         """
-
         return (
             fragments.filter(
                 (pl.col("is_precursor_deisotoped"))
