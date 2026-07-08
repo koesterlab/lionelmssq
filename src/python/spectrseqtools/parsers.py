@@ -31,9 +31,15 @@ class PreprocessingOptions(ddargparse.OptionsBase):
             "help": "Output directory (default: input directory).",
         }
     )
-    charge_range: Tuple[int, int] | None = field(
+    ms1_charge_range: Tuple[int, int] | None = field(
         metadata={
-            "help": "Charge range considered for deconvolution "
+            "help": "Charge range considered for MS1 deconvolution "
+            "(used in ms_deisotope package)."
+        }
+    )
+    ms2_charge_range: Tuple[int, int] | None = field(
+        metadata={
+            "help": "Charge range considered for MS2 deconvolution "
             "(used in ms_deisotope package)."
         }
     )
