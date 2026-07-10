@@ -85,16 +85,13 @@ class Preprocessor:
         # Deconvolute raw data from file
         ms1_fragments, ms2_fragments = self.deconvolute()
 
-        #TODO: This just checks if the intact mass extracted from MS1 and MS2 
-        # are within 10ppm of each other. 
+        # TODO: This just checks if the intact mass extracted from MS1 and MS2
+        # are within 10ppm of each other.
         # We can remove this once we are sure that the MS1 mass selection is consistent
         assert (
-            (
-                self.select_intact_mass(ms1_fragments) 
-                - self.select_intact_mass(ms2_fragments)
-            )
-            / self.select_intact_mass(ms1_fragments) < self.error.tolerance
-        )
+            self.select_intact_mass(ms1_fragments)
+            - self.select_intact_mass(ms2_fragments)
+        ) / self.select_intact_mass(ms1_fragments) < self.error.tolerance
 
         # Update meta parameters (if needed)
         meta_params = self.meta_params
@@ -131,40 +128,34 @@ class Preprocessor:
         )
 
         # Precount number of scan bunches and reset raw_file_read after
-        # TODO: Discuss if this is necessary because its passing through the whole 
-        # .RAW file once to pre-count the number of MS1 scans (and hence the number of scan bunches) 
+        # TODO: Discuss if this is necessary because its passing through the whole
+        # .RAW file once to pre-count the number of MS1 scans (and hence the number of scan bunches)
         # just to make a progress bar work. It is fast though.
-        n_scan_bunches = sum(
-            scan.ms_level == 1
-            for scan in raw_file_read
-        )
+        n_scan_bunches = sum(scan.ms_level == 1 for scan in raw_file_read)
         raw_file_read.reset()
-        raw_file_read.make_iterator(grouped = True)
+        raw_file_read.make_iterator(grouped=True)
 
         scan_processor = ms_ditp.ScanProcessor(raw_file_read)
 
         ms1_peak_list = DeisotopedPeakList.default()
         ms2_peak_list = DeisotopedPeakList.default()
-        
+
         for scan_bunch in tqdm.tqdm(
-            raw_file_read, desc="Deisotoping scan bunches",
-            total = n_scan_bunches
+            raw_file_read, desc="Deisotoping scan bunches", total=n_scan_bunches
         ):
-            
             # Obtain MS1, MS2 and priority peaks
-            # priority_list is a list of ms_deisotope 'PriorityTarget' objects, 
-            # which is similar to a 'Peak' object 
+            # priority_list is a list of ms_deisotope 'PriorityTarget' objects,
+            # which is similar to a 'Peak' object
             ms1_scan, priority_list, ms2_scans = scan_processor.process_scan_group(
-                scan_bunch.precursor,
-                scan_bunch.products
+                scan_bunch.precursor, scan_bunch.products
             )
-            
+
             # Deconvolute MS1 scan to get list of deisotoped peaks
             ms1_peak_list += DeisotopedPeakList.from_scan(
                 scan=ms1_scan,
                 priority_list=priority_list,
                 params=self.deconvolution_params,
-                scan_level=1
+                scan_level=1,
             )
 
             # Deconvolute MS2 scan to get list of deisotoped peaks
@@ -176,6 +167,7 @@ class Preprocessor:
                     scan_level=2,
                 )
         import numpy as np
+
         COL_TYPES_DEISOTOPED = {
             "scan_id": pl.Int32,
             "scan_time": pl.Float64,
@@ -198,7 +190,7 @@ class Preprocessor:
 
         ms1_fragments = ms1_peak_list.to_fragments(tolerance=self.error.tolerance)
         ms2_fragments = ms2_peak_list.to_fragments(tolerance=self.error.tolerance)
-        
+
         return ms1_fragments, ms2_fragments
 
     def identify_singletons(self) -> pl.DataFrame:
