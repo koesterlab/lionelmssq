@@ -145,7 +145,7 @@ class Sequence:
             head, seq = f.readlines()[:2]
             assert head.startswith(">")
 
-        cls.from_str(input_seq=seq)
+        return cls.from_str(input_seq=seq)
 
     @classmethod
     def from_str(cls, input_seq: str) -> Self:
