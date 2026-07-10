@@ -460,7 +460,9 @@ class MS1PeakList(DeisotopedPeakList):
         max_charge : int
             Maximum accepted charge value.
         """
-        max_charge = max(abs(peak.charge) for peak in priority_list)
+        max_charge = max(
+            DEFAULT_CHARGE_VALUE, max(abs(int(peak.charge)) for peak in priority_list)
+        )
 
         # Return charge range with consideration to polarity
         if polarity < 0:
