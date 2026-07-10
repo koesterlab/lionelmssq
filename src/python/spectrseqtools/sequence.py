@@ -48,7 +48,7 @@ class SkeletonSequence:
         total_mass = 0
         for nucs in self.sequence:
             total_mass += min(
-                (alphabet.get(nuc).mass * alphabet.precision for nuc in nucs), default=0
+                (alphabet.get(nuc).nucleotide_mass for nuc in nucs), default=0
             )
         return total_mass
 
@@ -57,7 +57,7 @@ class SkeletonSequence:
         total_mass = 0
         for nucs in self.sequence:
             total_mass += max(
-                (alphabet.get(nuc).mass * alphabet.precision for nuc in nucs), default=0
+                (alphabet.get(nuc).nucleotide_mass for nuc in nucs), default=0
             )
         return total_mass
 

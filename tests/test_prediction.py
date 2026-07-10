@@ -7,6 +7,7 @@ import yaml
 from clr_loader import get_mono
 from spectrseqtools.dataclasses import Sequence
 from spectrseqtools.enums import SolverType
+from spectrseqtools.error_calculator import ErrorCalculator
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 from spectrseqtools.parsers import PredictionOptions, PreprocessingOptions
 from spectrseqtools.plotting import plot_prediction
@@ -46,7 +47,6 @@ def test_testcase(testcase):
                 alphabet=None,
                 charge_range=None,
                 min_intensity=None,
-                cutoff_percentile=75,
             )
         ).preprocess()
     else:
@@ -54,15 +54,17 @@ def test_testcase(testcase):
         with open(base_path / "fragments.preprocessed.meta.yaml", "w") as f:
             yaml.safe_dump(meta, f)
 
+    alphabet_path = base_path / "fragments.singletons.tsv"
     prediction = Predictor(
         PredictionOptions(
             fragments=base_path / "fragments.tsv",
             meta=base_path / "fragments.preprocessed.meta.yaml",
-            singletons=base_path / "fragments.singletons.tsv",
+            alphabet=alphabet_path,
             sequence_prediction=base_path / "fragments.prediction.fasta",
             fragment_predictions=base_path / "fragments.prediction.tsv",
             sequence_name=f"{testcase}",
             output_dir=None,
+            intensity_cutoff_percentile=75,
             # solver=SolverType.CBC,
             # solver=SolverType.GUROBI,
             solver=SolverType.HIGHS,
@@ -75,10 +77,16 @@ def test_testcase(testcase):
     print("True sequence =\t\t", true_seq)
     print(
         "Full sequence =\t\t",
-        prediction.sequence.fmt(nucleotide_alphabet=NucleotideAlphabet.from_file()),
+        prediction.sequence.fmt(
+            nucleotide_alphabet=NucleotideAlphabet.from_file(
+                error=ErrorCalculator.with_metric()
+            )
+        ),
     )
 
-    plots = plot_prediction(prediction=prediction, true_seq=true_seq)
+    plots = plot_prediction(
+        prediction=prediction, true_seq=true_seq, alphabet_path=alphabet_path
+    )
 
     # plots[0].save(base_path / "fragments.plot.start.html")
     # plots[1].save(base_path / "fragments.plot.end.html")
@@ -92,13 +100,3 @@ def test_testcase(testcase):
 
     # Assert whether the sequences match
     assert prediction.sequence == true_seq
-
-    # Assert whether observed and predicted mass match for all fragments
-    # Note this will only be true for simulated data; experimental data does
-    # not have any guarantee accuracy
-    # if simulation:
-    #     for idx in range(len(prediction.fragments)):
-    #         assert abs(
-    #             prediction.fragments.item(idx, "standard_unit_mass")
-    #             - prediction.fragments.item(idx, "predicted_mass")
-    #         ) <= TOLERANCE * prediction.fragments.item(idx, "observed_mass")

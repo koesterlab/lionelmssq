@@ -170,9 +170,7 @@ class LinearProgramInstance:
             fragment_masses[j]
             - lpSum(
                 [
-                    self.z[i][j][k]
-                    * self.alphabet.get(i).mass
-                    * self.alphabet.precision
+                    self.z[i][j][k] * self.alphabet.get(i).nucleotide_mass
                     for i in range(len(self.alphabet))
                     for k in range(self.seq.max_len)
                 ]
@@ -180,7 +178,7 @@ class LinearProgramInstance:
             for j in range(len(self.fragments))
         ]
 
-    def _define_lp_problem(self):
+    def _define_lp_problem(self, full_problem: bool = True):
         """Return linear-problem instance."""
         problem = LpProblem("fragment_filter", LpMinimize)
 
@@ -239,6 +237,26 @@ class LinearProgramInstance:
                         [self.x[j][k_between] for k_between in range(k1 + 1, k2)]
                     )
 
+        # Ensure that predicted sequence matches intact mass (for full LP)
+        if full_problem:
+            problem += (
+                lpSum(
+                    [
+                        self.y[i][k] * self.alphabet.get(i).nucleotide_mass
+                        for k in range(self.seq.max_len)
+                        for i in range(len(self.alphabet))
+                    ]
+                )
+                >= self.seq.su_mass - self.seq.max_variance
+            )
+            problem += self.seq.su_mass + self.seq.max_variance >= lpSum(
+                [
+                    self.y[i][k] * self.alphabet.get(i).nucleotide_mass
+                    for k in range(self.seq.max_len)
+                    for i in range(len(self.alphabet))
+                ]
+            )
+
         # Constrain predicted_mass_diff_abs to be the absolute value of predicted_mass_diff
         for j in range(len(self.fragments)):
             problem += predicted_mass_diff_abs[j] >= self.predicted_mass_diff[j]
@@ -264,7 +282,7 @@ class LinearProgramInstance:
         # Initialize solver
         solver = getSolver(**solver_params.to_dict(filter_only=True))
 
-        lp_problem = self._define_lp_problem()
+        lp_problem = self._define_lp_problem(full_problem=False)
         _ = lp_problem.solve(solver)
         score = lp_problem.objective.value()
         return np.inf if score is None else score
@@ -290,6 +308,7 @@ class LinearProgramInstance:
         # TODO: Make returned value resemble prediction accuracy
         lp_problem = self._define_lp_problem()
         _ = lp_problem.solve(solver)
+        print(f"LP status after solving: {lp_problem.status}\n")
 
         # Interpret solution
         try:
@@ -336,8 +355,9 @@ class LinearProgramInstance:
         predicted_fragment_mass = [
             sum(
                 (
-                    self.alphabet.get(self._get_fragment_nucleotide(j, k)).mass
-                    * self.alphabet.precision
+                    self.alphabet.get(
+                        self._get_fragment_nucleotide(j, k)
+                    ).nucleotide_mass
                     for k in range(self.seq.max_len)
                     if self._get_fragment_nucleotide(j, k) is not None
                 )
@@ -353,9 +373,16 @@ class LinearProgramInstance:
                     "left": self._get_leftmost_position(j),
                     "right": self._get_rightmost_position(j),
                     "observed_mass": observed_masses[j],
-                    "standard_unit_mass": fragment_masses[j],
-                    "predicted_mass": predicted_fragment_mass[j],
-                    "predicted_diff": self.predicted_mass_diff[j].value(),
+                    "standard_unit_mass": round(
+                        fragment_masses[j], self.alphabet.decimal_places
+                    ),
+                    "predicted_mass": round(
+                        predicted_fragment_mass[j], self.alphabet.decimal_places
+                    ),
+                    "predicted_diff": round(
+                        self.predicted_mass_diff[j].value(),
+                        self.alphabet.decimal_places,
+                    ),
                     "predicted_seq": fragment_seq[j],
                 }
                 for j in list(range(len(fragment_masses)))
