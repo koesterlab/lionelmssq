@@ -24,30 +24,35 @@ class PreprocessingOptions(ddargparse.OptionsBase):
     )
     meta: Path = field(metadata={"help": "Path to YAML with meta information."})
     alphabet: Path | None = field(
-        metadata={"help": "Path to file containing nucleotide alphabet."}
+        default=None,
+        metadata={"help": "Path to file containing nucleotide alphabet."},
     )
     output_dir: Path | None = field(
+        default=None,
         metadata={
             "help": "Output directory (default: input directory).",
-        }
+        },
     )
     ms1_charge_range: Tuple[int, int] | None = field(
+        default=None,
         metadata={
             "help": "Charge range considered for MS1 deconvolution "
             "(used in ms_deisotope package)."
-        }
+        },
     )
     ms2_charge_range: Tuple[int, int] | None = field(
+        default=None,
         metadata={
             "help": "Charge range considered for MS2 deconvolution "
             "(used in ms_deisotope package)."
-        }
+        },
     )
     min_intensity: float | None = field(
+        default=None,
         metadata={
             "help": "Minimum intensity required for peak consideration "
             "(used in ms_deisotope package as 'minimum_intensity')."
-        }
+        },
     )
     tolerance: float = field(
         default=10e-6,
@@ -134,12 +139,6 @@ class PredictionOptions(ddargparse.OptionsBase):
         metadata={"help": "Path to TSV table of observed fragments"},
     )
     meta: Path = field(metadata={"help": "Path to YAML with meta information."})
-    alphabet: Path | None = field(
-        metadata={
-            "help": "Path to file containing nucleotide alphabet. If preprocessing was "
-            "used, this should correspond to the detected singletons."
-        }
-    )
     fragment_predictions: Path = field(
         metadata={
             "help": "Path to TSV table that shall contain the per fragment predictions."
@@ -151,10 +150,18 @@ class PredictionOptions(ddargparse.OptionsBase):
         }
     )
     sequence_name: str = field(metadata={"help": "Header in FASTA output file."})
+    alphabet: Path | None = field(
+        default=None,
+        metadata={
+            "help": "Path to file containing nucleotide alphabet. If preprocessing was "
+            "used, this should correspond to the detected singletons."
+        },
+    )
     output_dir: Path | None = field(
+        default=None,
         metadata={
             "help": "Output directory (default: input directory).",
-        }
+        },
     )
     tolerance: float = field(
         default=10e-6,
