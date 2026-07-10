@@ -12,7 +12,7 @@ from clr_loader import get_mono
 rt = get_mono()
 
 # METHOD: If no precursor charge is given, we set it to 1 because it is
-# unlikely not yield any valid masses
+# unlikely yield any valid masses
 DEFAULT_CHARGE_VALUE = 1
 COL_TYPES_DEISOTOPED = {
     "scan_id": pl.Int32,
@@ -45,8 +45,6 @@ class DeconvolutionParameters:
 
     min_precursor_charge: int
     isotopic_shift_factor: int
-    ms1_charge_range: Tuple[int, int] | None
-    ms2_charge_range: Tuple[int, int] | None
     minimum_intensity: float | None
     averagine: ms_ditp.Averagine
     max_missed_peaks: int
@@ -54,6 +52,8 @@ class DeconvolutionParameters:
     error_tol: float
     ms1_scorer: ms_ditp.PenalizedMSDeconVFitter
     ms2_scorer: ms_ditp.MSDeconVFitter
+    ms1_charge_range: Tuple[int, int] | None
+    ms2_charge_range: Tuple[int, int] | None
     ms1_truncate_after: float
     ms2_truncate_after: float
 

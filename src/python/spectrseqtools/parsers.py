@@ -22,7 +22,9 @@ class PreprocessingOptions(ddargparse.OptionsBase):
     input: Path = field(
         metadata={"help": "Path to input file in RAW format"},
     )
-    meta: Path = field(metadata={"help": "Path to YAML with meta information."})
+    meta: Path = field(
+        metadata={"help": "Path to YAML with meta information."},
+    )
     alphabet: Path | None = field(
         default=None,
         metadata={"help": "Path to file containing nucleotide alphabet."},
@@ -31,20 +33,6 @@ class PreprocessingOptions(ddargparse.OptionsBase):
         default=None,
         metadata={
             "help": "Output directory (default: input directory).",
-        },
-    )
-    ms1_charge_range: Tuple[int, int] | None = field(
-        default=None,
-        metadata={
-            "help": "Charge range considered for MS1 deconvolution "
-            "(used in ms_deisotope package)."
-        },
-    )
-    ms2_charge_range: Tuple[int, int] | None = field(
-        default=None,
-        metadata={
-            "help": "Charge range considered for MS2 deconvolution "
-            "(used in ms_deisotope package)."
         },
     )
     min_intensity: float | None = field(
@@ -115,6 +103,20 @@ class PreprocessingOptions(ddargparse.OptionsBase):
             "(used in ms_deisotope package as 'error_tol')."
         },
     )
+    ms1_charge_range: Tuple[int, int] | None = field(
+        default=None,
+        metadata={
+            "help": "Charge range considered for MS1 deconvolution "
+            "(used in ms_deisotope package)."
+        },
+    )
+    ms2_charge_range: Tuple[int, int] | None = field(
+        default=None,
+        metadata={
+            "help": "Charge range considered for MS2 deconvolution "
+            "(used in ms_deisotope package)."
+        },
+    )
     ms1_truncate_after: float = field(
         default=0.95,
         metadata={
@@ -138,18 +140,22 @@ class PredictionOptions(ddargparse.OptionsBase):
     fragments: Path = field(
         metadata={"help": "Path to TSV table of observed fragments"},
     )
-    meta: Path = field(metadata={"help": "Path to YAML with meta information."})
+    meta: Path = field(
+        metadata={"help": "Path to YAML with meta information."},
+    )
     fragment_predictions: Path = field(
         metadata={
             "help": "Path to TSV table that shall contain the per fragment predictions."
-        }
+        },
     )
     sequence_prediction: Path = field(
         metadata={
             "help": "Path to FASTA file that shall contain the predicted sequence."
-        }
+        },
     )
-    sequence_name: str = field(metadata={"help": "Header in FASTA output file."})
+    sequence_name: str = field(
+        metadata={"help": "Header in FASTA output file."},
+    )
     alphabet: Path | None = field(
         default=None,
         metadata={
@@ -178,7 +184,8 @@ class PredictionOptions(ddargparse.OptionsBase):
         },
     )
     max_intact_mass_variance: int = field(
-        default=1, metadata={"help": "Maximum variance for intact mass."}
+        default=1,
+        metadata={"help": "Maximum variance for intact mass."},
     )
     reduce_fragmentation_dict: bool = field(
         default=True,
@@ -205,17 +212,20 @@ class PredictionOptions(ddargparse.OptionsBase):
         metadata={"help": "Solver to use for optimization problem."},
     )
     lp_timeout_short: int = field(
-        default=5, metadata={"help": "Time-out for shorter solving of LP instances."}
+        default=5,
+        metadata={"help": "Time-out for shorter solving of LP instances."},
     )
     lp_timeout_long: int = field(
-        default=60, metadata={"help": "Time-out for longer solving of LP instances."}
+        default=60,
+        metadata={"help": "Time-out for longer solving of LP instances."},
     )
     threads: int = field(
         default=1,
         metadata={"help": "Number of threads to use for the optimization problem."},
     )
     intensity_cutoff_percentile: int = field(
-        default=75, metadata={"help": "Intensity percentile used as cutoff."}
+        default=75,
+        metadata={"help": "Intensity percentile used as cutoff."},
     )
     composition_filter_weight_factor: float = field(
         default=1.0,

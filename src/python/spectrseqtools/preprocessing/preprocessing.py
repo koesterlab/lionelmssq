@@ -50,8 +50,6 @@ class Preprocessor:
         self.deconvolution_params = DeconvolutionParameters(
             min_precursor_charge=options.min_precursor_charge,
             isotopic_shift_factor=options.isotopic_shift_factor,
-            ms1_charge_range=options.ms1_charge_range,
-            ms2_charge_range=options.ms2_charge_range,
             minimum_intensity=options.min_intensity,
             averagine=ms_ditp.Averagine(
                 base_composition=set_averagine(backbone=options.averagine_backbone)
@@ -67,6 +65,8 @@ class Preprocessor:
                 minimum_score=options.envelope_min_score,
                 mass_error_tolerance=options.envelope_error_tol,
             ),
+            ms1_charge_range=options.ms1_charge_range,
+            ms2_charge_range=options.ms2_charge_range,
             ms1_truncate_after=options.ms1_truncate_after,
             ms2_truncate_after=options.ms2_truncate_after,
         )
