@@ -394,6 +394,8 @@ class MS1PeakList(DeisotopedPeakList):
         # Iterate through the deisotoped scan
         peak_list = [DeisotopedPeak.default()] * len(peak_set)
         for idx in range(len(peak_set)):
+            if peak_set[idx] is None:
+                continue
             mz = peak_set[idx].mz
             peak_list[idx] = DeisotopedPeak(
                 scan_id=scan_id,
@@ -405,7 +407,7 @@ class MS1PeakList(DeisotopedPeakList):
                 mz=mz,
             )
 
-        return cls(peaks=peak_list)
+        return cls(peaks=[peak for peak in peak_list if peak if peak.scan_id > -1])
 
     def filter_priority_peak_charges(
         priority_list: list, min_precursor_charge: int
