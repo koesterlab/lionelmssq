@@ -25,18 +25,15 @@ COL_TYPES_DEISOTOPED = {
 }
 
 # METHOD: To deconvolute/deisotope (which we use interchangeable because both
-# happen at the same time) an MS1 scan, we retrieve the peaks that were picked for MS2
-# on the MS1 scan. The MS1 fragment mass with the highest intensity is used as the
-# intact mass.
-
-# METHOD: To deconvolute/deisotope (which we use interchangeable because both
-# happen at the same time) a MS2 scan, we determine all its peaks with
+# happen at the same time) an MS2 scan, we determine all its peaks with
 # the ms_deisotope package. We then identify the precursor peak (if it exists)
 # and perform a check whether it has been deisotoped (since this is the only
 # one that we can reliably obtain as there exists a reference m/z).
 # We call a precursor correctly deisotoped if the m/z of the peak is:
 # (1) less than the m/z of the precursor, and
 # (2) greater than its isotopic shift times a given factor (here: 10).
+# For an MS1 scan, we retrieve the peaks that were picked for MS2
+# on the MS1 scan.
 
 
 @dataclass
@@ -58,7 +55,10 @@ class DeconvolutionParameters:
     ms2_truncate_after: float
 
     def to_scan_dependent_dict(
-        self, scan: ms_ditp.data_source.Scan, is_ms1: bool = False
+        self,
+        scan: ms_ditp.data_source.Scan,
+        priority_list: List[ms_ditp.processor.PriorityTarget] | None,
+        is_ms1: bool = False,
     ) -> dict:
         """Return dictionary of deconvolution parameters for the given scan.
 
@@ -66,6 +66,8 @@ class DeconvolutionParameters:
         ----------
         scan : ms_deisotope.data_source.Scan
             ThermoFisher scan.
+        priority_list : List[ms_ditp.processor.PriorityTarget] | None
+            List of priority targets for deconvolution.
         is_ms1 : bool, optional
             Flag whether scan is MS1. Default: False.
 
@@ -85,14 +87,17 @@ class DeconvolutionParameters:
             # TODO: MS1 charge ranges are computed from the priority list, not the scan
             # But this class only takes in the scan object. For now, ms1_charge_range
             # is generated in the MS1PeakList.from_scan function.
-            output_dict["charge_range"] = self.ms1_charge_range
+            output_dict["charge_range"] = self.select_ms1_charge_range(
+                scan=scan, priority_list=priority_list
+            )
         else:
             output_dict["scorer"] = self.ms2_scorer
             output_dict["truncate_after"] = self.ms2_truncate_after
-            output_dict["charge_range"] = self.select_charge_range(scan=scan)
+            output_dict["charge_range"] = self.select_ms2_charge_range(scan=scan)
 
         # Set scan-dependent parameters
         output_dict["peaklist"] = scan
+        output_dict["priority_list"] = priority_list
         output_dict["minimum_intensity"] = self.select_min_intensity(scan=scan)
 
         # Pop parameters not used by ms_deisotope
@@ -100,16 +105,63 @@ class DeconvolutionParameters:
         output_dict.pop("isotopic_shift_factor")
         output_dict.pop("ms1_scorer")
         output_dict.pop("ms2_scorer")
-        output_dict.pop("ms1_truncate_after")
-        output_dict.pop("ms2_truncate_after")
         output_dict.pop("ms1_charge_range")
         output_dict.pop("ms2_charge_range")
+        output_dict.pop("ms1_truncate_after")
+        output_dict.pop("ms2_truncate_after")
 
         return output_dict
 
-    def select_charge_range(self, scan: ms_ditp.data_source.Scan) -> Tuple[int, int]:
+    def select_ms1_charge_range(
+        self,
+        scan: ms_ditp.data_source.Scan,
+        priority_list: List[ms_ditp.processor.PriorityTarget] | None,
+    ) -> Tuple[int, int]:
         """
-        Select range for accepted charge values.
+        Select range for accepted charge values for MS1 scans.
+        Use the maximum charge from the priority list as a liberal approximate
+        of the charge state of the whole scan.
+
+        Parameters
+        ----------
+        scan : ms_deisotope.data_source.Scan
+            ThermoFisher scan.
+        priority_list : List[ms_ditp.processor.PriorityTarget] | None
+            List of priority targets for deconvolution.
+
+        Returns
+        -------
+        min_charge : int
+            Minimum accepted charge value.
+        max_charge : int
+            Maximum accepted charge value.
+
+        """
+        # Return user-defined charge range (if given)
+        if self.ms1_charge_range is not None:
+            return self.ms1_charge_range
+
+        # Select charge (or use default if not given)
+        charge = (
+            max(
+                DEFAULT_CHARGE_VALUE,
+                max(abs(int(peak.charge)) for peak in priority_list),
+            )
+            if priority_list is not None
+            else DEFAULT_CHARGE_VALUE
+        )
+
+        # Return charge range with consideration to polarity
+        if scan.polarity < 0:
+            return -charge, -1
+        else:
+            return 1, charge
+
+    def select_ms2_charge_range(
+        self, scan: ms_ditp.data_source.Scan
+    ) -> Tuple[int, int]:
+        """
+        Select range for accepted charge values fro MS2 scans.
 
         Parameters
         ----------
@@ -371,17 +423,12 @@ class MS1PeakList(DeisotopedPeakList):
         # Convert scan to centroid data
         scan.pick_peaks()
 
-        # Replace the charge_range from the input options with the one approximated from the priority list
-        param_dict = params.to_scan_dependent_dict(scan=scan, is_ms1=True)
-        if param_dict["charge_range"] is None:
-            param_dict["charge_range"] = cls.obtain_charge_range_from_priority_peaks(
-                filtered_priority_list, scan.polarity
-            )
+        param_dict = params.to_scan_dependent_dict(
+            scan=scan, priority_list=filtered_priority_list, is_ms1=True
+        )
 
         # Deconvolute/deisotope with ms_deisotope
-        peak_set = ms_ditp.deconvolute_peaks(
-            priority_list=filtered_priority_list, **param_dict
-        ).priorities
+        peak_set = ms_ditp.deconvolute_peaks(**param_dict).priorities
 
         # Return default if scan does not contain any deisotoped peaks
         if len(peak_set) <= 0:
@@ -410,21 +457,22 @@ class MS1PeakList(DeisotopedPeakList):
         return cls(peaks=[peak for peak in peak_list if peak if peak.scan_id > -1])
 
     def filter_priority_peak_charges(
-        priority_list: list, min_precursor_charge: int
-    ) -> list[ms_ditp.processor.PriorityTarget]:
+        priority_list: List[ms_ditp.processor.PriorityTarget],
+        min_precursor_charge: int
+    ) -> List[ms_ditp.processor.PriorityTarget]:
         """
         Remove priority peaks if charge state is below a minimum.
 
         Parameters
         ----------
-        priority_list : list[ms_ditp.processor.PriorityTarget]
+        priority_list : List[ms_ditp.processor.PriorityTarget]
             List of ms_deisotope 'PriorityTarget' peak objects.
         min_precursor_charge : int
             Minimum charge state considered.
 
         Returns
         -------
-        filtered_priority_list : list
+        filtered_priority_list : List[ms_ditp.processor.PriorityTarget]
             List of ms_deisotope 'PriorityTarget' peak objects
             with peak charges lower than a minimum charge removed.
 
@@ -438,37 +486,6 @@ class MS1PeakList(DeisotopedPeakList):
                 filtered_priority_list.append(priority_peak)
 
         return filtered_priority_list
-
-    def obtain_charge_range_from_priority_peaks(
-        priority_list: list[ms_ditp.processor.PriorityTarget], polarity: int
-    ) -> Tuple[int, int]:
-        """
-        Use the maximum charge from the priority list as a liberal approximate
-        of the charge state of the whole scan.
-
-        Parameters
-        ----------
-        priority_list : list[ms_ditp.processor.PriorityTarget]
-            List of ms_deisotope 'PriorityTarget' peak objects.
-        polarity : int
-            Polarity of the MS1 scan.
-
-        Returns
-        -------
-        min_charge : int
-            Minimum accepted charge value.
-        max_charge : int
-            Maximum accepted charge value.
-        """
-        max_charge = max(
-            DEFAULT_CHARGE_VALUE, max(abs(int(peak.charge)) for peak in priority_list)
-        )
-
-        # Return charge range with consideration to polarity
-        if polarity < 0:
-            return -max_charge, -1
-        else:
-            return 1, max_charge
 
 
 class MS2PeakList(DeisotopedPeakList):
@@ -516,7 +533,7 @@ class MS2PeakList(DeisotopedPeakList):
 
         # Deconvolute/deisotope with ms_deisotope
         peak_set = ms_ditp.deconvolute_peaks(
-            **params.to_scan_dependent_dict(scan=scan)
+            **params.to_scan_dependent_dict(scan=scan, priority_list=None)
         ).peak_set
 
         # Return default if scan does not contain any deisotoped peaks
