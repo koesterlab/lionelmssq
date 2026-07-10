@@ -166,28 +166,6 @@ class Preprocessor:
                     params=self.deconvolution_params,
                     scan_level=2,
                 )
-        import numpy as np
-
-        COL_TYPES_DEISOTOPED = {
-            "scan_id": pl.Int32,
-            "scan_time": pl.Float64,
-            "peak_idx": pl.Int64,
-            "intensity": pl.Float64,
-            "neutral_mass": pl.Float64,
-            "is_precursor_deisotoped": pl.Boolean,
-            "mz": pl.Float64,
-        }
-        df_ms1_peak_list = pl.DataFrame(
-            data=np.array(
-                [
-                    [peak.__dict__[key] for key in COL_TYPES_DEISOTOPED]
-                    for peak in ms1_peak_list.peaks
-                ]
-            ),
-            schema=COL_TYPES_DEISOTOPED,
-        )
-        df_ms1_peak_list.write_csv("ms1_peak_list.csv")
-
         ms1_fragments = ms1_peak_list.to_fragments(tolerance=self.error.tolerance)
         ms2_fragments = ms2_peak_list.to_fragments(tolerance=self.error.tolerance)
 
