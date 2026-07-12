@@ -84,7 +84,7 @@ class PreprocessingOptions(ddargparse.OptionsBase):
         },
     )
     max_missed_peaks: int = field(
-        default=1,
+        default=0,
         metadata={
             "help": "Maximum number of missed peaks tolerated in envelope fitting "
             "(used in ms_deisotope package)."
