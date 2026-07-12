@@ -14,7 +14,6 @@ from spectrseqtools.error_calculator import ErrorCalculator
 from spectrseqtools.file_settings import PreprocessingFileSettings
 from spectrseqtools.parsers import PreprocessingOptions
 from spectrseqtools.preprocessing.deconvolution import (
-    DeconvolutionParameters,
     DeisotopedPeakList,
     MS1Deconvoluter,
     MS2Deconvoluter,
@@ -53,27 +52,6 @@ class Preprocessor:
 
         averagine = ms_ditp.Averagine(
             base_composition=set_averagine(backbone=options.averagine_backbone)
-        )
-        self.deconvolution_params = DeconvolutionParameters(
-            min_precursor_charge=options.min_precursor_charge,
-            isotopic_shift_factor=options.isotopic_shift_factor,
-            minimum_intensity=options.min_intensity,
-            averagine=averagine,
-            max_missed_peaks=options.max_missed_peaks,
-            scale_method=options.scale_method,
-            error_tol=options.peak_error_tol,
-            ms1_scorer=ms_ditp.PenalizedMSDeconVFitter(
-                minimum_score=options.envelope_min_score,
-                mass_error_tolerance=options.envelope_error_tol,
-            ),
-            ms2_scorer=ms_ditp.MSDeconVFitter(
-                minimum_score=options.envelope_min_score,
-                mass_error_tolerance=options.envelope_error_tol,
-            ),
-            ms1_charge_range=options.ms1_charge_range,
-            ms2_charge_range=options.ms2_charge_range,
-            ms1_truncate_after=options.ms1_truncate_after,
-            ms2_truncate_after=options.ms2_truncate_after,
         )
         self.ms1_deconvoluter = MS1Deconvoluter(
             minimum_intensity=options.min_intensity,
@@ -178,24 +156,12 @@ class Preprocessor:
                 scan=ms1_scan,
                 priority_list=priority_list,
             )
-            # ms1_peak_list += DeisotopedPeakList.from_scan(
-            #     scan=ms1_scan,
-            #     priority_list=priority_list,
-            #     params=self.deconvolution_params,
-            #     scan_level=1,
-            # )
 
             # Deconvolute MS2 scan to get list of deisotoped peaks
             for ms2_scan in ms2_scans:
                 ms2_peak_list += self.ms2_deconvoluter.deconvolute_scan(
                     scan=ms2_scan,
                 )
-                # ms2_peak_list += DeisotopedPeakList.from_scan(
-                #     scan=ms2_scan,
-                #     priority_list=None,
-                #     params=self.deconvolution_params,
-                #     scan_level=2,
-                # )
         ms1_fragments = ms1_peak_list.to_fragments(tolerance=self.error.tolerance)
         ms2_fragments = ms2_peak_list.to_fragments(tolerance=self.error.tolerance)
 
