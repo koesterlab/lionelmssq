@@ -414,8 +414,8 @@ class MS1PeakList(DeisotopedPeakList):
         priority_list = [
             peak
             for peak in priority_list
-            if (not isinstance(peak.charge, int))
-            or (peak.charge < params.min_precursor_charge)
+            if not isinstance(peak.charge, int)
+            and peak.charge >= params.min_precursor_charge
         ]
 
         # Return an empty peak list if no priority peak is above the minimum charge state
