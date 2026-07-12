@@ -16,6 +16,8 @@ from spectrseqtools.parsers import PreprocessingOptions
 from spectrseqtools.preprocessing.deconvolution import (
     DeconvolutionParameters,
     DeisotopedPeakList,
+    MS1Deconvoluter,
+    MS2Deconvoluter,
 )
 from spectrseqtools.preprocessing.singleton_identification import (
     RawPeakList,
@@ -49,13 +51,14 @@ class Preprocessor:
         with open(self.file_settings.meta_path, "r", encoding="utf-8") as f:
             self.meta_params = yaml.safe_load(f)
 
+        averagine = ms_ditp.Averagine(
+            base_composition=set_averagine(backbone=options.averagine_backbone)
+        )
         self.deconvolution_params = DeconvolutionParameters(
             min_precursor_charge=options.min_precursor_charge,
             isotopic_shift_factor=options.isotopic_shift_factor,
             minimum_intensity=options.min_intensity,
-            averagine=ms_ditp.Averagine(
-                base_composition=set_averagine(backbone=options.averagine_backbone)
-            ),
+            averagine=averagine,
             max_missed_peaks=options.max_missed_peaks,
             scale_method=options.scale_method,
             error_tol=options.peak_error_tol,
@@ -71,6 +74,35 @@ class Preprocessor:
             ms2_charge_range=options.ms2_charge_range,
             ms1_truncate_after=options.ms1_truncate_after,
             ms2_truncate_after=options.ms2_truncate_after,
+        )
+        self.ms1_deconvoluter = MS1Deconvoluter(
+            minimum_intensity=options.min_intensity,
+            averagine=averagine,
+            max_missed_peaks=options.max_missed_peaks,
+            scale_method=options.scale_method,
+            error_tol=options.peak_error_tol,
+            scorer=ms_ditp.PenalizedMSDeconVFitter(
+                minimum_score=options.envelope_min_score,
+                mass_error_tolerance=options.envelope_error_tol,
+            ),
+            charge_range=options.ms1_charge_range,
+            truncate_after=options.ms1_truncate_after,
+            min_precursor_charge=options.min_precursor_charge,
+        )
+        self.ms2_deconvoluter = MS2Deconvoluter(
+            minimum_intensity=options.min_intensity,
+            averagine=averagine,
+            max_missed_peaks=options.max_missed_peaks,
+            scale_method=options.scale_method,
+            error_tol=options.peak_error_tol,
+            scorer=ms_ditp.MSDeconVFitter(
+                minimum_score=options.envelope_min_score,
+                mass_error_tolerance=options.envelope_error_tol,
+            ),
+            charge_range=options.ms2_charge_range,
+            truncate_after=options.ms2_truncate_after,
+            min_precursor_charge=options.min_precursor_charge,
+            isotopic_shift_factor=options.isotopic_shift_factor,
         )
 
     def preprocess(self) -> None:
@@ -122,10 +154,7 @@ class Preprocessor:
         )
 
         # Precount number of scan bunches and reset raw_file_read after
-        # TODO: Discuss if this is necessary because its passing through the whole
-        # .RAW file once to pre-count the number of MS1 scans (and hence the number of scan bunches)
-        # just to make a progress bar work. It is fast though.
-        n_scan_bunches = sum(scan.ms_level == 1 for scan in raw_file_read)
+        num_scan_bunches = sum(scan.ms_level == 1 for scan in raw_file_read)
         raw_file_read.reset()
         raw_file_read.make_iterator(grouped=True)
 
@@ -135,7 +164,7 @@ class Preprocessor:
         ms2_peak_list = DeisotopedPeakList.default()
 
         for scan_bunch in tqdm.tqdm(
-            raw_file_read, desc="Deisotoping scan bunches", total=n_scan_bunches
+            raw_file_read, desc="Deisotoping scan bunches", total=num_scan_bunches
         ):
             # Obtain MS1, MS2 and priority peaks
             # priority_list is a list of ms_deisotope 'PriorityTarget' objects,
@@ -145,21 +174,28 @@ class Preprocessor:
             )
 
             # Deconvolute MS1 scan to get list of deisotoped peaks
-            ms1_peak_list += DeisotopedPeakList.from_scan(
+            ms1_peak_list += self.ms1_deconvoluter.deconvolute_scan(
                 scan=ms1_scan,
                 priority_list=priority_list,
-                params=self.deconvolution_params,
-                scan_level=1,
             )
+            # ms1_peak_list += DeisotopedPeakList.from_scan(
+            #     scan=ms1_scan,
+            #     priority_list=priority_list,
+            #     params=self.deconvolution_params,
+            #     scan_level=1,
+            # )
 
             # Deconvolute MS2 scan to get list of deisotoped peaks
             for ms2_scan in ms2_scans:
-                ms2_peak_list += DeisotopedPeakList.from_scan(
+                ms2_peak_list += self.ms2_deconvoluter.deconvolute_scan(
                     scan=ms2_scan,
-                    priority_list=None,
-                    params=self.deconvolution_params,
-                    scan_level=2,
                 )
+                # ms2_peak_list += DeisotopedPeakList.from_scan(
+                #     scan=ms2_scan,
+                #     priority_list=None,
+                #     params=self.deconvolution_params,
+                #     scan_level=2,
+                # )
         ms1_fragments = ms1_peak_list.to_fragments(tolerance=self.error.tolerance)
         ms2_fragments = ms2_peak_list.to_fragments(tolerance=self.error.tolerance)
 
