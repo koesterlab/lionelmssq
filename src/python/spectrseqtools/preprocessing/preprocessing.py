@@ -44,6 +44,8 @@ class Preprocessor:
             boundary_factor=options.boundary_factor,
             error=self.error,
         )
+        self.intact_mass_cutoff_factor = options.intact_mass_cutoff_factor
+
         with open(self.file_settings.meta_path, "r", encoding="utf-8") as f:
             self.meta_params = yaml.safe_load(f)
 
@@ -226,11 +228,12 @@ class Preprocessor:
             fragments.filter(
                 (pl.col("is_precursor_deisotoped"))
                 & (
-                    pl.col("neutral_mass")
-                    > (
-                        self.meta_params["5_prime_tag"]
-                        + self.meta_params["3_prime_tag"]
-                    )
+                    self.meta_params["5_prime_tag"] + self.meta_params["3_prime_tag"]
+                    <= pl.col("neutral_mass")
+                )
+                & (
+                    self.intact_mass_cutoff_factor * pl.col("neutral_mass").max()
+                    <= pl.col("neutral_mass")
                 )
             )
             .filter((pl.col("intensity") == pl.col("intensity").max()))["neutral_mass"]

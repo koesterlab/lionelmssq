@@ -62,6 +62,12 @@ class PreprocessingOptions(ddargparse.OptionsBase):
         default=10,
         metadata={"help": "Factor for scaling isotopic shift for precursors."},
     )
+    intact_mass_cutoff_factor: float = field(
+        default=0.4,
+        metadata={
+            "help": "Factor for maximum mass to function as lower bound on intact mass."
+        },
+    )
     envelope_min_score: float = field(
         default=150.0,
         metadata={
