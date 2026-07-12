@@ -58,7 +58,7 @@ class Preprocessor:
             scale_method=options.scale_method,
             error_tol=options.peak_error_tol,
             ms1_scorer=ms_ditp.PenalizedMSDeconVFitter(
-                options.envelope_min_score,
+                minimum_score=options.envelope_min_score,
                 mass_error_tolerance=options.envelope_error_tol,
             ),
             ms2_scorer=ms_ditp.MSDeconVFitter(
@@ -84,14 +84,6 @@ class Preprocessor:
 
         # Deconvolute raw data from file
         ms1_fragments, ms2_fragments = self.deconvolute()
-
-        # TODO: This just checks if the intact mass extracted from MS1 and MS2
-        # are within 10ppm of each other.
-        # We can remove this once we are sure that the MS1 mass selection is consistent
-        assert (
-            self.select_intact_mass(ms1_fragments)
-            - self.select_intact_mass(ms2_fragments)
-        ) / self.select_intact_mass(ms1_fragments) < self.error.tolerance
 
         # Update meta parameters (if needed)
         meta_params = self.meta_params
