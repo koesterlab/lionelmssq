@@ -24,7 +24,6 @@ from spectrseqtools.preprocessing.singleton_identification import (
 
 rt = get_mono()
 
-
 class Preprocessor:
     """Class for preprocessing of raw MS data."""
 
@@ -159,6 +158,10 @@ class Preprocessor:
                 scan_bunch.products
             )
             
+            priority_list, ms2_scans = priority_list_charge_filter(priority_list, 
+                                                                    ms2_scans, 
+                                                                    self.deconvolution_params.min_precursor_charge)
+
             # Deconvolute MS1 scan to get list of deisotoped peaks
             ms1_peak_list += DeisotopedPeakList.from_scan(
                 scan=ms1_scan,
@@ -367,3 +370,20 @@ def set_averagine(backbone: AveragineBackbone) -> dict:
             )
 
     return average_composition
+
+def priority_list_charge_filter(
+        priority_list, 
+        ms2_scans, 
+        min_precursor_charge
+):
+    new_priority_list = []
+    new_ms2_scans = []
+
+    for p in range(len(priority_list)):
+        pcharge = 0 if not isinstance(priority_list[p].charge, int) else priority_list[p].charge 
+
+        if pcharge >= min_precursor_charge:
+            new_priority_list.append(priority_list[p])
+            new_ms2_scans.append(ms2_scans[p])
+            
+    return new_priority_list, new_ms2_scans

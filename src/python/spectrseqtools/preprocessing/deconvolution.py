@@ -356,10 +356,8 @@ class MS1PeakList(DeisotopedPeakList):
         originally implemented by Moshir Harsh (btemoshir@gmail.com).
 
         """
-        filtered_priority_list = cls.filter_priority_peak_charges(priority_list, 
-                                                                  params.min_precursor_charge)
         # Return an empty peak list if no priority peak is above the minimum charge state
-        if len(filtered_priority_list) == 0:
+        if len(priority_list) == 0:
             return cls.default()
         
         # Convert scan to centroid data
@@ -368,14 +366,14 @@ class MS1PeakList(DeisotopedPeakList):
         # Replace the charge_range from the input options with the one approximated from the priority list
         param_dict = params.to_scan_dependent_dict(scan=scan, is_ms1=True)
         if param_dict["charge_range"] is None:
-            param_dict["charge_range"] = cls.obtain_charge_range_from_priority_peaks(
-                filtered_priority_list,
+            param_dict["charge_range"] = obtain_charge_range_from_priority_peaks(
+                priority_list,
                 scan.polarity
                 )
 
         # Deconvolute/deisotope with ms_deisotope
         peak_set = ms_ditp.deconvolute_peaks(
-            priority_list=filtered_priority_list,
+            priority_list=priority_list,
             **param_dict
         ).priorities
 
@@ -403,38 +401,7 @@ class MS1PeakList(DeisotopedPeakList):
 
         return cls(peaks=peak_list)
     
-    def filter_priority_peak_charges(
-        priority_list: list,
-        min_precursor_charge: int
-    ) -> list[ms_ditp.processor.PriorityTarget]:
-        """
-        Remove priority peaks if charge state is below a minimum.
-
-        Parameters
-        ----------
-        priority_list : list[ms_ditp.processor.PriorityTarget]
-            List of ms_deisotope 'PriorityTarget' peak objects.
-        min_precursor_charge : int
-            Minimum charge state considered.
-
-        Returns
-        -------
-        filtered_priority_list : list
-            List of ms_deisotope 'PriorityTarget' peak objects
-            with peak charges lower than a minimum charge removed.
-
-        """
-        
-        filtered_priority_list = []
-        for priority_peak in priority_list:
-            if (not isinstance(priority_peak.charge, int)
-                ) or (
-                priority_peak.charge < min_precursor_charge):
-                filtered_priority_list.append(priority_peak)
-
-        return filtered_priority_list
-    
-    def obtain_charge_range_from_priority_peaks(
+def obtain_charge_range_from_priority_peaks(
         priority_list: list[ms_ditp.processor.PriorityTarget],
         polarity: int
     ) -> Tuple[int, int]:
@@ -463,7 +430,6 @@ class MS1PeakList(DeisotopedPeakList):
             return -max_charge, -1
         else:
             return 1, max_charge
-
 
 class MS2PeakList(DeisotopedPeakList):
     """Class for list of deisotoped peaks from MS2 spectra."""
