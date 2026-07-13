@@ -2,6 +2,7 @@
 """Preprocessing of raw mass spectrometry data."""
 
 import importlib.resources
+from typing import List, Tuple
 
 import ms_deisotope as ms_ditp
 import polars as pl
@@ -45,6 +46,7 @@ class Preprocessor:
             boundary_factor=options.boundary_factor,
             error=self.error,
         )
+        self.min_precursor_charge = options.min_precursor_charge
         self.intact_mass_cutoff_factor = options.intact_mass_cutoff_factor
 
         with open(self.file_settings.meta_path, "r", encoding="utf-8") as f:
@@ -65,7 +67,6 @@ class Preprocessor:
             ),
             charge_range=options.ms1_charge_range,
             truncate_after=options.ms1_truncate_after,
-            min_precursor_charge=options.min_precursor_charge,
         )
         self.ms2_deconvoluter = MS2Deconvoluter(
             minimum_intensity=options.min_intensity,
@@ -79,7 +80,6 @@ class Preprocessor:
             ),
             charge_range=options.ms2_charge_range,
             truncate_after=options.ms2_truncate_after,
-            min_precursor_charge=options.min_precursor_charge,
             isotopic_shift_factor=options.isotopic_shift_factor,
         )
 
@@ -151,6 +151,11 @@ class Preprocessor:
                 scan_bunch.precursor, scan_bunch.products
             )
 
+            # Filter scans by requiring sufficient charge
+            priority_list, ms2_scans = self.filter_ms2_scans_by_charge(
+                ms2_scans=ms2_scans, priority_list=priority_list
+            )
+
             # Deconvolute MS1 scan to get list of deisotoped peaks
             ms1_peak_list += self.ms1_deconvoluter.deconvolute_scan(
                 scan=ms1_scan,
@@ -166,6 +171,54 @@ class Preprocessor:
         ms2_fragments = ms2_peak_list.to_fragments(tolerance=self.error.tolerance)
 
         return ms1_fragments, ms2_fragments
+
+    def filter_ms2_scans_by_charge(
+        self,
+        priority_list: List[ms_ditp.processor.PriorityTarget],
+        ms2_scans: List[ms_ditp.data_source.Scan],
+    ) -> Tuple[List[ms_ditp.processor.PriorityTarget], List[ms_ditp.data_source.Scan]]:
+        """
+        Filter out MS2 scans (and their priority targets) if charge insufficient.
+
+        Parameters
+        ----------
+        priority_list : List[ms_ditp.processor.PriorityTarget] | None
+            List of priority targets for deconvolution.
+        ms2_scans : List[ms_deisotope.data_source.Scan]
+            List of ThermoFisher MS2 scan.
+
+        Returns
+        -------
+        List[ms_ditp.processor.PriorityTarget] | None
+            Updated list of priority targets for deconvolution.
+        List[ms_deisotope.data_source.Scan]
+            Updated list of ThermoFisher MS2 scan.
+
+        """
+        for target, scan in zip(priority_list, ms2_scans):
+            if abs(target.mz - scan.precursor_information.mz) > 10e-3:
+                print(target.mz, scan.precursor_information.mz)
+                raise ValueError("Order not correct.")
+
+        # Check whether target charge is too low for consideration (if given)
+        target_mask = [
+            isinstance(peak.charge, int) and peak.charge >= self.min_precursor_charge
+            for peak in priority_list
+        ]
+
+        # Check whether precursor charge is too low for consideration (if given)
+        scan_mask = [
+            isinstance(peak.precursor_information.charge, int)
+            and peak.precursor_information.charge >= self.min_precursor_charge
+            for peak in ms2_scans
+        ]
+
+        # Return entries for which charges of both target and scan are sufficient
+        mask = [target_mask[idx] and scan_mask[idx] for idx in range(len(ms2_scans))]
+        return (
+            [priority_list[idx] for idx in range(len(priority_list)) if mask[idx]],
+            [ms2_scans[idx] for idx in range(len(ms2_scans)) if mask[idx]],
+        )
 
     def identify_singletons(self) -> pl.DataFrame:
         """
