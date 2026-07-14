@@ -230,7 +230,8 @@ class Predictor:
                 solver_params=solver_params,
             )
         # TODO: Replace generic ValueError, within custom one
-        except ValueError:
+        except ValueError or IndexError:
+            # TODO: Replace IndexError for LP initialization with custom one
             return Prediction.default()
 
         print("Number of internal fragments after filter: ", len(fragments.internal))
