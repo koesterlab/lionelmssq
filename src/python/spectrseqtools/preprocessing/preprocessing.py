@@ -60,7 +60,7 @@ class Preprocessor:
             averagine=averagine,
             max_missed_peaks=options.max_missed_peaks,
             scale_method=options.scale_method,
-            error_tol=options.peak_error_tol,
+            error_tolerance=options.peak_error_tol,
             scorer=ms_ditp.PenalizedMSDeconVFitter(
                 minimum_score=options.envelope_min_score,
                 mass_error_tolerance=options.envelope_error_tol,
@@ -73,7 +73,7 @@ class Preprocessor:
             averagine=averagine,
             max_missed_peaks=options.max_missed_peaks,
             scale_method=options.scale_method,
-            error_tol=options.peak_error_tol,
+            error_tolerance=options.peak_error_tol,
             scorer=ms_ditp.MSDeconVFitter(
                 minimum_score=options.envelope_min_score,
                 mass_error_tolerance=options.envelope_error_tol,

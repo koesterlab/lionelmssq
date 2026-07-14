@@ -106,7 +106,7 @@ class PreprocessingOptions(ddargparse.OptionsBase):
         default=2e-5,
         metadata={
             "help": "Error tolerance for each individual peak "
-            "(used in ms_deisotope package as 'error_tol')."
+            "(used in ms_deisotope package as 'error_tolerance')."
         },
     )
     ms1_charge_range: Tuple[int, int] | None = field(

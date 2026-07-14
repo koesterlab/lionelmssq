@@ -145,7 +145,7 @@ class ScanDeconvoluter(ABC):
     averagine: ms_ditp.Averagine
     max_missed_peaks: int
     scale_method: str
-    error_tol: float
+    error_tolerance: float
     scorer: ms_ditp.MSDeconVFitter
     charge_range: Tuple[int, int] | None
     truncate_after: float
