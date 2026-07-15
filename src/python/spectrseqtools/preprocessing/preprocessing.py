@@ -150,6 +150,10 @@ class Preprocessor:
                 scan_bunch.precursor, scan_bunch.products
             )
 
+            priority_list, ms2_scans = priority_list_charge_filter(priority_list, 
+                                                                   ms2_scans, 
+                                                                   self.ms1_deconvoluter.min_precursor_charge)
+
             # Deconvolute MS1 scan to get list of deisotoped peaks
             ms1_peak_list += self.ms1_deconvoluter.deconvolute_scan(
                 scan=ms1_scan,
@@ -343,9 +347,9 @@ def priority_list_charge_filter(
     new_ms2_scans = []
 
     for p in range(len(priority_list)):
-        pcharge = 0 if not isinstance(priority_list[p].charge, int) else priority_list[p].charge 
-
-        if pcharge >= min_precursor_charge:
+        priority_peak = priority_list[p]
+        
+        if isinstance(priority_peak.charge, int) and priority_peak.charge >= min_precursor_charge:
             new_priority_list.append(priority_list[p])
             new_ms2_scans.append(ms2_scans[p])
             

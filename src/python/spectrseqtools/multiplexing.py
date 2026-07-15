@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from spectrseqtools.preprocessing.preprocessing import Preprocessor, set_averagine, initialize_raw_file_iterator
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
-from spectrseqtools.preprocessing.deconvolution import DeconvolutionParameters, DeisotopedPeakList
+from spectrseqtools.preprocessing.deconvolution import MS1Deconvoluter,MS2Deconvoluter
 from spectrseqtools.preprocessing.singleton_identification import RawPeakList, SingletonBoundaries
 from spectrseqtools.parsers import PreprocessingOptions
 
@@ -43,17 +43,23 @@ COL_TYPES_MS1_CLUSTER = {
     "ms1_intensity": pl.Float64,
 }
 
-def charge_filter(priority_ms1_peaks, ms2_scan_list, options):
-    new_priority_ms1_peaks = []
-    new_priority_ms1_charges = []
-    new_ms2_scan_list = []
-    for p in range(len(priority_ms1_peaks)):
-        pcharge = 0 if not isinstance(priority_ms1_peaks[p].charge, int) else priority_ms1_peaks[p].charge 
-        if pcharge >= options.min_precursor_charge:
-            new_priority_ms1_peaks.append(priority_ms1_peaks[p])
-            new_priority_ms1_charges.append(pcharge)
-            new_ms2_scan_list.append(ms2_scan_list[p])
-    return new_priority_ms1_peaks, new_priority_ms1_charges, new_ms2_scan_list
+def priority_list_charge_filter(
+        priority_list, 
+        ms2_scans, 
+        min_precursor_charge
+):
+    new_priority_list = []
+    new_ms2_scans = []
+
+    for p in range(len(priority_list)):
+        priority_peak = priority_list[p]
+        
+        if isinstance(priority_peak.charge, int) and priority_peak.charge >= min_precursor_charge:
+            new_priority_list.append(priority_list[p])
+            new_ms2_scans.append(ms2_scans[p])
+            
+    return new_priority_list, new_ms2_scans
+
     
 def ms1_to_ms2_dict(raw_file_read):
     raw_file_read.reset()

@@ -349,7 +349,6 @@ class MS1Deconvoluter(ScanDeconvoluter):
         scan.pick_peaks()
 
         param_dict = self.to_scan_dependent_dict(scan=scan, priority_list=priority_list)
-        print(param_dict)
 
         # Deconvolute/deisotope with ms_deisotope
         peak_set = ms_ditp.deconvolute_peaks(**param_dict).priorities
