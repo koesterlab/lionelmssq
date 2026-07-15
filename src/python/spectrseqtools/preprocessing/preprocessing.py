@@ -2,6 +2,7 @@
 """Preprocessing of raw mass spectrometry data."""
 
 import importlib.resources
+from typing import List, Tuple
 
 import ms_deisotope as ms_ditp
 import polars as pl
@@ -14,8 +15,9 @@ from spectrseqtools.error_calculator import ErrorCalculator
 from spectrseqtools.file_settings import PreprocessingFileSettings
 from spectrseqtools.parsers import PreprocessingOptions
 from spectrseqtools.preprocessing.deconvolution import (
-    DeconvolutionParameters,
     DeisotopedPeakList,
+    MS1Deconvoluter,
+    MS2Deconvoluter,
 )
 from spectrseqtools.preprocessing.singleton_identification import (
     RawPeakList,
@@ -44,32 +46,48 @@ class Preprocessor:
             boundary_factor=options.boundary_factor,
             error=self.error,
         )
+        self.min_precursor_charge = options.min_precursor_charge
+        self.intact_mass_cutoff_factor = options.intact_mass_cutoff_factor
+
         with open(self.file_settings.meta_path, "r", encoding="utf-8") as f:
             self.meta_params = yaml.safe_load(f)
 
-        self.deconvolution_params = DeconvolutionParameters(
-            min_precursor_charge=options.min_precursor_charge,
-            isotopic_shift_factor=options.isotopic_shift_factor,
-            charge_range=options.charge_range,
+        averagine = ms_ditp.Averagine(
+            base_composition=set_averagine(backbone=options.averagine_backbone)
+        )
+        self.ms1_deconvoluter = MS1Deconvoluter(
             minimum_intensity=options.min_intensity,
+            averagine=averagine,
+            max_missed_peaks=options.max_missed_peaks,
+            scale_method=options.scale_method,
+            error_tolerance=options.peak_error_tol,
+            scorer=ms_ditp.PenalizedMSDeconVFitter(
+                minimum_score=options.envelope_min_score,
+                mass_error_tolerance=options.envelope_error_tol,
+            ),
+            charge_range=options.ms1_charge_range,
+            truncate_after=options.ms1_truncate_after,
+        )
+        self.ms2_deconvoluter = MS2Deconvoluter(
+            minimum_intensity=options.min_intensity,
+            averagine=averagine,
+            max_missed_peaks=options.max_missed_peaks,
+            scale_method=options.scale_method,
+            error_tolerance=options.peak_error_tol,
             scorer=ms_ditp.MSDeconVFitter(
                 minimum_score=options.envelope_min_score,
                 mass_error_tolerance=options.envelope_error_tol,
             ),
-            averagine=ms_ditp.Averagine(
-                base_composition=set_averagine(backbone=options.averagine_backbone)
-            ),
-            max_missed_peaks=options.max_missed_peaks,
-            scale_method=options.scale_method,
-            error_tol=options.peak_error_tol,
-            truncate_after=options.truncate_after,
+            charge_range=options.ms2_charge_range,
+            truncate_after=options.ms2_truncate_after,
+            isotopic_shift_factor=options.isotopic_shift_factor,
         )
 
     def preprocess(self) -> None:
         """
-        Deconvolute MS2 scans, identify singletons, and update metadata.
+        Deconvolute MS1 and MS2 scans, identify singletons, and update metadata.
 
-        Main pipeline for deconvoluting MS2 scans and generating the metafile
+        Main pipeline for deconvoluting MS1 and MS2 scans and generating the metafile
         required for a SpectrSeqTools prediction as well as a list of candidate
         nucleotides from singletons.
 
@@ -77,12 +95,12 @@ class Preprocessor:
         print("RAW file found. Preprocessing raw data...")
 
         # Deconvolute raw data from file
-        fragments = self.deconvolute()
+        ms1_fragments, ms2_fragments = self.deconvolute()
 
         # Update meta parameters (if needed)
         meta_params = self.meta_params
         meta_params.setdefault("identity", self.file_settings.file_prefix)
-        meta_params.setdefault("intact_mass", self.select_intact_mass(fragments))
+        meta_params.setdefault("intact_mass", self.select_intact_mass(ms1_fragments))
         meta_params.setdefault("true_sequence", None)
 
         # Save updated meta data
@@ -90,7 +108,7 @@ class Preprocessor:
             yaml.dump(meta_params, f)
 
         # Save preprocessed fragments
-        fragments.write_csv(self.file_settings.fragment_path, separator="\t")
+        ms2_fragments.write_csv(self.file_settings.fragment_path, separator="\t")
 
         # Save singletons detected from raw data as new nucleotide alphabet
         singletons = self.identify_singletons()
@@ -100,7 +118,7 @@ class Preprocessor:
 
     def deconvolute(self) -> pl.DataFrame:
         """
-        Deconvolute/deisotope peaks in MS2 scans from ThermoFisher RAW file.
+        Deconvolute/deisotope peaks in MS1 and MS2 scans from ThermoFisher RAW file.
 
         Returns
         -------
@@ -113,21 +131,94 @@ class Preprocessor:
             file_path=str(self.file_settings.input_path)
         )
 
-        peak_list = DeisotopedPeakList.default()
-        for _ in tqdm.tqdm(range(len(raw_file_read) - 1), desc="Deisotoping MS2 scans"):
-            # Select next scan
-            scan = next(raw_file_read)
+        # Precount number of scan bunches and reset raw_file_read after
+        num_scan_bunches = sum(scan.ms_level == 1 for scan in raw_file_read)
+        raw_file_read.reset()
+        raw_file_read.make_iterator(grouped=True)
 
-            # Skip scan if it is no MS2 scan
-            if scan.ms_level != 2:
-                continue
+        scan_processor = ms_ditp.ScanProcessor(raw_file_read)
 
-            # Deconvolute scan to get list of deisotoped peaks
-            peak_list += DeisotopedPeakList.from_scan(
-                scan=scan, params=self.deconvolution_params
+        ms1_peak_list = DeisotopedPeakList.default()
+        ms2_peak_list = DeisotopedPeakList.default()
+
+        for scan_bunch in tqdm.tqdm(
+            raw_file_read, desc="Deisotoping scan bunches", total=num_scan_bunches
+        ):
+            # Obtain MS1, MS2 and priority peaks
+            # priority_list is a list of ms_deisotope 'PriorityTarget' objects,
+            # which is similar to a 'Peak' object
+            ms1_scan, priority_list, ms2_scans = scan_processor.process_scan_group(
+                scan_bunch.precursor, scan_bunch.products
             )
 
-        return peak_list.to_fragments(tolerance=self.error.tolerance)
+            # Filter scans by requiring sufficient charge
+            priority_list, ms2_scans = self.filter_ms2_scans_by_charge(
+                ms2_scans=ms2_scans, priority_list=priority_list
+            )
+
+            # Deconvolute MS1 scan to get list of deisotoped peaks
+            ms1_peak_list += self.ms1_deconvoluter.deconvolute_scan(
+                scan=ms1_scan,
+                priority_list=priority_list,
+            )
+
+            # Deconvolute MS2 scan to get list of deisotoped peaks
+            for ms2_scan in ms2_scans:
+                ms2_peak_list += self.ms2_deconvoluter.deconvolute_scan(
+                    scan=ms2_scan,
+                )
+        ms1_fragments = ms1_peak_list.to_fragments(tolerance=self.error.tolerance)
+        ms2_fragments = ms2_peak_list.to_fragments(tolerance=self.error.tolerance)
+
+        return ms1_fragments, ms2_fragments
+
+    def filter_ms2_scans_by_charge(
+        self,
+        priority_list: List[ms_ditp.processor.PriorityTarget],
+        ms2_scans: List[ms_ditp.data_source.Scan],
+    ) -> Tuple[List[ms_ditp.processor.PriorityTarget], List[ms_ditp.data_source.Scan]]:
+        """
+        Filter out MS2 scans (and their priority targets) if charge insufficient.
+
+        Parameters
+        ----------
+        priority_list : List[ms_ditp.processor.PriorityTarget] | None
+            List of priority targets for deconvolution.
+        ms2_scans : List[ms_deisotope.data_source.Scan]
+            List of ThermoFisher MS2 scan.
+
+        Returns
+        -------
+        List[ms_ditp.processor.PriorityTarget] | None
+            Updated list of priority targets for deconvolution.
+        List[ms_deisotope.data_source.Scan]
+            Updated list of ThermoFisher MS2 scan.
+
+        """
+        for target, scan in zip(priority_list, ms2_scans):
+            if abs(target.mz - scan.precursor_information.mz) > 10e-3:
+                print(target.mz, scan.precursor_information.mz)
+                raise ValueError("Order not correct.")
+
+        # Check whether target charge is too low for consideration (if given)
+        target_mask = [
+            isinstance(peak.charge, int) and peak.charge >= self.min_precursor_charge
+            for peak in priority_list
+        ]
+
+        # Check whether precursor charge is too low for consideration (if given)
+        scan_mask = [
+            isinstance(peak.precursor_information.charge, int)
+            and peak.precursor_information.charge >= self.min_precursor_charge
+            for peak in ms2_scans
+        ]
+
+        # Return entries for which charges of both target and scan are sufficient
+        mask = [target_mask[idx] and scan_mask[idx] for idx in range(len(ms2_scans))]
+        return (
+            [priority_list[idx] for idx in range(len(priority_list)) if mask[idx]],
+            [ms2_scans[idx] for idx in range(len(ms2_scans)) if mask[idx]],
+        )
 
     def identify_singletons(self) -> pl.DataFrame:
         """
@@ -188,16 +279,16 @@ class Preprocessor:
         originally implemented by Moshir Harsh (btemoshir@gmail.com).
 
         """
-
         return (
             fragments.filter(
                 (pl.col("is_precursor_deisotoped"))
                 & (
-                    pl.col("neutral_mass")
-                    > (
-                        self.meta_params["5_prime_tag"]
-                        + self.meta_params["3_prime_tag"]
-                    )
+                    self.meta_params["5_prime_tag"] + self.meta_params["3_prime_tag"]
+                    <= pl.col("neutral_mass")
+                )
+                & (
+                    self.intact_mass_cutoff_factor * pl.col("neutral_mass").max()
+                    <= pl.col("neutral_mass")
                 )
             )
             .filter((pl.col("intensity") == pl.col("intensity").max()))["neutral_mass"]

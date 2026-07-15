@@ -43,10 +43,6 @@ def test_testcase(testcase):
             options=PreprocessingOptions(
                 input=base_path / "fragments.raw",
                 meta=base_path / "fragments.meta.yaml",
-                output_dir=None,
-                alphabet=None,
-                charge_range=None,
-                min_intensity=None,
             )
         ).preprocess()
     else:
@@ -63,7 +59,6 @@ def test_testcase(testcase):
             sequence_prediction=base_path / "fragments.prediction.fasta",
             fragment_predictions=base_path / "fragments.prediction.tsv",
             sequence_name=f"{testcase}",
-            output_dir=None,
             intensity_cutoff_percentile=75,
             # solver=SolverType.CBC,
             # solver=SolverType.GUROBI,

@@ -111,6 +111,11 @@ class LPBasedEstimator(SequenceLengthEstimator):
                 best_val = value
                 best_len = len_cand
 
+        if best_len < 0:
+            raise Exception(
+                "No sequence length fitting the given sequence mass could be estimated."
+            )
+
         return best_len
 
     def _determine_lp_score(

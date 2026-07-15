@@ -78,6 +78,8 @@ class Predictor:
             nuc_weight_factor=options.composition_filter_weight_factor,
         )
 
+        print("Intensity cutoff percentile:", self.filter_params.cutoff_percentile)
+
         # Initialize nucleotide alphabet
         alphabet = NucleotideAlphabet.from_file(
             modification_rate=options.modification_rate,
@@ -87,7 +89,10 @@ class Predictor:
 
         # Standardize intact sequence mass by removing START_END fragmentation to gain SU mass
         seq_mass_obs = meta["intact_mass"]
-        seq_mass_su = seq_mass_obs - self.classifier.start_end_fragmentation
+        seq_mass_su = round(
+            seq_mass_obs - self.classifier.start_end_fragmentation,
+            error_calculator.decimal_places,
+        )
 
         # Initialize SequenceInformation class
         seq_info = SequenceInformation(
@@ -225,7 +230,8 @@ class Predictor:
                 solver_params=solver_params,
             )
         # TODO: Replace generic ValueError, within custom one
-        except ValueError:
+        except ValueError or IndexError:
+            # TODO: Replace IndexError for LP initialization with custom one
             return Prediction.default()
 
         print("Number of internal fragments after filter: ", len(fragments.internal))

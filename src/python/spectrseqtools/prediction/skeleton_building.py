@@ -72,6 +72,7 @@ class SkeletonBuilder:
             start_skeleton=start_skeleton,
             end_skeleton=end_skeleton,
         )
+        print("Estimated sequence length:", seq_len)
 
         # Combine both skeleton sequences
         skeleton_seq = start_skeleton.merge(other=end_skeleton, seq_len=seq_len)
