@@ -23,6 +23,7 @@ COL_TYPES_DEISOTOPED = {
     "neutral_mass": pl.Float64,
     "is_precursor_deisotoped": pl.Boolean,
     "mz": pl.Float64,
+    "score": pl.Float64
 }
 
 # METHOD: To deconvolute/deisotope (which we use interchangeable because both
@@ -47,6 +48,7 @@ class DeisotopedPeak:
     neutral_mass: float
     is_precursor_deisotoped: bool
     mz: float
+    score: float
 
     @classmethod
     def default(cls) -> Self:
@@ -59,6 +61,7 @@ class DeisotopedPeak:
             neutral_mass=0.0,
             is_precursor_deisotoped=False,
             mz=0.0,
+            score=0.0
         )
 
 
@@ -364,6 +367,7 @@ class MS1Deconvoluter(ScanDeconvoluter):
                 neutral_mass=peak.neutral_mass,
                 is_precursor_deisotoped=True,
                 mz=mz,
+                score=peak.score
             )
 
         return DeisotopedPeakList(
@@ -489,5 +493,6 @@ class MS2Deconvoluter(ScanDeconvoluter):
                     <= precursor_mz
                 ),
                 mz=mz,
+                score=peak.score
             )
         return DeisotopedPeakList(peaks=peak_list)
