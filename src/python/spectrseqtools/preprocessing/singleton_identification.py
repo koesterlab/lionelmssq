@@ -194,23 +194,33 @@ class RawPeakList:
             lambda x: pl.DataFrame(
                 {
                     "id": x["names"][0],
-                    "cluster_score": calculate_cluster_score(x["scan_time"]),
                     "count": len(x["names"]),
+                    "cluster_score": calculate_cluster_score(x["scan_time"]),
                 }
             )
         )
 
-        # Filter candidate singletons by cluster score
-        singletons = (
-            peak_df.filter(pl.col("cluster_score") >= 0).select(
-                ["id", "count", "cluster_score"]
+        # Extend singleton dataframe to include alphabet information
+        full_alphabet = load_alphabet(input_path=alphabet_path)
+        peak_df = full_alphabet.join(peak_df, on="id", how="inner")
+
+        # Extend singleton dataframe to include unmodified bases, which were not found
+        unmodified = (
+            full_alphabet.filter(~pl.col("is_modification"))
+            .with_columns(
+                pl.lit(0).alias("count"),
+                pl.lit(-1.0).alias("cluster_score"),
+            )
+            .join(peak_df, on="id", how="anti")
+        )
+        peak_df = peak_df.vstack(unmodified)
+
+        # Filter candidate singletons by cluster score (if modification)
+        return (
+            peak_df.filter(
+                (pl.col("cluster_score") >= 0) | (~pl.col("is_modification"))
             )
         ).sort("count", descending=True)
-
-        # Only select singletons for new alphabet
-        return load_alphabet(input_path=alphabet_path).join(
-            singletons, on="id", how="inner"
-        )
 
 
 def calculate_cluster_score(scan_times: pl.Series) -> float:
