@@ -10,8 +10,8 @@ from spectrseqtools.enums import SolverType
 from spectrseqtools.error_calculator import ErrorCalculator
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 from spectrseqtools.parsers import PredictionOptions, PreprocessingOptions
-from spectrseqtools.plot_singletons import plot_singletons
-from spectrseqtools.plotting import plot_prediction
+from spectrseqtools.plotting.plot_fragments import plot_prediction
+from spectrseqtools.plotting.plot_singletons import plot_singletons
 from spectrseqtools.prediction.prediction import Predictor
 from spectrseqtools.preprocessing.preprocessing import Preprocessor
 

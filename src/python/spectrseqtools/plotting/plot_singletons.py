@@ -4,7 +4,6 @@ from typing import Set
 import altair as alt
 import polars as pl
 import yaml
-
 from spectrseqtools.dataclasses import Sequence
 from spectrseqtools.error_calculator import ErrorUnderL1Norm
 from spectrseqtools.file_settings import load_alphabet
