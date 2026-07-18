@@ -143,8 +143,19 @@ class RawPeakList:
                 new_lists[peak.scan_id] = [peak]
         return [RawPeakList(peaks=peaks) for peaks in new_lists.values()]
 
+    def to_dataframe(self) -> pl.DataFrame:
+        """Build Polars dataframe from raw peaks."""
+        return pl.DataFrame(
+            data=np.array(
+                [[peak.__dict__[key] for key in COL_TYPES_RAW] for peak in self.peaks]
+            ),
+            schema=COL_TYPES_RAW,
+        )
+
     def to_singletons(
-        self, alphabet_path: Path, error: ErrorCalculator
+        self,
+        alphabet_path: Path | None,
+        error: ErrorCalculator,
     ) -> pl.DataFrame:
         """
         Select candidate singletons based on raw peaks.
@@ -154,7 +165,7 @@ class RawPeakList:
 
         Parameters
         ----------
-        alphabet_path : Path
+        alphabet_path : Path | None
             Path to alphabet of considered nucleotides.
         error : ErrorCalculator
             Error calculator.
@@ -169,16 +180,8 @@ class RawPeakList:
             input_path=alphabet_path, error=error
         ).to_dataframe()
 
-        # Build dataframe from peak list
-        peak_df = pl.DataFrame(
-            data=np.array(
-                [[peak.__dict__[key] for key in COL_TYPES_RAW] for peak in self.peaks]
-            ),
-            schema=COL_TYPES_RAW,
-        )
-
-        # Match observed m/z to singleton m/z from the reference table
-        peak_df = peak_df.sort("mz").join_asof(
+        # Match observed m/z to singleton m/z from the alphabet
+        peak_df = self.to_dataframe().sort("mz").join_asof(
             alphabet_df.sort("singleton_mz"),
             left_on="mz",
             right_on="singleton_mz",
@@ -225,7 +228,7 @@ class RawPeakList:
         )
         peak_df = peak_df.vstack(unmodified)
 
-        # Filter candidate singletons by cluster score (if modification)
+        # Filter candidate singletons by cluster score (only if modification)
         return (
             peak_df.filter(
                 (pl.col("cluster_score") >= 0) | (~pl.col("is_modification"))
