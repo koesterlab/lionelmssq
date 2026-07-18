@@ -156,6 +156,7 @@ class RawPeakList:
         self,
         alphabet_path: Path | None,
         error: ErrorCalculator,
+        enforce_unmodified: bool = True,
     ) -> pl.DataFrame:
         """
         Select candidate singletons based on raw peaks.
@@ -169,6 +170,8 @@ class RawPeakList:
             Path to alphabet of considered nucleotides.
         error : ErrorCalculator
             Error calculator.
+        enforce_unmodified : bool
+            Flag whether to enforce all unmodified bases to be in singleton alphabet.
 
         Returns
         -------
@@ -213,11 +216,18 @@ class RawPeakList:
             )
         )
 
+        # If desired, do not enforce unmodified bases to be singletons
+        if not enforce_unmodified:
+            # Filter candidate singletons by cluster score
+            return peak_df.filter(pl.col("cluster_score") >= 0).sort(
+                "count", descending=True
+            )
+
         # Extend singleton dataframe to include alphabet information
         full_alphabet = load_alphabet(input_path=alphabet_path)
         peak_df = full_alphabet.join(peak_df, on="id", how="inner")
 
-        # Extend singleton dataframe to include unmodified bases, which were not found
+        # Extend singleton dataframe to include unmodified bases (if not found)
         unmodified = (
             full_alphabet.filter(~pl.col("is_modification"))
             .with_columns(
