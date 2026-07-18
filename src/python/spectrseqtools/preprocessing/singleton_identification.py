@@ -133,6 +133,16 @@ class RawPeakList:
                 )
         return RawPeakList(peaks=peak_list)
 
+    def split_by_scan(self) -> List[Self]:
+        """Split peak list into multiple based on scan ID."""
+        new_lists = {}
+        for peak in self.peaks:
+            if peak.scan_id in new_lists:
+                new_lists[peak.scan_id].append(peak)
+            else:
+                new_lists[peak.scan_id] = [peak]
+        return [RawPeakList(peaks=peaks) for peaks in new_lists.values()]
+
     def to_singletons(
         self, alphabet_path: Path, error: ErrorCalculator
     ) -> pl.DataFrame:
