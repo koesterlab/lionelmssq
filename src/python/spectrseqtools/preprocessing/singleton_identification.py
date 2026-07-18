@@ -187,11 +187,15 @@ class RawPeakList:
         ).to_dataframe()
 
         # Match observed m/z to singleton m/z from the alphabet
-        peak_df = self.to_dataframe().sort("mz").join_asof(
-            alphabet_df.sort("singleton_mz"),
-            left_on="mz",
-            right_on="singleton_mz",
-            strategy="nearest",
+        peak_df = (
+            self.to_dataframe()
+            .sort("mz")
+            .join_asof(
+                alphabet_df.sort("singleton_mz"),
+                left_on="mz",
+                right_on="singleton_mz",
+                strategy="nearest",
+            )
         )
 
         # Compute mass error between observed and singleton m/z
