@@ -2,6 +2,7 @@ from typing import List
 
 import altair as alt
 import polars as pl
+
 from spectrseqtools.dataclasses import Sequence
 from spectrseqtools.file_settings import load_alphabet
 from spectrseqtools.prediction.prediction import Prediction
