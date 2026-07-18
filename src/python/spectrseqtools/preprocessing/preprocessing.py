@@ -220,14 +220,14 @@ class Preprocessor:
             [ms2_scans[idx] for idx in range(len(ms2_scans)) if mask[idx]],
         )
 
-    def identify_singletons(self) -> pl.DataFrame:
+    def collect_raw_peaks(self) -> RawPeakList:
         """
-        Determine singleton candidates from MS2 scans in ThermoFisher RAW file.
+        Collect raw peaks from MS2 scans in ThermoFisher RAW file.
 
         Returns
         -------
-        polars.DataFrame
-            Dataframe containing singleton candidates.
+        peak_list : RawPeakList
+            List of raw peaks.
 
         """
         # Initialize iterator for RAW file
@@ -250,11 +250,67 @@ class Preprocessor:
             peak_list += RawPeakList.from_scan(
                 scan=scan, boundaries=self.singleton_boundaries
             )
+        return peak_list
+
+    def identify_singletons(self) -> pl.DataFrame:
+        """
+        Determine singleton candidates from MS2 scans in ThermoFisher RAW file.
+
+        Returns
+        -------
+        polars.DataFrame
+            Dataframe containing singleton candidates.
+
+        """
+        peak_list = self.collect_raw_peaks()
 
         return peak_list.to_singletons(
             alphabet_path=self.file_settings.alphabet_path,
             error=self.error,
-        )
+        ).drop("mz")
+
+    def identify_scans_with_full_singleton_set(
+        self, singletons: pl.DataFrame, id_list: List[str]
+    ) -> List[pl.DataFrame]:
+        """
+        Determine peaks from each scan that contains the full singleton set.
+
+        Returns
+        -------
+        List[polars.DataFrame]
+            List of dataframes containing peaks from scans with full singleton set.
+
+        """
+        peak_list = self.collect_raw_peaks()
+
+        # Collect data from valid scans (i.e. those that contain full singleton set)
+        valid_scans = []
+        for scan_peaks in peak_list.split_by_scan():
+            # Identify singletons for individual scan (without filter or enforced bases)
+            scan_singletons = scan_peaks.to_singletons(
+                alphabet_path=self.file_settings.updated_alphabet_path,
+                error=self.error,
+                enforce_unmodified=False,
+                min_score=-2.0,
+            )
+
+            # Skip scans without any singletons
+            if scan_singletons is None:
+                continue
+
+            # Skip scans without the full singleton set
+            scan_singletons = scan_singletons.filter(pl.col("id").is_in(id_list))
+            if len(scan_singletons) != len(singletons):
+                continue
+
+            # Append combined peak and singleton data from valid scan to list
+            entry = scan_peaks.to_dataframe()
+            scan_data = pl.DataFrame(
+                {"mz": entry["mz"], "intensity": entry["intensity"]}
+            ).sort("mz")
+            valid_scans.append(scan_data.join(scan_singletons, on="mz", how="left"))
+
+        return valid_scans
 
     def select_intact_mass(self, fragments: pl.DataFrame) -> float:
         """

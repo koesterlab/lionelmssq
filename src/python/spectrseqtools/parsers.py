@@ -230,11 +230,11 @@ class PredictionOptions(ddargparse.OptionsBase):
         metadata={"help": "Number of threads to use for the optimization problem."},
     )
     intensity_cutoff_percentile: int = field(
-        default=75,
+        default=80,
         metadata={"help": "Intensity percentile used as cutoff."},
     )
     composition_filter_weight_factor: float = field(
-        default=1.0,
+        default=2.0,
         metadata={
             "help": "Nucleotide weight factor used during composition-based filtering."
         },
