@@ -157,6 +157,7 @@ class RawPeakList:
         alphabet_path: Path | None,
         error: ErrorCalculator,
         enforce_unmodified: bool = True,
+        min_score: float = 0.0,
     ) -> pl.DataFrame:
         """
         Select candidate singletons based on raw peaks.
@@ -172,6 +173,8 @@ class RawPeakList:
             Error calculator.
         enforce_unmodified : bool
             Flag whether to enforce all unmodified bases to be in singleton alphabet.
+        min_score : float
+            Minimum cluster score required to be considered for singleton alphabet.
 
         Returns
         -------
@@ -219,7 +222,7 @@ class RawPeakList:
         # If desired, do not enforce unmodified bases to be singletons
         if not enforce_unmodified:
             # Filter candidate singletons by cluster score
-            return peak_df.filter(pl.col("cluster_score") >= 0).sort(
+            return peak_df.filter(pl.col("cluster_score") >= min_score).sort(
                 "count", descending=True
             )
 
@@ -241,7 +244,7 @@ class RawPeakList:
         # Filter candidate singletons by cluster score (only if modification)
         return (
             peak_df.filter(
-                (pl.col("cluster_score") >= 0) | (~pl.col("is_modification"))
+                (pl.col("cluster_score") >= min_score) | (~pl.col("is_modification"))
             )
         ).sort("count", descending=True)
 
