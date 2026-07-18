@@ -6,16 +6,11 @@ import polars as pl
 import yaml
 
 from spectrseqtools.dataclasses import Sequence
-from spectrseqtools.error_calculator import ErrorUnderL1Norm
 from spectrseqtools.file_settings import load_alphabet
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 from spectrseqtools.parsers import PreprocessingOptions
 from spectrseqtools.preprocessing.preprocessing import Preprocessor
 
-EXPLANATION_MASSES = NucleotideAlphabet.from_file(
-    error=ErrorUnderL1Norm()
-).to_dataframe()
-MASSES = load_alphabet()
 HISTOGRAM_WIDTH = 850
 
 
@@ -63,15 +58,16 @@ def plot_singletons(
     )
 
     total_plot = alt.VConcatChart()
+    masses = load_alphabet(input_path=preprocessor.file_settings.alphabet_path)
     for scan_idx, scan_data in enumerate(valid_scans):
-        scan_plot = plot_scan(data=scan_data, true_nucs=true_nucleosides)
+        scan_plot = plot_scan(data=scan_data, true_nucs=true_nucleosides, masses=masses)
         total_plot &= scan_plot
         scan_plot.configure_view(strokeWidth=0).save(scan_dir / f"scan_{scan_idx}.html")
 
     return total_plot.configure_view(strokeWidth=0)
 
 
-def plot_scan(data: pl.DataFrame, true_nucs: Set[str]):
+def plot_scan(data: pl.DataFrame, true_nucs: Set[str], masses):
     # Select highest measured intensity peak
     max_intensity = data["intensity"].max()
 
@@ -85,7 +81,7 @@ def plot_scan(data: pl.DataFrame, true_nucs: Set[str]):
     data_singletons = data_singletons.with_columns(
         pl.col("id")
         .map_elements(
-            lambda x: MASSES.row(named=True, by_predicate=pl.col("id") == x)[
+            lambda x: masses.row(named=True, by_predicate=pl.col("id") == x)[
                 "encoding"
             ],
             return_dtype=str,
@@ -93,7 +89,7 @@ def plot_scan(data: pl.DataFrame, true_nucs: Set[str]):
         .alias("nuc_id"),
         pl.col("id")
         .map_elements(
-            lambda x: MASSES.row(named=True, by_predicate=pl.col("id") == x)[
+            lambda x: masses.row(named=True, by_predicate=pl.col("id") == x)[
                 "canonical_name"
             ],
             return_dtype=str,
