@@ -208,6 +208,10 @@ class RawPeakList:
             .sort("scan_time")
         )
 
+        # Return None if no singletons could be matched
+        if len(peak_df) == 0:
+            return None
+
         # Map representative nucleotide, cluster score, and count to each nucleotide group
         peak_df = peak_df.group_by("names").map_groups(
             lambda x: pl.DataFrame(
@@ -215,6 +219,7 @@ class RawPeakList:
                     "id": x["names"][0],
                     "count": len(x["names"]),
                     "cluster_score": calculate_cluster_score(x["scan_time"]),
+                    "mz": x["mz"][0],
                 }
             )
         )
@@ -236,6 +241,7 @@ class RawPeakList:
             .with_columns(
                 pl.lit(0).alias("count"),
                 pl.lit(-1.0).alias("cluster_score"),
+                pl.lit(0.0).alias("mz"),
             )
             .join(peak_df, on="id", how="anti")
         )
