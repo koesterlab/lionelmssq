@@ -220,14 +220,14 @@ class Preprocessor:
             [ms2_scans[idx] for idx in range(len(ms2_scans)) if mask[idx]],
         )
 
-    def identify_singletons(self) -> pl.DataFrame:
+    def collect_raw_peaks(self) -> RawPeakList:
         """
-        Determine singleton candidates from MS2 scans in ThermoFisher RAW file.
+        Collect raw peaks from MS2 scans in ThermoFisher RAW file.
 
         Returns
         -------
-        polars.DataFrame
-            Dataframe containing singleton candidates.
+        peak_list : RawPeakList
+            List of raw peaks.
 
         """
         # Initialize iterator for RAW file
@@ -250,6 +250,19 @@ class Preprocessor:
             peak_list += RawPeakList.from_scan(
                 scan=scan, boundaries=self.singleton_boundaries
             )
+        return peak_list
+
+    def identify_singletons(self) -> pl.DataFrame:
+        """
+        Determine singleton candidates from MS2 scans in ThermoFisher RAW file.
+
+        Returns
+        -------
+        polars.DataFrame
+            Dataframe containing singleton candidates.
+
+        """
+        peak_list = self.collect_raw_peaks()
 
         return peak_list.to_singletons(
             alphabet_path=self.file_settings.alphabet_path,
