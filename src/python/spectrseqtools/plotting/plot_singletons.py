@@ -16,14 +16,6 @@ EXPLANATION_MASSES = NucleotideAlphabet.from_file(
     error=ErrorUnderL1Norm()
 ).to_dataframe()
 MASSES = load_alphabet()
-NUCLEOTIDE_DF = NucleotideAlphabet.from_file(error=ErrorUnderL1Norm()).to_dataframe()
-NUC_REPS = {
-    **{
-        nuc: row[NUCLEOTIDE_DF.get_column_index("names")][0]
-        for row in NUCLEOTIDE_DF.rows()
-        for nuc in row[NUCLEOTIDE_DF.get_column_index("names")]
-    }
-}
 HISTOGRAM_WIDTH = 850
 
 
@@ -38,10 +30,20 @@ def plot_singletons(
 
     """
     preprocessor = Preprocessor(options=preprocessing_options)
+    alphabet = NucleotideAlphabet.from_file(
+        error=preprocessor.error, input_path=preprocessor.file_settings.alphabet_path
+    ).to_dataframe()
+    nuc_reps = {
+        **{
+            nuc: row[alphabet.get_column_index("names")][0]
+            for row in alphabet.rows()
+            for nuc in row[alphabet.get_column_index("names")]
+        }
+    }
     with open(preprocessor.file_settings.meta_path, "r", encoding="utf-8") as f:
         meta_params = yaml.safe_load(f)
         true_nucleosides = set(
-            NUC_REPS[nuc]
+            nuc_reps[nuc]
             for nuc in Sequence.from_str(meta_params["true_sequence"]).sequence
         )
 
@@ -65,8 +67,6 @@ def plot_singletons(
         scan_plot = plot_scan(data=scan_data, true_nucs=true_nucleosides)
         total_plot &= scan_plot
         scan_plot.configure_view(strokeWidth=0).save(scan_dir / f"scan_{scan_idx}.html")
-
-    print(len(valid_scans))
 
     return total_plot.configure_view(strokeWidth=0)
 
