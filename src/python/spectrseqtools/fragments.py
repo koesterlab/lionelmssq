@@ -454,28 +454,32 @@ class StandardUnitFragments:
         """
         is_invalid = []
         for fragment in self.fragments.rows(named=True):
-            # TODO: Add terminal-fragment filter based on LP output of
-            #  sequence-length estimation and reuse the below (for speed-up)
-            # # Skip terminal (i.e. non-internal) fragments
-            # if (
-            #     "START" in fragment["fragmentation"]
-            #     or "END" in fragment["fragmentation"]
-            # ):
-            #     continue
+            try:
+                # TODO: Add terminal-fragment filter based on LP output of
+                #  sequence-length estimation and reuse the below (for speed-up)
+                # # Skip terminal (i.e. non-internal) fragments
+                # if (
+                #     "START" in fragment["fragmentation"]
+                #     or "END" in fragment["fragmentation"]
+                # ):
+                #     continue
 
-            # Initialize LP instance for a singular fragment
-            filter_instance = LinearProgramInstance(
-                fragments=pl.DataFrame(fragment),
-                alphabet=inferrer.alphabet,
-                seq=inferrer.seq,
-                skeleton_seq=skeleton_seq,
-            )
+                # Initialize LP instance for a singular fragment
+                filter_instance = LinearProgramInstance(
+                    fragments=pl.DataFrame(fragment),
+                    alphabet=inferrer.alphabet,
+                    seq=inferrer.seq,
+                    skeleton_seq=skeleton_seq,
+                )
 
-            # Check whether fragment can feasibly be aligned to skeleton
-            if filter_instance.minimize_error(
-                solver_params=solver_params
-            ) > inferrer.error.get_threshold(mass_list=[fragment["observed_mass"]]):
+                # Check whether fragment can feasibly be aligned to skeleton
+                if filter_instance.minimize_error(
+                    solver_params=solver_params
+                ) > inferrer.error.get_threshold(mass_list=[fragment["observed_mass"]]):
+                    is_invalid.append(fragment["index"])
+            except Exception:
                 is_invalid.append(fragment["index"])
+
 
         # Return only valid fragments
         self.filter_by_index_list(invalid_indices=is_invalid)
