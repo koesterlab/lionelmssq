@@ -275,13 +275,16 @@ class LinearProgramInstance:
             Minimal error within timeframe.
 
         """
-        # Initialize solver
-        solver = getSolver(**solver_params.to_dict(filter_only=True))
+        try:
+            # Initialize solver
+            solver = getSolver(**solver_params.to_dict(filter_only=True))
 
-        lp_problem = self._define_lp_problem(full_problem=False)
-        _ = lp_problem.solve(solver)
-        score = lp_problem.objective.value()
-        return np.inf if score is None else score
+            lp_problem = self._define_lp_problem(full_problem=False)
+            _ = lp_problem.solve(solver)
+            score = lp_problem.objective.value()
+            return np.inf if score is None else score
+        except Exception:
+            return np.inf
 
     def evaluate(self, solver_params: SolverParameters) -> Prediction:
         """
