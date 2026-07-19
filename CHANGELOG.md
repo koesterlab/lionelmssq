@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.2.0](https://github.com/spectrseq/spectrseqtools/compare/v0.1.3...v0.2.0) (2026-07-19)
+
+
+### Features
+
+* add option to use highs solver ([#65](https://github.com/spectrseq/spectrseqtools/issues/65)) ([e29d684](https://github.com/spectrseq/spectrseqtools/commit/e29d68440abb44e10b7e84d865b350f4c05c3c75))
+* allow setting of relevant prediction parameters ([#66](https://github.com/spectrseq/spectrseqtools/issues/66)) ([392eccc](https://github.com/spectrseq/spectrseqtools/commit/392eccc2d012fcb42313b58b00118707619c98d7))
+* allow setting of relevant preprocessing parameters ([#61](https://github.com/spectrseq/spectrseqtools/issues/61)) ([b122921](https://github.com/spectrseq/spectrseqtools/commit/b122921285fa956bc2618ac62ec3e9dbc8cb577a))
+* enforce intact mass compatibility in lp ([#67](https://github.com/spectrseq/spectrseqtools/issues/67)) ([c736f74](https://github.com/spectrseq/spectrseqtools/commit/c736f74f4b967781e0bb323c3140b5c2c293873d))
+* plot fragments colorcoded based on tolerance ([#54](https://github.com/spectrseq/spectrseqtools/issues/54)) ([2fe01e3](https://github.com/spectrseq/spectrseqtools/commit/2fe01e3edcd1b8cb43ea177705272385a50705c0))
+* plot identified singletons ([#68](https://github.com/spectrseq/spectrseqtools/issues/68)) ([f8e13b3](https://github.com/spectrseq/spectrseqtools/commit/f8e13b3fb493c930dfa68b314c94a94fa878570c))
+* split preprocessing and prediction into separate subcommands ([#58](https://github.com/spectrseq/spectrseqtools/issues/58)) ([1eb9c47](https://github.com/spectrseq/spectrseqtools/commit/1eb9c47f8bb577bc438a8e38fe8e497f089cb7f4))
+
+
+### Bug Fixes
+
+* adapt testing to added rust core ([#59](https://github.com/spectrseq/spectrseqtools/issues/59)) ([2a7bbd1](https://github.com/spectrseq/spectrseqtools/commit/2a7bbd1ce9ede0e3bb4d13005af2eeb8fd279462))
+* catch none type errors during lp based filtering ([#69](https://github.com/spectrseq/spectrseqtools/issues/69)) ([496e664](https://github.com/spectrseq/spectrseqtools/commit/496e66457f408e2f99588fed3295ed7fe0a6d346))
+* process last bin during skeleton building even if containing only one fragment ([#63](https://github.com/spectrseq/spectrseqtools/issues/63)) ([76db9a2](https://github.com/spectrseq/spectrseqtools/commit/76db9a2ba4f3511dac9a6d0b15556a2870989554))
+
+
+### Performance Improvements
+
+* reduce search space with tightening allowed by new modularization ([#64](https://github.com/spectrseq/spectrseqtools/issues/64)) ([c4c02f9](https://github.com/spectrseq/spectrseqtools/commit/c4c02f9cc265f201253c5f03f271b7dbf5043f8f))
+
 ## [0.1.3](https://github.com/spectrseq/spectrseqtools/compare/v0.1.2...v0.1.3) (2026-02-15)
 
 
