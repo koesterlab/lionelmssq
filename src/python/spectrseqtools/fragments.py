@@ -480,7 +480,6 @@ class StandardUnitFragments:
             except Exception:
                 is_invalid.append(fragment["index"])
 
-
         # Return only valid fragments
         self.filter_by_index_list(invalid_indices=is_invalid)
 
