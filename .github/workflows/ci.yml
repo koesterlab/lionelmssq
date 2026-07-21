@@ -43,3 +43,17 @@ jobs:
 
       - run: |
           pixi run test -v
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup pixi
+        uses: prefix-dev/setup-pixi@v0
+
+      - name: Build wheel distribution
+        uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          args: --release
