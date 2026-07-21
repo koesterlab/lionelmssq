@@ -44,7 +44,7 @@ jobs:
       - run: |
           pixi run test -v
 
-  build:
+  test-pypi-publish:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -57,3 +57,8 @@ jobs:
         with:
           command: build
           args: --release
+
+      - name: Publishing to Test PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
