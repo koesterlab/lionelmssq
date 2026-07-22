@@ -16,6 +16,8 @@ tests/testcases/*/fragments.raw
 tests/testcases/*/fragments.singletons.tsv
 tests/testcases/*/fragments.standard_unit_fragments.tsv
 tests/testcases/*/fragments.testing.meta.yaml
+tests/testcases/*/singletons.plot.html
+tests/testcases/*/singletons/*.html
 tests/scratch_*
 /target
 /.pixi

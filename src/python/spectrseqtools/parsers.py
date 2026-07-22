@@ -106,7 +106,7 @@ class PreprocessingOptions(ddargparse.OptionsBase):
         default=2e-5,
         metadata={
             "help": "Error tolerance for each individual peak "
-            "(used in ms_deisotope package as 'error_tol')."
+            "(used in ms_deisotope package as 'error_tolerance')."
         },
     )
     ms1_charge_range: Tuple[int, int] | None = field(
@@ -149,12 +149,12 @@ class PredictionOptions(ddargparse.OptionsBase):
     meta: Path = field(
         metadata={"help": "Path to YAML with meta information."},
     )
-    fragment_predictions: Path | None = field(
+    fragment_predictions: Path = field(
         metadata={
             "help": "Path to TSV table that shall contain the per fragment predictions."
         },
     )
-    sequence_prediction: Path | None = field(
+    sequence_prediction: Path = field(
         metadata={
             "help": "Path to FASTA file that shall contain the predicted sequence."
         },
@@ -230,11 +230,11 @@ class PredictionOptions(ddargparse.OptionsBase):
         metadata={"help": "Number of threads to use for the optimization problem."},
     )
     intensity_cutoff_percentile: int = field(
-        default=75,
+        default=80,
         metadata={"help": "Intensity percentile used as cutoff."},
     )
     composition_filter_weight_factor: float = field(
-        default=1.0,
+        default=2.0,
         metadata={
             "help": "Nucleotide weight factor used during composition-based filtering."
         },

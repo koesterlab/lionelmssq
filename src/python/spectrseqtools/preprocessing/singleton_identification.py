@@ -133,23 +133,48 @@ class RawPeakList:
                 )
         return RawPeakList(peaks=peak_list)
 
+    def split_by_scan(self) -> List[Self]:
+        """Split peak list into multiple based on scan ID."""
+        new_lists = {}
+        for peak in self.peaks:
+            if peak.scan_id in new_lists:
+                new_lists[peak.scan_id].append(peak)
+            else:
+                new_lists[peak.scan_id] = [peak]
+        return [RawPeakList(peaks=peaks) for peaks in new_lists.values()]
+
+    def to_dataframe(self) -> pl.DataFrame:
+        """Build Polars dataframe from raw peaks."""
+        return pl.DataFrame(
+            data=np.array(
+                [[peak.__dict__[key] for key in COL_TYPES_RAW] for peak in self.peaks]
+            ),
+            schema=COL_TYPES_RAW,
+        )
+
     def to_singletons(
-        self, alphabet_path: Path, error: ErrorCalculator, filter_cluster_score = True
+        self,
+        alphabet_path: Path | None,
+        error: ErrorCalculator,
+        enforce_unmodified: bool = True,
+        min_score: float = 0.0,
     ) -> pl.DataFrame:
         """
         Select candidate singletons based on raw peaks.
 
         Build dataframe of raw peaks, match theoretical and observed mz,
-        cluster them, and if 'filter_cluster_score'=True filter the candidates 
-        based on their cluster score. If 'filter_cluster_score'=False, return all
-        candidate singletons regardless of clustering score.
+        cluster them, and filter the candidates based on their cluster score.
 
         Parameters
         ----------
-        alphabet_path : Path
+        alphabet_path : Path | None
             Path to alphabet of considered nucleotides.
         error : ErrorCalculator
             Error calculator.
+        enforce_unmodified : bool
+            Flag whether to enforce all unmodified bases to be in singleton alphabet.
+        min_score : float
+            Minimum cluster score required to be considered for singleton alphabet.
 
         Returns
         -------
@@ -161,20 +186,16 @@ class RawPeakList:
             input_path=alphabet_path, error=error
         ).to_dataframe()
 
-        # Build dataframe from peak list
-        peak_df = pl.DataFrame(
-            data=np.array(
-                [[peak.__dict__[key] for key in COL_TYPES_RAW] for peak in self.peaks]
-            ),
-            schema=COL_TYPES_RAW,
-        )
-
-        # Match observed m/z to singleton m/z from the reference table
-        peak_df = peak_df.sort("mz").join_asof(
-            alphabet_df.sort("singleton_mz"),
-            left_on="mz",
-            right_on="singleton_mz",
-            strategy="nearest",
+        # Match observed m/z to singleton m/z from the alphabet
+        peak_df = (
+            self.to_dataframe()
+            .sort("mz")
+            .join_asof(
+                alphabet_df.sort("singleton_mz"),
+                left_on="mz",
+                right_on="singleton_mz",
+                strategy="nearest",
+            )
         )
 
         # Compute mass error between observed and singleton m/z
@@ -191,34 +212,51 @@ class RawPeakList:
             .sort("scan_time")
         )
 
+        # Return None if no singletons could be matched
         if len(peak_df) == 0:
-            return pl.DataFrame({"id": [], "cluster_score": [], "count": []})
-        
+            return None
+
         # Map representative nucleotide, cluster score, and count to each nucleotide group
         peak_df = peak_df.group_by("names").map_groups(
             lambda x: pl.DataFrame(
                 {
                     "id": x["names"][0],
-                    "cluster_score": calculate_cluster_score(x["scan_time"]),
                     "count": len(x["names"]),
+                    "cluster_score": calculate_cluster_score(x["scan_time"]),
+                    "mz": x["mz"][0],
                 }
             )
         )
 
-        # Filter candidate singletons by cluster score
-        if filter_cluster_score:
-            return (
-                peak_df.filter(pl.col("cluster_score") >= 0).select(
-                    ["id", "count", "cluster_score"]
-                )
-            ).sort("count", descending=True)
-        else:
-            return peak_df
+        # If desired, do not enforce unmodified bases to be singletons
+        if not enforce_unmodified:
+            # Filter candidate singletons by cluster score
+            return peak_df.filter(pl.col("cluster_score") >= min_score).sort(
+                "count", descending=True
+            )
 
-        # Only select singletons for new alphabet
-        return load_alphabet(input_path=alphabet_path).join(
-            singletons, on="id", how="inner"
+        # Extend singleton dataframe to include alphabet information
+        full_alphabet = load_alphabet(input_path=alphabet_path)
+        peak_df = full_alphabet.join(peak_df, on="id", how="inner")
+
+        # Extend singleton dataframe to include unmodified bases (if not found)
+        unmodified = (
+            full_alphabet.filter(~pl.col("is_modification"))
+            .with_columns(
+                pl.lit(0).alias("count"),
+                pl.lit(-1.0).alias("cluster_score"),
+                pl.lit(0.0).alias("mz"),
+            )
+            .join(peak_df, on="id", how="anti")
         )
+        peak_df = peak_df.vstack(unmodified)
+
+        # Filter candidate singletons by cluster score (only if modification)
+        return (
+            peak_df.filter(
+                (pl.col("cluster_score") >= min_score) | (~pl.col("is_modification"))
+            )
+        ).sort("count", descending=True)
 
 
 def calculate_cluster_score(scan_times: pl.Series) -> float:

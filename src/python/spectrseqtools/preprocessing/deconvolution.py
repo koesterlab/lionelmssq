@@ -145,11 +145,10 @@ class ScanDeconvoluter(ABC):
     averagine: ms_ditp.Averagine
     max_missed_peaks: int
     scale_method: str
-    error_tol: float
+    error_tolerance: float
     scorer: ms_ditp.MSDeconVFitter
     charge_range: Tuple[int, int] | None
     truncate_after: float
-    min_precursor_charge: int
 
     def to_scan_dependent_dict(
         self,
@@ -184,9 +183,6 @@ class ScanDeconvoluter(ABC):
         output_dict["peaklist"] = scan
         output_dict["priority_list"] = priority_list
         output_dict["minimum_intensity"] = self.select_min_intensity(scan=scan)
-
-        # Pop parameters not used by ms_deisotope
-        output_dict.pop("min_precursor_charge")
 
         return output_dict
 
@@ -334,15 +330,8 @@ class MS1Deconvoluter(ScanDeconvoluter):
         originally implemented by Moshir Harsh (btemoshir@gmail.com).
 
         """
-        # Remove insufficient peaks from priority list
-        priority_list = [
-            peak
-            for peak in priority_list
-            if isinstance(peak.charge, int) and peak.charge >= self.min_precursor_charge
-        ]
-
-        # Return an empty peak list if no priority peak is above the minimum charge state
-        if len(priority_list) == 0:
+        # Return empty peak list if no priority peak is above the minimum charge state
+        if priority_list is None or len(priority_list) == 0:
             return DeisotopedPeakList.default()
 
         # Convert scan to centroid data
@@ -456,13 +445,6 @@ class MS2Deconvoluter(ScanDeconvoluter):
         originally implemented by Moshir Harsh (btemoshir@gmail.com).
 
         """
-        # Return default if precursor charge is too low for consideration
-        if (
-            not isinstance(scan.precursor_information.charge, int)
-            or scan.precursor_information.charge < self.min_precursor_charge
-        ):
-            return DeisotopedPeakList.default()
-
         # Convert scan to centroid data
         scan.pick_peaks()
 

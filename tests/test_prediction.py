@@ -10,7 +10,8 @@ from spectrseqtools.enums import SolverType
 from spectrseqtools.error_calculator import ErrorCalculator
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 from spectrseqtools.parsers import PredictionOptions, PreprocessingOptions
-from spectrseqtools.plotting import plot_prediction
+from spectrseqtools.plotting.plot_fragments import plot_prediction
+from spectrseqtools.plotting.plot_singletons import plot_singletons
 from spectrseqtools.prediction.prediction import Predictor
 from spectrseqtools.preprocessing.preprocessing import Preprocessor
 
@@ -45,6 +46,18 @@ def test_testcase(testcase):
                 meta=base_path / "fragments.meta.yaml",
             )
         ).preprocess()
+
+        scan_path = base_path / "singletons"
+        if not os.path.exists(scan_path):
+            os.makedirs(scan_path)
+        singleton_plot = plot_singletons(
+            preprocessing_options=PreprocessingOptions(
+                input=base_path / "fragments.raw",
+                meta=base_path / "fragments.meta.yaml",
+            ),
+            scan_dir=scan_path,
+        )
+        singleton_plot.save(base_path / "singletons.plot.html")
     else:
         # Copy metadata otherwise
         with open(base_path / "fragments.preprocessed.meta.yaml", "w") as f:

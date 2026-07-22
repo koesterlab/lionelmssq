@@ -29,10 +29,6 @@ from spectrseqtools.sequence import SkeletonSequence
 MILP_QUASI_ONE_THRESHOLD = 0.9
 
 
-class LinearProgramInferenceError(Exception):
-    """Raised when LP output cannot be converted into a prediction."""
-
-
 def milp_is_one(var, threshold=MILP_QUASI_ONE_THRESHOLD):
     """Return whether variable is over threshold."""
     # Due to the LP relaxation, the LP sometimes does not exactly output
@@ -279,13 +275,16 @@ class LinearProgramInstance:
             Minimal error within timeframe.
 
         """
-        # Initialize solver
-        solver = getSolver(**solver_params.to_dict(filter_only=True))
+        try:
+            # Initialize solver
+            solver = getSolver(**solver_params.to_dict(filter_only=True))
 
-        lp_problem = self._define_lp_problem(full_problem=False)
-        _ = lp_problem.solve(solver)
-        score = lp_problem.objective.value()
-        return np.inf if score is None else score
+            lp_problem = self._define_lp_problem(full_problem=False)
+            _ = lp_problem.solve(solver)
+            score = lp_problem.objective.value()
+            return np.inf if score is None else score
+        except Exception:
+            return np.inf
 
     def evaluate(self, solver_params: SolverParameters) -> Prediction:
         """
@@ -311,14 +310,9 @@ class LinearProgramInstance:
         print(f"LP status after solving: {lp_problem.status}\n")
 
         # Interpret solution
-        try:
-            return Prediction(
-                sequence=self._get_sequence(), fragments=self._get_fragments()
-            )
-        except (TypeError, ValueError) as error:
-            raise LinearProgramInferenceError(
-                "LP output could not be converted into a prediction."
-            ) from error
+        return Prediction(
+            sequence=self._get_sequence(), fragments=self._get_fragments()
+        )
 
     def _get_sequence(self) -> Sequence:
         return Sequence(

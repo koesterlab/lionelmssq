@@ -2,6 +2,7 @@
 """Preprocessing of raw mass spectrometry data."""
 
 import importlib.resources
+from typing import List, Tuple
 
 import ms_deisotope as ms_ditp
 import polars as pl
@@ -25,6 +26,7 @@ from spectrseqtools.preprocessing.singleton_identification import (
 
 rt = get_mono()
 
+
 class Preprocessor:
     """Class for preprocessing of raw MS data."""
 
@@ -44,6 +46,7 @@ class Preprocessor:
             boundary_factor=options.boundary_factor,
             error=self.error,
         )
+        self.min_precursor_charge = options.min_precursor_charge
         self.intact_mass_cutoff_factor = options.intact_mass_cutoff_factor
 
         with open(self.file_settings.meta_path, "r", encoding="utf-8") as f:
@@ -57,28 +60,26 @@ class Preprocessor:
             averagine=averagine,
             max_missed_peaks=options.max_missed_peaks,
             scale_method=options.scale_method,
-            error_tol=options.peak_error_tol,
+            error_tolerance=options.peak_error_tol,
             scorer=ms_ditp.PenalizedMSDeconVFitter(
                 minimum_score=options.envelope_min_score,
                 mass_error_tolerance=options.envelope_error_tol,
             ),
             charge_range=options.ms1_charge_range,
             truncate_after=options.ms1_truncate_after,
-            min_precursor_charge=options.min_precursor_charge,
         )
         self.ms2_deconvoluter = MS2Deconvoluter(
             minimum_intensity=options.min_intensity,
             averagine=averagine,
             max_missed_peaks=options.max_missed_peaks,
             scale_method=options.scale_method,
-            error_tol=options.peak_error_tol,
+            error_tolerance=options.peak_error_tol,
             scorer=ms_ditp.MSDeconVFitter(
                 minimum_score=options.envelope_min_score,
                 mass_error_tolerance=options.envelope_error_tol,
             ),
             charge_range=options.ms2_charge_range,
             truncate_after=options.ms2_truncate_after,
-            min_precursor_charge=options.min_precursor_charge,
             isotopic_shift_factor=options.isotopic_shift_factor,
         )
 
@@ -150,9 +151,10 @@ class Preprocessor:
                 scan_bunch.precursor, scan_bunch.products
             )
 
-            priority_list, ms2_scans = priority_list_charge_filter(priority_list, 
-                                                                   ms2_scans, 
-                                                                   self.ms1_deconvoluter.min_precursor_charge)
+            # Filter scans by requiring sufficient charge
+            priority_list, ms2_scans = self.filter_ms2_scans_by_charge(
+                ms2_scans=ms2_scans, priority_list=priority_list
+            )
 
             # Deconvolute MS1 scan to get list of deisotoped peaks
             ms1_peak_list += self.ms1_deconvoluter.deconvolute_scan(
@@ -170,14 +172,62 @@ class Preprocessor:
 
         return ms1_fragments, ms2_fragments
 
-    def identify_singletons(self) -> pl.DataFrame:
+    def filter_ms2_scans_by_charge(
+        self,
+        priority_list: List[ms_ditp.processor.PriorityTarget],
+        ms2_scans: List[ms_ditp.data_source.Scan],
+    ) -> Tuple[List[ms_ditp.processor.PriorityTarget], List[ms_ditp.data_source.Scan]]:
         """
-        Determine singleton candidates from MS2 scans in ThermoFisher RAW file.
+        Filter out MS2 scans (and their priority targets) if charge insufficient.
+
+        Parameters
+        ----------
+        priority_list : List[ms_ditp.processor.PriorityTarget] | None
+            List of priority targets for deconvolution.
+        ms2_scans : List[ms_deisotope.data_source.Scan]
+            List of ThermoFisher MS2 scan.
 
         Returns
         -------
-        polars.DataFrame
-            Dataframe containing singleton candidates.
+        List[ms_ditp.processor.PriorityTarget] | None
+            Updated list of priority targets for deconvolution.
+        List[ms_deisotope.data_source.Scan]
+            Updated list of ThermoFisher MS2 scan.
+
+        """
+        for target, scan in zip(priority_list, ms2_scans):
+            if abs(target.mz - scan.precursor_information.mz) > 10e-3:
+                print(target.mz, scan.precursor_information.mz)
+                raise ValueError("Order not correct.")
+
+        # Check whether target charge is too low for consideration (if given)
+        target_mask = [
+            isinstance(peak.charge, int) and peak.charge >= self.min_precursor_charge
+            for peak in priority_list
+        ]
+
+        # Check whether precursor charge is too low for consideration (if given)
+        scan_mask = [
+            isinstance(peak.precursor_information.charge, int)
+            and peak.precursor_information.charge >= self.min_precursor_charge
+            for peak in ms2_scans
+        ]
+
+        # Return entries for which charges of both target and scan are sufficient
+        mask = [target_mask[idx] and scan_mask[idx] for idx in range(len(ms2_scans))]
+        return (
+            [priority_list[idx] for idx in range(len(priority_list)) if mask[idx]],
+            [ms2_scans[idx] for idx in range(len(ms2_scans)) if mask[idx]],
+        )
+
+    def collect_raw_peaks(self) -> RawPeakList:
+        """
+        Collect raw peaks from MS2 scans in ThermoFisher RAW file.
+
+        Returns
+        -------
+        peak_list : RawPeakList
+            List of raw peaks.
 
         """
         # Initialize iterator for RAW file
@@ -200,11 +250,67 @@ class Preprocessor:
             peak_list += RawPeakList.from_scan(
                 scan=scan, boundaries=self.singleton_boundaries
             )
+        return peak_list
+
+    def identify_singletons(self) -> pl.DataFrame:
+        """
+        Determine singleton candidates from MS2 scans in ThermoFisher RAW file.
+
+        Returns
+        -------
+        polars.DataFrame
+            Dataframe containing singleton candidates.
+
+        """
+        peak_list = self.collect_raw_peaks()
 
         return peak_list.to_singletons(
             alphabet_path=self.file_settings.alphabet_path,
             error=self.error,
-        )
+        ).drop("mz")
+
+    def identify_scans_with_full_singleton_set(
+        self, singletons: pl.DataFrame, id_list: List[str]
+    ) -> List[pl.DataFrame]:
+        """
+        Determine peaks from each scan that contains the full singleton set.
+
+        Returns
+        -------
+        List[polars.DataFrame]
+            List of dataframes containing peaks from scans with full singleton set.
+
+        """
+        peak_list = self.collect_raw_peaks()
+
+        # Collect data from valid scans (i.e. those that contain full singleton set)
+        valid_scans = []
+        for scan_peaks in peak_list.split_by_scan():
+            # Identify singletons for individual scan (without filter or enforced bases)
+            scan_singletons = scan_peaks.to_singletons(
+                alphabet_path=self.file_settings.updated_alphabet_path,
+                error=self.error,
+                enforce_unmodified=False,
+                min_score=-2.0,
+            )
+
+            # Skip scans without any singletons
+            if scan_singletons is None:
+                continue
+
+            # Skip scans without the full singleton set
+            scan_singletons = scan_singletons.filter(pl.col("id").is_in(id_list))
+            if len(scan_singletons) != len(singletons):
+                continue
+
+            # Append combined peak and singleton data from valid scan to list
+            entry = scan_peaks.to_dataframe()
+            scan_data = pl.DataFrame(
+                {"mz": entry["mz"], "intensity": entry["intensity"]}
+            ).sort("mz")
+            valid_scans.append(scan_data.join(scan_singletons, on="mz", how="left"))
+
+        return valid_scans
 
     def select_intact_mass(self, fragments: pl.DataFrame) -> float:
         """
@@ -248,7 +354,6 @@ class Preprocessor:
 
 def initialize_raw_file_iterator(
     file_path: str,
-    is_grouped = False
 ) -> ms_ditp.data_source.thermo_raw_net.ThermoRawLoader:
     """
     Initialize iterator over scans in ThermoFisher RAW file format.
@@ -269,8 +374,8 @@ def initialize_raw_file_iterator(
         file_path, _load_metadata=True
     )
 
-    # Initialize an iterator while grouping/ungrouping MS1 from MS2 scans based on 'is_grouped'
-    raw_file.make_iterator(grouped=is_grouped)
+    # Initialize an iterator while ungrouping MS1 from MS2 scans
+    raw_file.make_iterator(grouped=False)
 
     return raw_file
 
@@ -337,20 +442,3 @@ def set_averagine(backbone: AveragineBackbone) -> dict:
             )
 
     return average_composition
-
-def priority_list_charge_filter(
-        priority_list, 
-        ms2_scans, 
-        min_precursor_charge
-):
-    new_priority_list = []
-    new_ms2_scans = []
-
-    for p in range(len(priority_list)):
-        priority_peak = priority_list[p]
-        
-        if isinstance(priority_peak.charge, int) and priority_peak.charge >= min_precursor_charge:
-            new_priority_list.append(priority_list[p])
-            new_ms2_scans.append(ms2_scans[p])
-            
-    return new_priority_list, new_ms2_scans
