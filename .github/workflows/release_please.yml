@@ -37,8 +37,8 @@ jobs:
     permissions:
       id-token: write
     environment:
-      name: pypi
-      url: https://pypi.org/p/spectrseqtools
+      name: ${{ github.event_name == 'pull_request' && 'testpypi' || 'pypi' }}
+      url: ${{ github.event_name == 'pull_request' && 'https://test.pypi.org/p/spectrseqtools' || 'https://pypi.org/p/spectrseqtools' }}
     strategy:
       matrix:
         os:
