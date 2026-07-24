@@ -6,7 +6,7 @@ on:
     branches: 
       - "main"
 
-name: release-please
+name: publish-or-test-publish
 
 permissions:
   contents: write
@@ -18,26 +18,33 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
+    if: github.event_name != 'pull_request'
     steps:
       - uses: 8BitJonny/gh-get-current-pr@4.0.0
         id: pr
 
       - uses: GoogleCloudPlatform/release-please-action@v3
         id: release
-        if: steps.pr.outputs.pr_found == 'false'
         with:
           release-type: python
           package-name: spectrseqtools
 
-  publish:
+  publish-or-test-publish:
     runs-on: ubuntu-latest
     needs: release-please
-    if: ${{ needs.release-please.outputs.release_created }}
+    if: needs.release-please.outputs.release_created || github.event_name == 'pull_request'
     permissions:
       id-token: write
     environment:
       name: pypi
       url: https://pypi.org/p/spectrseqtools
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+          - macos-26-intel
     steps:
       - uses: actions/checkout@v6
 
@@ -62,10 +69,10 @@ jobs:
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
-        if: ${{ needs.release-please.outputs.release_created }}
+        if: github.event_name != 'pull_request'
 
       - name: Publishing to Test PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
-        if: ${{ !needs.release-please.outputs.release_created }}
+        if: github.event_name == 'pull_request'
         with:
           repository-url: https://test.pypi.org/legacy/
