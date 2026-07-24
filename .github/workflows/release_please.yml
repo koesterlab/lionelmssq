@@ -18,13 +18,14 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
-    if: github.event_name != 'pull_request'
     steps:
       - uses: 8BitJonny/gh-get-current-pr@4.0.0
         id: pr
+        if: github.event_name != 'pull_request'
 
       - uses: GoogleCloudPlatform/release-please-action@v3
         id: release
+        if: github.event_name != 'pull_request'
         with:
           release-type: python
           package-name: spectrseqtools
