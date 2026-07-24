@@ -48,6 +48,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/spectrseqtools
     steps:
       - uses: actions/checkout@v6
 
