@@ -2,6 +2,9 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches: 
+      - "main"
 
 name: release-please
 
@@ -16,8 +19,12 @@ jobs:
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
     steps:
+      - uses: 8BitJonny/gh-get-current-pr@4.0.0
+        id: pr
+
       - uses: GoogleCloudPlatform/release-please-action@v3
         id: release
+        if: steps.pr.outputs.pr_found == 'false'
         with:
           release-type: python
           package-name: spectrseqtools
@@ -37,9 +44,28 @@ jobs:
       - name: Setup pixi
         uses: prefix-dev/setup-pixi@v0
 
-      - name: Build source and wheel distribution + check build
+      - name: Build source distribution + check build
         run: |
-          pixi run -e dev check-build
+          pixi run -e dev build
+
+      - name: Build wheel distribution
+        uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          args: --release --out dist
+
+      - name: Build source distribution
+        uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        if: ${{ needs.release-please.outputs.release_created }}
+
+      - name: Publishing to Test PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        if: ${{ !needs.release-please.outputs.release_created }}
+        with:
+          repository-url: https://test.pypi.org/legacy/
