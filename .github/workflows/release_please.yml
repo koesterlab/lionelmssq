@@ -31,8 +31,8 @@ jobs:
           package-name: spectrseqtools
 
   publish-or-test-publish:
-    name: ${{ github.event_name == 'pull_request' && 'test-publish' || 'publish' }} (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    name: ${{ github.event_name == 'pull_request' && 'test-publish' || 'publish' }}
+    runs-on: ubuntu-latest
     needs: release-please
     if: needs.release-please.outputs.release_created || github.event_name == 'pull_request'
     permissions:
@@ -40,31 +40,12 @@ jobs:
     environment:
       name: ${{ github.event_name == 'pull_request' && 'testpypi' || 'pypi' }}
       url: ${{ github.event_name == 'pull_request' && 'https://test.pypi.org/p/spectrseqtools' || 'https://pypi.org/p/spectrseqtools' }}
-    strategy:
-      matrix:
-        os:
-          - ubuntu-latest
-          - macos-latest
-          - windows-latest
-          - macos-26-intel
     steps:
       - uses: actions/checkout@v6
 
       - uses: prefix-dev/setup-pixi@v0
-        # on ubuntu, we use the manylinux container, no need for pixi setup
-        if: matrix.os != 'ubuntu-latest' 
 
-      - name: Build wheel distribution
-        uses: PyO3/maturin-action@v1
-        with:
-          command: build
-          args: --release --out dist
-
-      - name: Build source distribution
-        uses: PyO3/maturin-action@v1
-        with:
-          command: sdist
-          args: --out dist
+      - run: pixi sbuild
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
