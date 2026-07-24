@@ -58,7 +58,6 @@ spectrseqtools = { path = ".", editable = true }
 ruff = "*"
 pytest = "*"
 pyrefly = "*"
-twine = "*"
 maturin = "*"
 
 [tool.pixi.feature.dev.tasks]
