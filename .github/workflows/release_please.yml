@@ -31,8 +31,8 @@ jobs:
           package-name: spectrseqtools
 
   publish-or-test-publish:
-    name: ${{ github.event_name == 'pull_request' && 'test-publish' || 'publish' }}
-    runs-on: ubuntu-latest
+    name: ${{ github.event_name == 'pull_request' && 'test-publish' || 'publish' }} (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     needs: release-please
     if: needs.release-please.outputs.release_created || github.event_name == 'pull_request'
     permissions:
