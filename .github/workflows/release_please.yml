@@ -59,3 +59,4 @@ jobs:
         if: github.event_name == 'pull_request'
         with:
           repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
