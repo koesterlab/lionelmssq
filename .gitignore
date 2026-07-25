@@ -24,5 +24,4 @@ tests/scratch_*
 /dist
 # maturin-generated dynamic libraries
 *.so
-/pixi.lock
 /Cargo.lock
