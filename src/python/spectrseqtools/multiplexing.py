@@ -62,33 +62,33 @@ def priority_list_charge_filter(
     return new_priority_list, new_ms2_scans
 
     
-# def ms1_to_ms2_dict(raw_file_read):
-#     raw_file_read.reset()
-#     raw_file_read.make_iterator(grouped = False)
+def ms1_to_ms2_dict(raw_file_read):
+    raw_file_read.reset()
+    raw_file_read.make_iterator(grouped = False)
     
-#     ms2_to_ms1_idx = {}
+    ms2_to_ms1_idx = {}
 
-#     while True:
-#         try:
-#             # Select next scan
-#             scan = next(raw_file_read)
+    while True:
+        try:
+            # Select next scan
+            scan = next(raw_file_read)
 
-#             # Skip scan if it is no MS2 scan
-#             if scan.ms_level != 2:
-#                 continue
+            # Skip scan if it is no MS2 scan
+            if scan.ms_level != 2:
+                continue
             
-#             ms2_idx = scan.index
-#             ms1_idx = scan.precursor_information.precursor.index
+            ms2_idx = scan.index
+            ms1_idx = scan.precursor_information.precursor.index
             
-#             ms2_to_ms1_idx[ms2_idx] = ms1_idx
-#         except StopIteration:
-#             break
+            ms2_to_ms1_idx[ms2_idx] = ms1_idx
+        except StopIteration:
+            break
 
-#     ms1_to_ms2_idx = defaultdict(list)
-#     for ms2_idx, ms1_idx in ms2_to_ms1_idx.items():
-#         ms1_to_ms2_idx[ms1_idx].append(ms2_idx)
+    ms1_to_ms2_idx = defaultdict(list)
+    for ms2_idx, ms1_idx in ms2_to_ms1_idx.items():
+        ms1_to_ms2_idx[ms1_idx].append(ms2_idx)
     
-#     return ms1_to_ms2_idx
+    return ms1_to_ms2_idx
 
 # def deconvolute_average_ms1_scan(average_ms1_scan, priority_ms1_peaks, priority_ms1_charges, ms2_scan_list, ms1_decon_params):
 #     max_abs_charge = max(abs(c) for c in priority_ms1_charges if c)
@@ -350,6 +350,7 @@ def priority_list_charge_filter(
 @dataclass
 class PreprocessedGroup:
     fragments: pl.DataFrame
+    singletons: pl.DataFrame
     meta: dict
 
 def pre_process_multiplexing(file_path, 
@@ -406,7 +407,7 @@ def pre_process_multiplexing(file_path,
             scale_method=options.scale_method,
             error_tol=options.peak_error_tol,
             scorer=ms_ditp.MSDeconVFitter(
-                minimum_score=10,#options.envelope_min_score,
+                minimum_score=options.envelope_min_score,
                 mass_error_tolerance=options.envelope_error_tol,
             ),
             charge_range=options.ms2_charge_range,
@@ -414,7 +415,7 @@ def pre_process_multiplexing(file_path,
             min_precursor_charge=options.min_precursor_charge,
             isotopic_shift_factor=options.isotopic_shift_factor,
         )
-    
+        
     # Initialize iterator for RAW file
     raw_file_read = initialize_raw_file_iterator(
         file_path=str(file_path)
@@ -467,9 +468,7 @@ def pre_process_multiplexing(file_path,
             
             if ms2_scan_idx in ms2_fragment_cache.keys():
                 continue
-            ms2_fragment_cache[ms2_scan_idx] = ms2_deconvoluter.deconvolute_scan(
-                scan=ms2_scan,
-            )
+            ms2_fragment_cache[ms2_scan_idx] = ms2_scan
 
         if len(ms1_masses) != len(ms2_scan_idx_list):
             raise("ms1_masses and ms2_scan_idx_list are not equal in length!")
@@ -490,38 +489,203 @@ def pre_process_multiplexing(file_path,
 
     df_window_info = pl.DataFrame(window_mass_info)
 
-    assumed_num_subgroups = 10
-
-    df_window_info = df_window_info.sort("ms1_mass").with_columns(
-        (
-            abs(pl.col("ms1_mass").shift(1) - pl.col("ms1_mass"))
-            / pl.col("ms1_mass").shift(1)
+    df_window_info = (
+        df_window_info
+        .with_row_index("_row_id")
+        .sort("ms1_scan_time")
+        .with_columns(
+            pl.col("ms1_scan_time")
+            .diff()
+            .gt(max_time_diff)
+            .fill_null(False)
+            .cum_sum()
+            .alias("ms1_time_group")
         )
-        .fill_null(0)
-        .fill_nan(0)
-        .gt(error.tolerance)
-        .cum_sum().cast(pl.Float64)
-        .alias("ms1_mass_group")
-    ).sort(["ms1_mass_group", "ms1_scan_time"])
+    )
 
-    df_window_info = df_window_info.with_columns(
-        pl.col("ms1_scan_time")
-        .diff()
-        .gt(max_time_diff)
-        .fill_null(False)
-        .cum_sum()
-        .over("ms1_mass_group", 
-            order_by = "ms1_scan_time")
-        .mul(1/assumed_num_subgroups)
-        .add(pl.col("ms1_mass_group"))
-        .alias("ms1_mass_group")
+    detect_adducts = True
+
+    HYDROGEN_MONOISOTOPIC_MASS = 1.00782503223
+    SODIUM_MONOISOTOPIC_MASS = 22.9897692820
+    POTASSIUM_MONOISOTOPIC_MASS = 38.9637064864
+
+    adducts = (
+        {
+            "none": 0.0,
+            "Na-H": (
+                SODIUM_MONOISOTOPIC_MASS
+                - HYDROGEN_MONOISOTOPIC_MASS
+            ),
+            "K-H": (
+                POTASSIUM_MONOISOTOPIC_MASS
+                - HYDROGEN_MONOISOTOPIC_MASS
+            ),
+        }
+        if detect_adducts
+        else {
+            "none": 0.0,
+        }
+    )
+
+    df_adducts = pl.DataFrame(
+        {
+            "adduct_type": list(adducts.keys()),
+            "adduct_mass": list(adducts.values()),
+        }
+    )
+
+    df_adduct_candidates = (
+        df_window_info
+        .join(
+            df_adducts,
+            how="cross",
+        )
+        .with_columns(
+            (
+                pl.col("ms1_mass")
+                - pl.col("adduct_mass")
+            ).alias("_candidate_ms1_mass")
+        )
+    )
+
+    previous_candidate_mass = pl.col("_candidate_ms1_mass").shift(1)
+
+    df_adduct_candidates = (
+        df_adduct_candidates
+        .with_columns(
+            (
+                (
+                    pl.col("_candidate_ms1_mass")
+                    - previous_candidate_mass
+                ).abs()
+                / previous_candidate_mass.abs()
+            )
+            .fill_null(0.0)
+            .fill_nan(0.0)
+            .gt(error.tolerance)
+            .cum_sum()
+            .over(
+                "ms1_time_group",
+                order_by="_candidate_ms1_mass",
+            )
+            .alias("_local_candidate_group")
+        )
+    )
+
+    candidate_group_support = (
+        df_adduct_candidates
+        .group_by(
+            [
+                "ms1_time_group",
+                "_local_candidate_group",
+            ]
+        )
+        .agg(
+            pl.col("_row_id")
+            .n_unique()
+            .alias("_group_support")
+        )
+    )
+
+    df_adduct_candidates = (
+        df_adduct_candidates
+        .join(
+            candidate_group_support,
+            on=[
+                "ms1_time_group",
+                "_local_candidate_group",
+            ],
+            how="left",
+        )
+        .with_columns(
+            (
+                pl.col("adduct_type") == "none"
+            ).alias("_prefer_no_adduct")
+        )
+    )
+
+    selected_assignments = (
+        df_adduct_candidates
+        .sort(
+            by=[
+                "_row_id",
+                "_group_support",
+                "_prefer_no_adduct",
+                "_candidate_ms1_mass",
+            ],
+            descending=[
+                False,
+                True,
+                True,
+                False,
+            ],
+        )
+        .unique(
+            subset="_row_id",
+            keep="first",
+            maintain_order=True,
+        )
+    )
+
+    mass_group_mapping = (
+        selected_assignments
+        .select(
+            [
+                "ms1_time_group",
+                "_local_candidate_group",
+            ]
+        )
+        .unique()
+        .sort(
+            [
+                "ms1_time_group",
+                "_local_candidate_group",
+            ]
+        )
+        .with_row_index("ms1_mass_group")
+    )
+
+    selected_assignments = (
+        selected_assignments
+        .join(
+            mass_group_mapping,
+            on=[
+                "ms1_time_group",
+                "_local_candidate_group",
+            ],
+            how="left",
+        )
+        .select(
+            "_row_id",
+            "ms1_mass_group",
+            pl.col("adduct_type").alias("inferred_adduct_type"),
+            pl.col("_candidate_ms1_mass").alias(
+                "adduct_normalized_ms1_mass"
+            ),
+        )
+    )
+
+    df_window_info = (
+        df_window_info
+        .join(
+            selected_assignments,
+            on="_row_id",
+            how="left",
+            validate="1:1",
+        )
+        .drop("_row_id")
     )
 
     preprocessed_groups = []
-    for grp_number in df_window_info["ms1_mass_group"].unique():
+    for grp_number in tqdm.tqdm(
+        df_window_info["ms1_mass_group"].unique(), 
+        desc = "Generating fragments and singletons"
+        ):
         df_filter = df_window_info.filter(pl.col("ms1_mass_group") == grp_number)
-        
-        # adduct_types = df_filter["adduct_type"].unique().to_list()
+
+        adduct_types = df_filter["inferred_adduct_type"].unique().to_list()
+        min_scan_time = df_filter["ms1_scan_time"].min()
+        max_scan_time = df_filter["ms1_scan_time"].max()
 
         precursor_min_idx = df_filter["ms1_mass"].arg_min()
         intact_mass = df_filter["ms1_mass"][precursor_min_idx]
@@ -529,16 +693,35 @@ def pre_process_multiplexing(file_path,
         if intact_mass < three_prime_tag+five_prime_tag:
             continue
 
-        ms2_peak_list = DeisotopedPeakList.default()
+        ms2_scan_list = []
 
         ms2_index_list = df_filter["ms2_scan_idx"].unique().to_list()
         for ms2_idx in ms2_index_list:
-            ms2_peak_list += ms2_fragment_cache[ms2_idx]
+            ms2_scan_list.append(ms2_fragment_cache[ms2_idx])
+
+        if len(ms2_scan_list)>1:
+            average_ms2_scan = ms2_scan_list[0].average_with(ms2_scan_list[1:])
+        else:
+            average_ms2_scan = ms2_scan_list[0]
+        average_ms2_scan.pick_peaks()
+
+        singletons = RawPeakList.from_scan(
+            average_ms2_scan, 
+            SingletonBoundaries.from_alphabet_file(
+                input_path=options.alphabet,
+                boundary_factor=0.5,
+                error=error,)
+        ).to_singletons(alphabet_path = options.alphabet, error = error)
+
+        ms2_peak_list = ms2_deconvoluter.deconvolute_scan(
+            scan=average_ms2_scan,
+        )
+            
+        if len(ms2_peak_list.peaks) == 0:
+            continue
 
         fragments = ms2_peak_list.to_fragments(tolerance=error.tolerance)
 
-        if len(fragments) == 0:
-            continue
         fragments = fragments.rename({"neutral_mass": "observed_mass"}).filter(pl.col("observed_mass")<intact_mass)
 
         meta = {
@@ -547,13 +730,16 @@ def pre_process_multiplexing(file_path,
             "3_prime_tag": three_prime_tag, #728.2006,
             "5_prime_tag": five_prime_tag, #170.9755,
             "intact_mass": intact_mass,
-            # "adduct_types": adduct_types
+            "min_scan_time": min_scan_time,
+            "max_scan_time": max_scan_time,
+            "adduct_types": adduct_types
         }
 
         preprocessed_groups.append(PreprocessedGroup(fragments = fragments,
+                                                    singletons = singletons,
                                                         meta = meta))
         
-    return preprocessed_groups
+    return df_window_info, preprocessed_groups
 
 # #POST PROCESSING
 # def targ_pred_pairing(x):
