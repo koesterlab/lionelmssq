@@ -2,7 +2,7 @@
 """Prediction of sequence and fragments."""
 
 from typing import Set, Tuple
-
+import polars as pl
 import yaml
 
 from spectrseqtools.dataclasses import (
@@ -81,11 +81,18 @@ class Predictor:
         print("Intensity cutoff percentile:", self.filter_params.cutoff_percentile)
 
         # Initialize nucleotide alphabet
-        alphabet = NucleotideAlphabet.from_file(
-            modification_rate=options.modification_rate,
-            input_path=self.file_settings.alphabet_path,
-            error=error_calculator,
-        )
+        if isinstance(self.file_settings.alphabet_path, pl.DataFrame):
+            alphabet = NucleotideAlphabet.from_file(
+                modification_rate=options.modification_rate,
+                input_path=self.file_settings.alphabet_path,
+                error=error_calculator,
+            )
+        else:
+            alphabet = NucleotideAlphabet.from_dataframe(
+                modification_rate=options.modification_rate,
+                masses=self.file_settings.alphabet_path,
+                error=error_calculator,
+            )
 
         # Standardize intact sequence mass by removing START_END fragmentation to gain SU mass
         seq_mass_obs = meta["intact_mass"]

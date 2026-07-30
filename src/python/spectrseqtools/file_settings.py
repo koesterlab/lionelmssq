@@ -98,7 +98,7 @@ class FileSettings:
 
     input_path: Path
     meta_path: Path
-    alphabet_path: Path | None = None
+    alphabet_path: Path | pl.DataFrame | None = None
     output_dir: Path | None = None
 
     def __post_init__(self):

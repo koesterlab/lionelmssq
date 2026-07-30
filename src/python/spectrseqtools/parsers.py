@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Tuple
 
+import polars as pl
 import ddargparse
 
 from spectrseqtools.enums import (
@@ -162,7 +163,7 @@ class PredictionOptions(ddargparse.OptionsBase):
     sequence_name: str = field(
         metadata={"help": "Header in FASTA output file."},
     )
-    alphabet: Path | None = field(
+    alphabet: Path | pl.DataFrame | None = field(
         default=None,
         metadata={
             "help": "Path to file containing nucleotide alphabet. If preprocessing was "
