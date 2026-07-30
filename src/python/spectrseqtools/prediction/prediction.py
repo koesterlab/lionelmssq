@@ -95,7 +95,15 @@ class Predictor:
             )
 
         # Standardize intact sequence mass by removing START_END fragmentation to gain SU mass
-        seq_mass_obs = meta["intact_mass"]
+        if "intact_mass" in meta.keys():
+            seq_mass_obs = meta["intact_mass"]
+        else:
+            ms1_fragments = RawFragments.from_dataframe(
+                            fragments=self.file_settings.raw_fragment_path
+                        ).filter(pl.col("is_ms1_mass"))
+            if ms1_fragments.height > 1:
+                raise Exception("There is more than one MS1 mass in this dataframe")
+            seq_mass_obs = ms1_fragments["observed_mass"][0]
         seq_mass_su = round(
             seq_mass_obs - self.classifier.start_end_fragmentation,
             error_calculator.decimal_places,
@@ -139,7 +147,7 @@ class Predictor:
         if isinstance(self.file_settings.raw_fragment_path, pl.DataFrame):
             fragments = RawFragments.from_dataframe(
                 fragments=self.file_settings.raw_fragment_path
-            )
+            ).filter(~pl.col("is_ms1_mass"))
         else:
             fragments = RawFragments.from_file(
                 input_path=self.file_settings.raw_fragment_path
