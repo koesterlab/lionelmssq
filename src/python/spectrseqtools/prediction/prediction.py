@@ -82,15 +82,15 @@ class Predictor:
 
         # Initialize nucleotide alphabet
         if isinstance(self.file_settings.alphabet_path, pl.DataFrame):
-            alphabet = NucleotideAlphabet.from_file(
-                modification_rate=options.modification_rate,
-                input_path=self.file_settings.alphabet_path,
-                error=error_calculator,
-            )
-        else:
             alphabet = NucleotideAlphabet.from_dataframe(
                 modification_rate=options.modification_rate,
                 masses=self.file_settings.alphabet_path,
+                error=error_calculator,
+            )
+        else:
+            alphabet = NucleotideAlphabet.from_file(
+                modification_rate=options.modification_rate,
+                input_path=self.file_settings.alphabet_path,
                 error=error_calculator,
             )
 
@@ -100,7 +100,7 @@ class Predictor:
         else:
             ms1_fragments = RawFragments.from_dataframe(
                             fragments=self.file_settings.raw_fragment_path
-                        ).filter(pl.col("is_ms1_mass"))
+                        ).fragments.filter(pl.col("is_ms1_mass"))
             if ms1_fragments.height > 1:
                 raise Exception("There is more than one MS1 mass in this dataframe")
             seq_mass_obs = ms1_fragments["observed_mass"][0]
@@ -146,8 +146,8 @@ class Predictor:
         # Initialize raw fragments
         if isinstance(self.file_settings.raw_fragment_path, pl.DataFrame):
             fragments = RawFragments.from_dataframe(
-                fragments=self.file_settings.raw_fragment_path
-            ).filter(~pl.col("is_ms1_mass"))
+                fragments=self.file_settings.raw_fragment_path.filter(~pl.col("is_ms1_mass"))
+            )
         else:
             fragments = RawFragments.from_file(
                 input_path=self.file_settings.raw_fragment_path

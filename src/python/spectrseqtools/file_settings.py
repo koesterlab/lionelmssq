@@ -102,14 +102,19 @@ class FileSettings:
     output_dir: Path | None = None
 
     def __post_init__(self):
-        path = self.input_path.resolve()
+        if isinstance(self.input_path, Path):
+            path = self.input_path.resolve()
         if self.output_dir is None:
             self.output_dir = path.parent
 
     @property
     def file_prefix(self):
         """Return file prefix (not including directory path)."""
-        return self.input_path.stem
+        if isinstance(self.input_path, Path):
+            return self.input_path.stem
+        else:
+            grp_number = self.input_path["ms1_mass_group"].unique()[0]
+            return grp_number
 
 
 @dataclass

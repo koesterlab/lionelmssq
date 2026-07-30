@@ -4,24 +4,27 @@ import polars as pl
 import tqdm as tqdm
 from clr_loader import get_mono
 from dataclasses import dataclass
+from pathlib import Path
 
 from spectrseqtools.preprocessing.preprocessing import Preprocessor, set_averagine, initialize_raw_file_iterator
-from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
-from spectrseqtools.preprocessing.deconvolution import MS1Deconvoluter,MS2Deconvoluter,DeisotopedPeakList
+from spectrseqtools.preprocessing.deconvolution import MS1Deconvoluter,MS2Deconvoluter
 from spectrseqtools.preprocessing.singleton_identification import RawPeakList, SingletonBoundaries
 from spectrseqtools.parsers import PreprocessingOptions
+from spectrseqtools.file_settings import PreprocessingFileSettings
 from spectrseqtools.error_calculator import ErrorCalculator
 
 from collections import defaultdict
 
 from pyxdameraulevenshtein import normalized_damerau_levenshtein_distance_seqs
 
+from scipy.signal import find_peaks
+
 import altair as alt
 
 rt = get_mono()
 
-SODIUM_MASS = 22.989769
-POTASSIUM_MASS = 39.098300
+# SODIUM_MASS = 22.989769
+# POTASSIUM_MASS = 39.098300
 
 @dataclass
 class DeisotopedMS1Peak:
@@ -90,289 +93,16 @@ def ms1_to_ms2_dict(raw_file_read):
     
     return ms1_to_ms2_idx
 
-# def deconvolute_average_ms1_scan(average_ms1_scan, priority_ms1_peaks, priority_ms1_charges, ms2_scan_list, ms1_decon_params):
-#     max_abs_charge = max(abs(c) for c in priority_ms1_charges if c)
-#     if average_ms1_scan.polarity < 0:
-#         ms1_charge_range = (-max_abs_charge, -1)
-#     else:
-#         ms1_charge_range = (1, max_abs_charge)
-
-#     ms1_min_intensity = ms1_decon_params.select_min_intensity(
-#                     scan=average_ms1_scan
-#                 )
-
-#     scan_independent_params = ms1_decon_params.__dict__.copy()
-#     scan_independent_params.pop("min_precursor_charge", None)
-#     scan_independent_params.pop("isotopic_shift_factor", None)
-#     scan_independent_params.pop("charge_range", None)
-#     scan_independent_params.pop("minimum_intensity", None)
-
-#     ms1_decon_priority_peaks = ms_ditp.deconvolute_peaks( 
-#                                     peaklist=average_ms1_scan, priority_list = priority_ms1_peaks,
-#                                     charge_range = ms1_charge_range,
-#                                     minimum_intensity= ms1_min_intensity,
-#                                     **scan_independent_params,
-#                                 ).priorities
-
-#     average_ms1_mass_list = []
-#     for i in range(len(ms1_decon_priority_peaks)):
-#         if ms1_decon_priority_peaks[i] is None:
-#             continue
-
-#         ms1_neutral_mass = ms1_decon_priority_peaks[i].neutral_mass
-#         ms1_intensity = ms1_decon_priority_peaks[i].intensity
-#         average_ms1_mass_list.append(
-#             DeisotopedMS1Peak(
-#                 min_scan_time=np.nan,
-#                 max_scan_time=np.nan,
-#                 ms1_neutral_mass=ms1_neutral_mass, 
-#                 ms1_intensity= ms1_intensity,
-#                 ms2_scan = ms2_scan_list[i],
-#                 max_charge_state = 0
-#                 ))
-        
-#     return average_ms1_mass_list
-
-# def group_ms1_mass_collect_ms2_scan(average_ms1_mass_list, priority_charges, min_window_time, max_window_time, options):
-#     df_average_ms1_mass_info = pl.DataFrame(
-#             data=np.array(
-#                 [[frag.__dict__[key] for key in COL_TYPES_MS1_INFO.keys()] for frag in average_ms1_mass_list]
-#             ),
-#             schema=COL_TYPES_MS1_INFO,
-#         ).with_row_index("ms1_window_scan_index").sort("ms1_neutral_mass").with_columns(
-#                 (
-#                     abs(pl.col("ms1_neutral_mass").shift(1) - pl.col("ms1_neutral_mass"))
-#                     / pl.col("ms1_neutral_mass").shift(1)
-#                 )
-#                 .fill_null(0)
-#                 .fill_nan(0)
-#                 .gt(options.tolerance)
-#                 .cum_sum()
-#                 .alias("ms1_window_grp"))
-    
-#     ms1_grp_list = df_average_ms1_mass_info["ms1_window_grp"].unique()
-#     grouped_ms1_mass_list = []
-
-#     for ms1_grp in ms1_grp_list:
-#         df_filter = df_average_ms1_mass_info.filter(pl.col("ms1_window_grp") == ms1_grp)
-        
-#         ms1_min_idx = df_filter["ms1_neutral_mass"].arg_min()
-        
-#         ms1_window_scan_index_list = df_filter["ms1_window_scan_index"].to_numpy()        
-#         ms2_window_scan_list = [average_ms1_mass_list[idx].ms2_scan for idx in ms1_window_scan_index_list]
-
-#         grouped_ms1_mass_list.append(
-#             DeisotopedMS1Peak(
-#                 min_scan_time=min_window_time,
-#                 max_scan_time=max_window_time,
-#                 ms1_neutral_mass=df_filter["ms1_neutral_mass"][ms1_min_idx], 
-#                 ms1_intensity= df_filter["ms1_intensity"][ms1_min_idx],
-#                 ms2_scan = ms2_window_scan_list,
-#                 max_charge_state = max(priority_charges)
-#                 ))
-
-#     return grouped_ms1_mass_list
-
-# def average_deisotope_ms1_collect_ms2(raw_file_read, ms1_decon_params, min_scan_time, max_scan_time, dt, options):
-#     ms1_to_ms2_idx = ms1_to_ms2_dict(raw_file_read)
-
-#     raw_file_read.reset()
-#     raw_file_read.make_iterator(grouped = True)
-
-#     scan_processor = ms_ditp.ScanProcessor(raw_file_read)
-
-#     ms1_mass_ms2_scans_list = []
-
-#     for t in tqdm.tqdm(np.arange(min_scan_time, max_scan_time, dt/2), desc="Deisotoping average MS1 and collecting MS2"):
-#         scan = raw_file_read.get_scan_by_time(t)
-#         if scan.ms_level != 1:
-#             scan = raw_file_read.find_previous_ms1(scan.index)
-
-#         average_ms1_scan = scan.average(rt_interval = dt)
-#         average_ms1_scan.pick_peaks()
-
-#         ms1_index_list = average_ms1_scan.scan_indices
-#         min_window_time = raw_file_read.get_scan_by_index(min(ms1_index_list)).scan_time
-#         max_window_time = raw_file_read.get_scan_by_index(max(ms1_index_list)).scan_time
-
-#         ms2_scan_list = []
-#         for ms1_idx in ms1_index_list:
-#             ms2_index_list = ms1_to_ms2_idx[ms1_idx]
-#             for ms2_idx in ms2_index_list:
-#                 ms2_scan_list.append(raw_file_read.get_scan_by_index(ms2_idx))
-
-#         average_ms1_scan, priority_ms1_peaks, ms2_scan_list = scan_processor.process_scan_group(average_ms1_scan, ms2_scan_list)
-#         priority_ms1_peaks, priority_ms1_charges, ms2_scan_list = charge_filter(priority_ms1_peaks, ms2_scan_list, options)
-#         if len(priority_ms1_charges) == 0:
-#             continue
-
-#         average_ms1_mass_list = deconvolute_average_ms1_scan(average_ms1_scan=average_ms1_scan,
-#                                                             priority_ms1_peaks=priority_ms1_peaks,
-#                                                             priority_ms1_charges=priority_ms1_charges,
-#                                                             ms2_scan_list=ms2_scan_list,
-#                                                             ms1_decon_params=ms1_decon_params,)
-
-#         if len(average_ms1_mass_list) == 0:
-#             continue
-#         grouped_ms1_mass_list = group_ms1_mass_collect_ms2_scan(average_ms1_mass_list, priority_ms1_charges, min_window_time, max_window_time, options)
-
-#         for ms1_mass_ms2_scans in grouped_ms1_mass_list:
-#             ms1_mass_ms2_scans_list.append(ms1_mass_ms2_scans)
-#     return ms1_mass_ms2_scans_list
-
-# def cluster_ms1_masses(ms1_mass_ms2_scans_list, options, correct_adducts = True):
-#     df_ms1_clusters = pl.DataFrame(
-#                     data=np.array(
-#                         [[frag.__dict__[key] for key in COL_TYPES_MS1_CLUSTER.keys()] for frag in ms1_mass_ms2_scans_list]
-#                     ),
-#                     schema=COL_TYPES_MS1_CLUSTER,
-#                 ).with_row_index("ms1_cluster_index"
-#                 ).sort(["min_scan_time", "max_scan_time", "ms1_neutral_mass"]
-#                 ).with_columns(
-#                         ((
-#                             abs(pl.col("min_scan_time").shift(1) - pl.col("min_scan_time"))>1e-3
-#                         ) & 
-#                         (
-#                             pl.col("min_scan_time")>pl.col("max_scan_time").shift(1)
-#                         ))  
-#                         .cast(pl.Int8).fill_null(0).fill_nan(0).cum_sum().alias("time_grp"))
-
-#     time_grp_list = df_ms1_clusters["time_grp"].unique().to_numpy()
-
-#     last_grp_idx = 0
-
-#     list_df_timegrp = []
-
-#     if correct_adducts:
-#         salt_corrections = {
-#             "none": 0.0,
-#             "Na-H": SODIUM_MASS - ELEMENT_MASSES["H+"],
-#             "K-H": POTASSIUM_MASS - ELEMENT_MASSES["H+"],
-#             }
-#     else:
-#         salt_corrections = {
-#             "": 0.0,
-#             }
-        
-#     for tgrp in time_grp_list:
-#         df_timegrp_filter = df_ms1_clusters.filter(pl.col("time_grp") == tgrp)
-
-#         expanded_rows = []
-
-#         for row in df_timegrp_filter.iter_rows(named=True):
-#             for adduct_type, correction in salt_corrections.items():
-#                 new_row = dict(row)
-#                 new_row["ms1_neutral_mass"] = row["ms1_neutral_mass"]
-#                 new_row["corrected_neutral_mass"] = row["ms1_neutral_mass"] + correction
-#                 new_row["adduct_type"] = adduct_type
-#                 expanded_rows.append(new_row)
-
-#         df_timegrp_filter = pl.DataFrame(expanded_rows)
-        
-#         df_timegrp_filter = df_timegrp_filter.sort(["corrected_neutral_mass"]).with_columns(
-#                         (
-#                             abs(pl.col("corrected_neutral_mass").shift(1) - pl.col("corrected_neutral_mass"))
-#                             / pl.col("corrected_neutral_mass").shift(1)
-#                         )
-#                         .fill_null(0)
-#                         .fill_nan(0)
-#                         .gt(options.tolerance)
-#                         .cum_sum()
-#                         .alias("add_mass_subgrp"))
-
-#         df_timegrp_filter = df_timegrp_filter.sort(["add_mass_subgrp", "adduct_type", "ms1_cluster_index"])
-        
-#         df_timegrp_deduplicate = (
-#             df_timegrp_filter.group_by("add_mass_subgrp")
-#                             .agg(pl.col("ms1_cluster_index")
-#                                  .unique()
-#                                  .sort())
-#                             .unique("ms1_cluster_index", 
-#                                     keep='first', 
-#                                     maintain_order=True)
-#                                     )
-#         df_timegrp_filter = df_timegrp_filter.filter(
-#                                     pl.col("add_mass_subgrp")
-#                                     .is_in(df_timegrp_deduplicate["add_mass_subgrp"].to_list())
-#                                     )
-#         df_timegrp_filter = df_timegrp_filter.with_columns(
-#                                     (
-#                                         pl.col("add_mass_subgrp")
-#                                         .rank("dense")
-#                                         .cast(pl.Int64) - 1 + last_grp_idx
-#                                     ).alias("add_mass_subgrp")
-#                                 )
-        
-#         list_df_timegrp.append(df_timegrp_filter)
-#         last_grp_idx = (
-#                         df_timegrp_filter.select(
-#                             pl.col("add_mass_subgrp").max()
-#                         ).item() + 1
-#                     )
-        
-#     df_ms1_clusters = pl.concat(list_df_timegrp).rename({"add_mass_subgrp": "neutral_mass_grp"}).drop(["corrected_neutral_mass"])
-
-#     return df_ms1_clusters
-
-# def average_and_deconvolute_ms2_scan(df_filter, ms1_mass_ms2_scans_list, ms2_decon_params):
-#     grp_ms2_idx = df_filter["ms1_cluster_index"].to_numpy()
-    
-#     grp_ms2_scans = []
-#     gidx = set()
-#     grp_charge_states = []
-
-#     for idx in grp_ms2_idx:
-#         for scan in ms1_mass_ms2_scans_list[idx].ms2_scan:
-#             if scan.index not in gidx:
-#                 gidx.add(scan.index)
-#                 grp_ms2_scans.append(scan)
-#                 grp_charge_states.append(ms1_mass_ms2_scans_list[idx].max_charge_state)
-
-#     if len(grp_ms2_scans)>1:
-#         average_ms2_scan = grp_ms2_scans[0].average_with(grp_ms2_scans[1:])
-#     else:
-#         average_ms2_scan = grp_ms2_scans[0]
-#     average_ms2_scan.pick_peaks()
-
-#     max_abs_charge = max(abs(c) for c in grp_charge_states if c)
-#     if average_ms2_scan.polarity < 0:
-#         ms2_charge_range = (-max_abs_charge, -1)
-#     else:
-#         ms2_charge_range = (1, max_abs_charge)
-
-#     ms2_decon_params.charge_range = ms2_charge_range
-
-#     decon_ms2_peaks = DeisotopedPeakList.from_scan(average_ms2_scan, ms2_decon_params)
-    
-#     return average_ms2_scan, decon_ms2_peaks
-
-
-@dataclass
-class PreprocessedGroup:
-    fragments: pl.DataFrame
-    singletons: pl.DataFrame
-    meta: dict
-
-def pre_process_multiplexing(file_path, 
-                             ms1_deconvoluter = None, 
-                             ms2_deconvoluter = None,
-                             options = None,
-                             three_prime_tag = 728.2006, 
-                             five_prime_tag = 170.9755):
-    if options is None:    
-        options = PreprocessingOptions(
+def initialize_parsers(file_path):
+    options = PreprocessingOptions(
             input=file_path,
-            meta=None,
-            alphabet=None,
+            meta = None,
             output_dir=None,
-            charge_range=None,
-            min_intensity=None,
+            alphabet=None,
+            ms1_charge_range=None,
+            ms2_charge_range=None,
+            min_intensity=None
         )
-
-    # alphabet = NucleotideAlphabet.from_file(input_path=None)
-    # preprocessor = Preprocessor(options)
-
-    sample_name = options.input.stem
 
     error = ErrorCalculator.with_metric(
                 tolerance=options.tolerance,
@@ -380,130 +110,180 @@ def pre_process_multiplexing(file_path,
             )
 
     averagine = ms_ditp.Averagine(
-                base_composition=set_averagine(backbone=options.averagine_backbone)
+                base_composition=set_averagine(
+                    backbone=options.averagine_backbone
+                    )
             )
 
-    if ms1_deconvoluter is None:
-        ms1_deconvoluter = MS1Deconvoluter(
-            minimum_intensity=options.min_intensity,
-            averagine=averagine,
-            max_missed_peaks=1,#options.max_missed_peaks,
-            scale_method=options.scale_method,
-            error_tol=options.peak_error_tol,
-            scorer=ms_ditp.PenalizedMSDeconVFitter(
-                # minimum_score=options.envelope_min_score,
-                # mass_error_tolerance=options.envelope_error_tol,
-            ),
-            charge_range=options.ms1_charge_range,
-            truncate_after=options.ms1_truncate_after,
-            min_precursor_charge=options.min_precursor_charge,
-        )
+    ms1_deconvoluter = MS1Deconvoluter(
+                minimum_intensity=options.min_intensity,
+                averagine=averagine,
+                max_missed_peaks=1,#options.max_missed_peaks,
+                scale_method=options.scale_method,
+                error_tolerance=options.peak_error_tol,
+                scorer=ms_ditp.PenalizedMSDeconVFitter(
+                    # minimum_score=options.envelope_min_score,
+                    # mass_error_tolerance=options.envelope_error_tol,
+                ),
+                charge_range=options.ms1_charge_range,
+                truncate_after=options.ms1_truncate_after,
+            )
 
-    if ms2_deconvoluter is None:
-        ms2_deconvoluter = MS2Deconvoluter(
-            minimum_intensity=options.min_intensity,
-            averagine=averagine,
-            max_missed_peaks=options.max_missed_peaks,
-            scale_method=options.scale_method,
-            error_tol=options.peak_error_tol,
-            scorer=ms_ditp.MSDeconVFitter(
-                minimum_score=options.envelope_min_score,
-                mass_error_tolerance=options.envelope_error_tol,
-            ),
-            charge_range=options.ms2_charge_range,
-            truncate_after=options.ms2_truncate_after,
-            min_precursor_charge=options.min_precursor_charge,
-            isotopic_shift_factor=options.isotopic_shift_factor,
-        )
-        
-    # Initialize iterator for RAW file
-    raw_file_read = initialize_raw_file_iterator(
-        file_path=str(file_path)
-    )
+    ms2_deconvoluter = MS2Deconvoluter(
+                minimum_intensity=options.min_intensity,
+                averagine=averagine,
+                max_missed_peaks=options.max_missed_peaks,
+                scale_method=options.scale_method,
+                error_tolerance=options.peak_error_tol,
+                scorer=ms_ditp.MSDeconVFitter(
+                    minimum_score=0,#options.envelope_min_score,
+                    mass_error_tolerance=options.envelope_error_tol,
+                ),
+                charge_range=options.ms2_charge_range,
+                truncate_after=options.ms2_truncate_after,
+                isotopic_shift_factor=options.isotopic_shift_factor,
+            )
+    return options, error, ms1_deconvoluter, ms2_deconvoluter
 
-    # Precount number of scan bunches and reset raw_file_read after
-    num_scan_bunches = sum(scan.ms_level == 1 for scan in raw_file_read)
+def identify_tic_peaks(raw_file_read):
+    raw_file_read.reset()
+    raw_file_read.make_iterator(grouped=False)
+
+    scan_times = []
+    total_intensities = []
+
+    for scan in raw_file_read:
+
+        if scan.ms_level != 1:
+            continue
+
+        scan_times.append(scan.scan_time)
+        total_intensities.append(np.sum(scan.arrays.intensity))
+
+    scan_times = np.array(scan_times)
+    total_intensities = np.array(total_intensities)
+
+    # Local maxima
+    max_idx, _ = find_peaks(total_intensities)
+
+    peak_times = scan_times[max_idx]
+    return peak_times
+
+def generate_ms1_windows(raw_file_read, 
+                         options, 
+                         ms1_deconvoluter, 
+                         delta_time_window = 0.4
+                         ):
+    
+    ms1_to_ms2_idx = ms1_to_ms2_dict(raw_file_read)
+    peak_times = identify_tic_peaks(raw_file_read)
+
     raw_file_read.reset()
     raw_file_read.make_iterator(grouped=True)
 
     scan_processor = ms_ditp.ScanProcessor(raw_file_read)
 
-    scan_times = []
-
     window_mass_info = []
-    ms2_fragment_cache = {}
 
-    for scan_bunch in tqdm.tqdm(
-        raw_file_read, desc="Deisotoping scan bunches", total=num_scan_bunches
-    ):
-        # Obtain MS1, MS2 and priority peaks
-        # priority_list is a list of ms_deisotope 'PriorityTarget' objects,
-        # which is similar to a 'Peak' object
-        ms1_scan, priority_list, ms2_scans = scan_processor.process_scan_group(
-            scan_bunch.precursor, scan_bunch.products
+    seen_ms1_scan_sets = set()
+    ms2_scan_cache = {}
+
+    for idx, t in enumerate(
+        tqdm.tqdm(
+            peak_times,
+            desc="Deisotoping average MS1 and collecting MS2",
         )
-        
-        ms1_scan_time = ms1_scan.scan_time
-        scan_times.append(ms1_scan_time)
+    ):
+        scan = raw_file_read.get_scan_by_time(t)
 
-        if len(ms2_scans) == 0:
+        if scan.ms_level != 1:
+            scan = raw_file_read.find_previous_ms1(scan.index)
+
+        average_ms1_scan = scan.average(
+            rt_interval=delta_time_window/2
+            )
+        average_ms1_scan.pick_peaks()
+
+        ms1_index_list = average_ms1_scan.scan_indices
+        ms1_index_set = frozenset(ms1_index_list)
+
+        if ms1_index_set in seen_ms1_scan_sets:
             continue
 
-        priority_list, ms2_scans = priority_list_charge_filter(
-            priority_list, 
-            ms2_scans, 
-            options.min_precursor_charge)
+        seen_ms1_scan_sets.add(ms1_index_set)
+
+        min_window_time = raw_file_read.get_scan_by_index(
+            min(ms1_index_list)
+        ).scan_time
+
+        max_window_time = raw_file_read.get_scan_by_index(
+            max(ms1_index_list)
+        ).scan_time
+
+        ms2_scans = []
+
+        for ms1_idx in ms1_index_list:
+            ms2_index_list = ms1_to_ms2_idx[ms1_idx]
+
+            for ms2_idx in ms2_index_list:
+                ms2_scans.append(
+                    raw_file_read.get_scan_by_index(ms2_idx)
+                )
+
+        (
+            average_ms1_scan,
+            priority_list,
+            ms2_scans,
+        ) = scan_processor.process_scan_group(
+            average_ms1_scan,
+            ms2_scans,
+        )
+
+        (
+            priority_list,
+            ms2_scans,
+        ) = priority_list_charge_filter(
+            priority_list,
+            ms2_scans,
+            options.min_precursor_charge,
+        )
 
         # Deconvolute MS1 scan to get list of deisotoped peaks
         ms1_masses = ms1_deconvoluter.deconvolute_scan(
-            scan=ms1_scan,
+            scan=average_ms1_scan,
             priority_list=priority_list,
         ).peaks
 
         ms2_scan_idx_list = []
-        # Deconvolute MS2 scan to get list of deisotoped peaks
+        # Collect MS2 scans
         for ms2_scan in ms2_scans:
             ms2_scan_idx = int(ms2_scan.index)
             ms2_scan_idx_list.append(ms2_scan_idx)
             
-            if ms2_scan_idx in ms2_fragment_cache.keys():
+            if ms2_scan_idx in ms2_scan_cache.keys():
                 continue
-            ms2_fragment_cache[ms2_scan_idx] = ms2_scan
+            ms2_scan_cache[ms2_scan_idx] = ms2_scan
 
-        if len(ms1_masses) != len(ms2_scan_idx_list):
-            raise("ms1_masses and ms2_scan_idx_list are not equal in length!")
-        
-        for ms1_mass, ms2_scan_idx in zip(ms1_masses, ms2_scan_idx_list):
+        for ms1_mass, ms2_scan_idx in zip(
+            ms1_masses,
+            ms2_scan_idx_list,
+        ):
             window_mass_info.append(
                 {
-                    "ms1_scan_time": ms1_scan_time,
-                    "ms1_scan_idx": ms1_scan.index,
+                    "min_window_time": min_window_time,
+                    "max_window_time": max_window_time,
                     "ms1_mass": ms1_mass.neutral_mass,
                     "ms2_scan_idx": ms2_scan_idx,
+                    "ms1_time_group": idx,
                 }
             )
 
-    scan_time_diff = np.diff(np.array(scan_times))
-    scan_time_diff = scan_time_diff[scan_time_diff > 0.02]
-    max_time_diff = (np.mean(scan_time_diff)+(1.96*np.std(scan_time_diff)))*3
-
     df_window_info = pl.DataFrame(window_mass_info)
 
-    df_window_info = (
-        df_window_info
-        .with_row_index("_row_id")
-        .sort("ms1_scan_time")
-        .with_columns(
-            pl.col("ms1_scan_time")
-            .diff()
-            .gt(max_time_diff)
-            .fill_null(False)
-            .cum_sum()
-            .alias("ms1_time_group")
-        )
-    )
+    return df_window_info, ms2_scan_cache
 
-    detect_adducts = True
+def adduct_detection(df_window_info, error, detect_adducts = True):
+    df_window_info = df_window_info.with_row_index("_row_id")
 
     HYDROGEN_MONOISOTOPIC_MASS = 1.00782503223
     SODIUM_MONOISOTOPIC_MASS = 22.9897692820
@@ -676,70 +456,191 @@ def pre_process_multiplexing(file_path,
         .drop("_row_id")
     )
 
-    preprocessed_groups = []
+    return df_window_info
+
+def generate_global_singletons(options, error):
+    #TODO: Remove this requirement.
+    # We just need to get the singletons of the whole RAW file 
+    # without saving it or anything else
+    preprocessor = Preprocessor.__new__(Preprocessor)
+
+    # identify_singletons() and collect_raw_peaks() require these attributes
+    preprocessor.file_settings = PreprocessingFileSettings(
+        input_path=options.input,
+        meta_path=Path("unused.yaml"),
+        alphabet_path=options.alphabet,
+        output_dir=Path("unused_output"),
+    )
+    preprocessor.error = error
+
+    preprocessor.singleton_boundaries = SingletonBoundaries.from_alphabet_file(
+        input_path=options.alphabet,
+        boundary_factor=0.5,
+        error=preprocessor.error,
+    )
+
+    default_singletons = preprocessor.identify_singletons()
+    return default_singletons
+
+def generate_singletons_and_fragments(grp_number, 
+                                      df_window_info, 
+                                      ms2_scan_cache, 
+                                      options,
+                                      error,
+                                      ms2_deconvoluter,
+                                      default_singletons,
+                                      meta):
+    df_filter = df_window_info.filter(pl.col("ms1_mass_group") == grp_number)
+
+    adduct_types = ", ".join(df_filter["inferred_adduct_type"].unique().to_list())
+    min_window_time = df_filter["min_window_time"].min()
+    max_window_time = df_filter["max_window_time"].max()
+    intact_mass = df_filter["ms1_mass"].max()
+    
+    if intact_mass < meta["3_prime_tag"]+meta["5_prime_tag"]:
+        return None, None
+
+    ms2_scan_list = []
+
+    ms2_index_list = df_filter["ms2_scan_idx"].unique().to_list()
+    for ms2_idx in ms2_index_list:
+        ms2_scan_list.append(ms2_scan_cache[ms2_idx])
+
+    if len(ms2_scan_list)>1:
+        average_ms2_scan = ms2_scan_list[0].average_with(ms2_scan_list[1:])
+    else:
+        average_ms2_scan = ms2_scan_list[0]
+    average_ms2_scan.pick_peaks()
+
+    singletons = RawPeakList.from_scan(
+        average_ms2_scan, 
+        SingletonBoundaries.from_alphabet_file(
+            input_path=options.alphabet,
+            boundary_factor=0.5,
+            error=error,)
+    ).to_singletons(alphabet_path = options.alphabet, error = error, min_score = -np.inf)
+
+    if singletons is None:
+        singletons = default_singletons
+
+    singletons = singletons.with_columns(
+        pl.lit(grp_number).alias("ms1_mass_group")
+    )
+
+    ms2_peak_list = ms2_deconvoluter.deconvolute_scan(
+        scan=average_ms2_scan,
+    )
+        
+    if len(ms2_peak_list.peaks) == 0:
+        return None, None
+
+    fragments = ms2_peak_list.to_fragments(tolerance=error.tolerance)
+
+    fragments = fragments.rename({"neutral_mass": "observed_mass"}).filter(pl.col("observed_mass")<intact_mass)
+
+    fragments = fragments.with_columns(
+        pl.lit(False).alias("is_ms1_mass"),
+        pl.lit(grp_number).alias("ms1_mass_group"),
+        )
+
+    intact_mass_row = pl.DataFrame({
+        "observed_mass": intact_mass,
+        "is_ms1_mass": True,
+        "ms1_mass_group": grp_number,
+        "adduct_type": adduct_types,
+        "min_window_time": min_window_time,
+        "max_window_time": max_window_time
+    })
+
+    if fragments is None:
+        fragments = intact_mass_row
+    else:
+        fragments = pl.concat([fragments, intact_mass_row], how = "diagonal_relaxed")
+
+    return fragments, singletons
+
+def metafile_dict(
+        sample_name, 
+        three_prime_tag, 
+        five_prime_tag
+        ):
+    return {
+        "identity": sample_name,
+        "3_prime_tag": three_prime_tag,
+        "5_prime_tag": five_prime_tag,
+    }
+
+def pre_process_multiplexing(
+        file_path,
+        three_prime_tag,
+        five_prime_tag,
+        delta_time_window
+        ):
+
+    raw_file_read = initialize_raw_file_iterator(str(file_path))
+    sample_name = file_path.stem
+
+    meta = metafile_dict(
+        sample_name,
+        three_prime_tag,
+        five_prime_tag
+        )
+
+    (
+        options, 
+        error, 
+        ms1_deconvoluter, 
+        ms2_deconvoluter
+     ) = initialize_parsers(file_path)
+
+    (
+        df_window_info, 
+        ms2_scan_cache
+    ) = generate_ms1_windows(
+        raw_file_read, 
+        options, 
+        ms1_deconvoluter, 
+        delta_time_window
+    )
+
+    df_window_info = adduct_detection(
+        df_window_info, 
+        error, 
+        detect_adducts = True
+        )
+
+    fragment_list = []
+    singleton_list = []
+
+    default_singletons = generate_global_singletons(options, error)
+
     for grp_number in tqdm.tqdm(
         df_window_info["ms1_mass_group"].unique(), 
         desc = "Generating fragments and singletons"
         ):
-        df_filter = df_window_info.filter(pl.col("ms1_mass_group") == grp_number)
-
-        adduct_types = df_filter["inferred_adduct_type"].unique().to_list()
-        min_scan_time = df_filter["ms1_scan_time"].min()
-        max_scan_time = df_filter["ms1_scan_time"].max()
-
-        precursor_min_idx = df_filter["ms1_mass"].arg_min()
-        intact_mass = df_filter["ms1_mass"][precursor_min_idx]
-
-        if intact_mass < three_prime_tag+five_prime_tag:
+        (
+            fragments, 
+            singletons
+            ) = generate_singletons_and_fragments(
+                grp_number, 
+                df_window_info, 
+                ms2_scan_cache, 
+                options,
+                error,
+                ms2_deconvoluter,
+                default_singletons,
+                meta
+                )
+        if fragments is None or singletons is None:
             continue
 
-        ms2_scan_list = []
+        fragment_list.append(fragments)
+        singleton_list.append(singletons)
 
-        ms2_index_list = df_filter["ms2_scan_idx"].unique().to_list()
-        for ms2_idx in ms2_index_list:
-            ms2_scan_list.append(ms2_fragment_cache[ms2_idx])
+    fragments = pl.concat(fragment_list, how="diagonal_relaxed")
+    singletons = pl.concat(singleton_list, how="diagonal_relaxed")
 
-        if len(ms2_scan_list)>1:
-            average_ms2_scan = ms2_scan_list[0].average_with(ms2_scan_list[1:])
-        else:
-            average_ms2_scan = ms2_scan_list[0]
-        average_ms2_scan.pick_peaks()
-
-        singletons = RawPeakList.from_scan(
-            average_ms2_scan, 
-            SingletonBoundaries.from_alphabet_file(
-                input_path=options.alphabet,
-                boundary_factor=0.5,
-                error=error,)
-        ).to_singletons(alphabet_path = options.alphabet, error = error)
-
-        ms2_peak_list = ms2_deconvoluter.deconvolute_scan(
-            scan=average_ms2_scan,
-        )
-            
-        if len(ms2_peak_list.peaks) == 0:
-            continue
-
-        fragments = ms2_peak_list.to_fragments(tolerance=error.tolerance)
-
-        fragments = fragments.rename({"neutral_mass": "observed_mass"}).filter(pl.col("observed_mass")<intact_mass)
-
-        meta = {
-            "identity": sample_name,
-            "group_number": grp_number,
-            "3_prime_tag": three_prime_tag, #728.2006,
-            "5_prime_tag": five_prime_tag, #170.9755,
-            "intact_mass": intact_mass,
-            "min_scan_time": min_scan_time,
-            "max_scan_time": max_scan_time,
-            "adduct_types": adduct_types
-        }
-
-        preprocessed_groups.append(PreprocessedGroup(fragments = fragments,
-                                                    singletons = singletons,
-                                                        meta = meta))
-        
-    return df_window_info, preprocessed_groups
+    return fragments, singletons, meta
 
 # #POST PROCESSING
 # def targ_pred_pairing(x):
