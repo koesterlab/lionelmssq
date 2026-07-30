@@ -136,9 +136,14 @@ class Predictor:
         print()
 
         # Initialize raw fragments
-        fragments = RawFragments.from_file(
-            input_path=self.file_settings.raw_fragment_path
-        )
+        if isinstance(self.file_settings.raw_fragment_path, pl.DataFrame):
+            fragments = RawFragments.from_dataframe(
+                fragments=self.file_settings.raw_fragment_path
+            )
+        else:
+            fragments = RawFragments.from_file(
+                input_path=self.file_settings.raw_fragment_path
+            )
         fragments.filter_by_intensity(filter_params=self.filter_params)
 
         # Classify raw fragments into SU-fragments

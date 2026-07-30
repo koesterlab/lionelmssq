@@ -96,7 +96,7 @@ def set_matrix_path(num_places: int, compression_rate: int) -> Path:
 class FileSettings:
     """Class for file-related settings."""
 
-    input_path: Path
+    input_path: Path | pl.DataFrame
     meta_path: Path
     alphabet_path: Path | pl.DataFrame | None = None
     output_dir: Path | None = None

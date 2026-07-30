@@ -144,7 +144,7 @@ class PreprocessingOptions(ddargparse.OptionsBase):
 class PredictionOptions(ddargparse.OptionsBase):
     """Prediction of sequence based on preprocessed fragments"""
 
-    fragments: Path = field(
+    fragments: Path | pl.DataFrame = field(
         metadata={"help": "Path to TSV table of observed fragments"},
     )
     meta: Path = field(

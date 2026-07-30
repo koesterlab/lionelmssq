@@ -517,6 +517,32 @@ class RawFragments:
 
         return cls(fragments=fragments)
 
+    #TODO: Combine this with the from_file function above
+    @classmethod
+    def from_dataframe(cls, fragments: pl.DataFrame) -> Self:
+        """
+        Initialize raw fragments from a dataframe.
+
+        Parameters
+        ----------
+        fragments : pl.DataFrame
+            Path to input fragments as a dataframe.
+
+        """
+
+        # If no intensity is given, set it to -1 by default
+        if "intensity" not in fragments.columns:
+            fragments = fragments.with_columns(pl.lit(-1).alias("intensity"))
+
+        # Rename 'neutral_mass' values from deisotoping to 'observed_mass'
+        if "neutral_mass" in fragments.columns:
+            fragments = fragments.rename({"neutral_mass": "observed_mass"})
+
+        # Index fragments
+        fragments = fragments.with_row_index("fragment_index")
+
+        return cls(fragments=fragments)
+
     @classmethod
     def default(cls) -> Self:
         """Return empty fragments dataframe."""
