@@ -242,6 +242,32 @@ class PredictionOptions(ddargparse.OptionsBase):
 
 
 @dataclass
+class SingletonPlotOptions(ddargparse.OptionsBase):
+    """Plotting of singletons detected during preprocessing."""
+
+    input: Path = field(
+        metadata={"help": "Path to input file in RAW format"},
+    )
+    meta: Path = field(
+        metadata={"help": "Path to YAML with meta information."},
+    )
+    scan_dir: Path = field(
+        metadata={
+            "help": "Output directory for all individual scans.",
+        },
+    )
+    output_path: Path = field(
+        metadata={
+            "help": "Output path for combined HTML of all scans.",
+        },
+    )
+    alphabet: Path | None = field(
+        default=None,
+        metadata={"help": "Path to file containing nucleotide alphabet."},
+    )
+
+
+@dataclass
 class Options(ddargparse.OptionsBase):
     """
     De novo prediction of RNA sequences
@@ -256,3 +282,4 @@ class Options(ddargparse.OptionsBase):
 
     preprocessing: PreprocessingOptions | None
     prediction: PredictionOptions | None
+    plot_singletons: SingletonPlotOptions | None
