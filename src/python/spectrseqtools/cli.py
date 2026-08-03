@@ -2,6 +2,7 @@
 """Module for command-line interface."""
 
 from spectrseqtools.parsers import Options
+from spectrseqtools.plotting.plot_fragments import plot_fragments
 from spectrseqtools.plotting.plot_singletons import plot_singletons
 from spectrseqtools.prediction.prediction import Predictor
 from spectrseqtools.preprocessing.preprocessing import Preprocessor
@@ -22,3 +23,7 @@ def main():
     # Plot singletons
     if options.plot_singletons is not None:
         plot_singletons(options=options.plot_singletons)
+
+    # Plot fragments
+    if options.plot_fragments is not None:
+        plot_fragments(options=options.plot_fragments)

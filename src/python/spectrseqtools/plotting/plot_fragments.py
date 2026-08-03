@@ -1,16 +1,50 @@
+from pathlib import Path
 from typing import List
 
 import altair as alt
 import polars as pl
+import yaml
 
 from spectrseqtools.dataclasses import Sequence
 from spectrseqtools.file_settings import load_alphabet
+from spectrseqtools.parsers import FragmentPlotOptions
 from spectrseqtools.prediction.prediction import Prediction
 
 STATUS_COLORS = {
     "False": "#808285",
     "True": "black",
 }
+
+
+def plot_fragments(options: FragmentPlotOptions) -> None:
+    # Read prediction data from files
+    prediction = Prediction.from_files(
+        sequence_path=options.prediction,
+        fragments_path=options.fragments,
+    )
+
+    # Read true sequence from meta file
+    with open(options.meta, "r", encoding="utf-8") as f:
+        meta = yaml.safe_load(f)
+    true_seq = Sequence.from_str(meta["true_sequence"])
+
+    simulation = None
+    if options.simulation is not None:
+        simulation = pl.read_csv(options.simulation, separator="\t")
+
+    charts = plot_prediction(
+        prediction=prediction,
+        true_seq=true_seq,
+        simulation=simulation,
+        alphabet_path=options.alphabet,
+    )
+
+    charts[0].save(options.start_fragment_plot)
+    charts[1].save(options.end_fragment_plot)
+    charts[2].save(options.internal_fragment_plot)
+    charts[3].save(options.mixed_fragment_plot)
+
+    (charts[0] | charts[1] | charts[2]).save(options.combined_plot)
 
 
 def plot_prediction(
