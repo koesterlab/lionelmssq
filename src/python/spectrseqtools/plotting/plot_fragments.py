@@ -1,3 +1,6 @@
+# -*- coding: utf-8 -*-
+"""Plotting of fragments aligned to predicted sequence."""
+
 from pathlib import Path
 from typing import List
 
@@ -17,6 +20,14 @@ STATUS_COLORS = {
 
 
 def plot_fragments(options: FragmentPlotOptions) -> None:
+    """Plot fragments aligned to predicted sequence.
+
+    Parameters
+    ----------
+    options : FragmentPlotOptions
+        Options for fragment plot read by parser.
+
+    """
     # Read prediction data from files
     prediction = Prediction.from_files(
         sequence_path=options.prediction,
@@ -50,9 +61,28 @@ def plot_fragments(options: FragmentPlotOptions) -> None:
 def plot_prediction(
     prediction: Prediction,
     true_seq: Sequence,
-    simulation: pl.DataFrame = None,
-    alphabet_path=None,
+    simulation: pl.DataFrame | None = None,
+    alphabet_path: Path | None = None,
 ) -> alt.Chart:
+    """Plot prediction and aligned fragments.
+
+    Parameters
+    ----------
+    prediction : Prediction
+        Prediction results.
+    true_seq : Sequence
+        True underlying sequence.
+    simulation : polars.DataFrame | None
+        Simulation data (if applicable).
+    alphabet_path : Path | None
+        Path to nucleotide alphabet.
+
+    Returns
+    -------
+    altair.Chart
+        Altair chart of fragments aligned to predicted sequence.
+
+    """
     alphabet_df = load_alphabet(input_path=alphabet_path)
     true_seq = true_seq.to_encoding(masses=alphabet_df)
     pred_seq = prediction.sequence.to_encoding(masses=alphabet_df)
