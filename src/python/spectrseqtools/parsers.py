@@ -268,6 +268,54 @@ class SingletonPlotOptions(ddargparse.OptionsBase):
 
 
 @dataclass
+class FragmentPlotOptions(ddargparse.OptionsBase):
+    """Plotting of fragments aligned to predicted sequence."""
+
+    fragments: Path = field(
+        metadata={"help": "Path to fragment file in TSV format"},
+    )
+    prediction: Path = field(
+        metadata={"help": "Path to prediction file in FASTA format."},
+    )
+    meta: Path = field(
+        metadata={"help": "Path to YAML with meta information."},
+    )
+    combined_plot: Path = field(
+        metadata={
+            "help": "Output path for combined HTML for fragment of each class.",
+        },
+    )
+    start_fragment_plot: Path = field(
+        metadata={
+            "help": "Output path for HTML for START-fragments, i.e. 5'-fragments.",
+        },
+    )
+    end_fragment_plot: Path = field(
+        metadata={
+            "help": "Output path for HTML for END-fragments, i.e. 3'-fragments.",
+        },
+    )
+    internal_fragment_plot: Path = field(
+        metadata={
+            "help": "Output path for HTML for internal fragments.",
+        },
+    )
+    mixed_fragment_plot: Path = field(
+        metadata={
+            "help": "Output path for HTML for fragments not divided by class.",
+        },
+    )
+    simulation: Path | None = field(
+        default=None,
+        metadata={"help": "Path to file containing simulation data (if applicable)."},
+    )
+    alphabet: Path | None = field(
+        default=None,
+        metadata={"help": "Path to file containing nucleotide alphabet."},
+    )
+
+
+@dataclass
 class Options(ddargparse.OptionsBase):
     """
     De novo prediction of RNA sequences
@@ -283,3 +331,4 @@ class Options(ddargparse.OptionsBase):
     preprocessing: PreprocessingOptions | None
     prediction: PredictionOptions | None
     plot_singletons: SingletonPlotOptions | None
+    plot_fragments: FragmentPlotOptions | None
