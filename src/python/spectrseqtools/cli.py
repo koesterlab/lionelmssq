@@ -4,6 +4,7 @@
 from spectrseqtools.parsers import Options
 from spectrseqtools.plotting.plot_fragments import plot_fragments
 from spectrseqtools.plotting.plot_singletons import plot_singletons
+from spectrseqtools.plotting.plot_spectrum import plot_spectrum
 from spectrseqtools.prediction.prediction import Predictor
 from spectrseqtools.preprocessing.preprocessing import Preprocessor
 
@@ -27,3 +28,7 @@ def main():
     # Plot fragments
     if options.plot_fragments is not None:
         plot_fragments(options=options.plot_fragments)
+
+    # Plot spectrum
+    if options.plot_spectrum is not None:
+        plot_spectrum(options=options.plot_spectrum)
