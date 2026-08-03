@@ -316,6 +316,23 @@ class FragmentPlotOptions(ddargparse.OptionsBase):
 
 
 @dataclass
+class SpectrumPlotOptions(ddargparse.OptionsBase):
+    """Plotting of spectrum of preprocessed fragments based on usage in prediction."""
+
+    raw_fragments: Path = field(
+        metadata={"help": "Path to TSV file containing raw fragments."},
+    )
+    predicted_fragments: Path = field(
+        metadata={"help": "Path to TSV file containing fragments used for prediction."},
+    )
+    output_path: Path = field(
+        metadata={
+            "help": "Output path for HTML with spectrum plot.",
+        },
+    )
+
+
+@dataclass
 class Options(ddargparse.OptionsBase):
     """
     De novo prediction of RNA sequences
@@ -332,3 +349,4 @@ class Options(ddargparse.OptionsBase):
     prediction: PredictionOptions | None
     plot_singletons: SingletonPlotOptions | None
     plot_fragments: FragmentPlotOptions | None
+    plot_spectrum: SpectrumPlotOptions | None
