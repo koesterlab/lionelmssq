@@ -4,6 +4,7 @@
 from spectrseqtools.parsers import Options
 from spectrseqtools.plotting.plot_evaluation import plot_evaluation
 from spectrseqtools.plotting.plot_fragments import plot_fragments
+from spectrseqtools.plotting.plot_run_statistics import plot_run_statistics
 from spectrseqtools.plotting.plot_singletons import plot_singletons
 from spectrseqtools.plotting.plot_spectrum import plot_spectrum
 from spectrseqtools.prediction.prediction import Predictor
@@ -37,3 +38,7 @@ def main():
     # Plot evaluation results
     if options.plot_evaluation is not None:
         plot_evaluation(options=options.plot_evaluation)
+
+    # Plot run statistics
+    if options.plot_run_statistics is not None:
+        plot_run_statistics(options=options.plot_run_statistics)
