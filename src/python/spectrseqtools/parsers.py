@@ -333,6 +333,29 @@ class SpectrumPlotOptions(ddargparse.OptionsBase):
 
 
 @dataclass
+class EvaluationPlotOptions(ddargparse.OptionsBase):
+    """Plotting of overview of (evaluated) prediction results."""
+
+    input: Path = field(
+        metadata={"help": "Path to TSV file containing evaluation results."},
+    )
+    bar_path: Path = field(
+        metadata={
+            "help": "Output path for HTML with barplot with evaluation results.",
+        },
+    )
+    donut_path: Path = field(
+        metadata={
+            "help": "Output path for HTML with donut plot with evaluation results.",
+        },
+    )
+    evaluation_criterion: str = field(
+        default="default",
+        metadata={"help": "Criterion for differentiation between evaluation results."},
+    )
+
+
+@dataclass
 class Options(ddargparse.OptionsBase):
     """
     De novo prediction of RNA sequences
@@ -350,3 +373,4 @@ class Options(ddargparse.OptionsBase):
     plot_singletons: SingletonPlotOptions | None
     plot_fragments: FragmentPlotOptions | None
     plot_spectrum: SpectrumPlotOptions | None
+    plot_evaluation: EvaluationPlotOptions | None
