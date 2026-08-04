@@ -1,28 +1,19 @@
 # -*- coding: utf-8 -*-
 """Plotting of run statistics."""
+
 from typing import List
 
 import altair as alt
 import polars as pl
 
 from spectrseqtools.parsers import RunStatisticsPlotOptions
-
-STATUS_COLORS = {
-    "experiment": "#990000",
-    # "true": "#2b73b5",
-    "simulation": "#808285",
-}
+from spectrseqtools.plotting import HISTOGRAM_WIDTH, LEGEND_PARAMS, select_scale
 
 STATUS_ORDER = ["simulation", "experiment"]
-
-LEGEND_PARAMS = {
-    "padding": 10,
-    "strokeColor": "black",
-    "cornerRadius": 5,
-    "fillColor": "white",
+STATUS_COLORS = {
+    "experiment": "#990000",
+    "simulation": "#808285",
 }
-
-WIDTH = 850
 
 
 def plot_run_statistics(options: RunStatisticsPlotOptions) -> None:
@@ -81,20 +72,13 @@ def create_scatterplot(data: pl.DataFrame, mode: str, size: int = 20) -> alt.Cha
             ),
             y=select_y_axis(mode=mode),
         )
-        .properties(width=WIDTH)
+        .properties(width=HISTOGRAM_WIDTH)
     )
 
     scatterplot = base_chart.mark_circle(size=size).encode(
-        # color=alt.value(STATUS_COLORS[kind]),
         color=alt.Color(
             "type:N",
-            scale=alt.Scale(
-                domain=STATUS_ORDER,
-                range=[
-                    STATUS_COLORS[stat] if STATUS_COLORS.get(stat) else stat
-                    for stat in STATUS_ORDER
-                ],
-            ),
+            scale=select_scale(order=STATUS_ORDER, colors=STATUS_COLORS),
             legend=alt.Legend(
                 **LEGEND_PARAMS,
                 orient="top-left",

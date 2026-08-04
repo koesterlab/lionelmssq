@@ -11,9 +11,8 @@ from spectrseqtools.dataclasses import Sequence
 from spectrseqtools.file_settings import load_alphabet
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 from spectrseqtools.parsers import PreprocessingOptions, SingletonPlotOptions
+from spectrseqtools.plotting import HISTOGRAM_WIDTH
 from spectrseqtools.preprocessing.preprocessing import Preprocessor
-
-HISTOGRAM_WIDTH = 850
 
 
 def plot_singletons(options: SingletonPlotOptions) -> None:

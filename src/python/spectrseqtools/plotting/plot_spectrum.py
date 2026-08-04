@@ -5,22 +5,13 @@ import altair as alt
 import polars as pl
 
 from spectrseqtools.parsers import SpectrumPlotOptions
+from spectrseqtools.plotting import HISTOGRAM_WIDTH
 
 STATUS_COLORS = {
     "true": "#990000",
-    # "true": "#2b73b5",
     "false": "#808285",
 }
-
-LEGEND_PARAMS = {
-    "padding": 10,
-    "strokeColor": "black",
-    "cornerRadius": 5,
-    "fillColor": "white",
-}
-
 MAX_INTENSITY = 0.2
-HISTOGRAM_WIDTH = 850
 
 
 def plot_spectrum(options: SpectrumPlotOptions) -> None:

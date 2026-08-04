@@ -5,29 +5,7 @@ import altair as alt
 import polars as pl
 
 from spectrseqtools.parsers import EvaluationPlotOptions
-
-STATUS_COLORS = {
-    "identical": "#8cb110",
-    "identical (minus 55U/G)": "yellow",
-    "correct composition": "orange",
-    # "failed prediction": "#be0a26",
-    "failed prediction": "#990000",
-    "wrong length": "gray",
-    "no prediction": "black",
-}
-
-STATUS_COLORS = {
-    "identical": "#35607A",
-    # "identical": "#2B73B5",
-    # "identical (minus 55U/G)": "#2B73B5",
-    # "correct composition": "#639FD3",
-    "identical (minus 55U/G)": "#639FD3",
-    "correct composition": "#F9BD77",
-    # "failed prediction": "#F9BD77",
-    "failed prediction": "#E54A26",
-    "wrong length": "#990000",
-    "no prediction": "#808285",
-}
+from spectrseqtools.plotting import LEGEND_PARAMS, select_scale
 
 STATUS_ORDER = [
     "identical",
@@ -37,12 +15,13 @@ STATUS_ORDER = [
     "wrong length",
     "no prediction",
 ]
-
-LEGEND_PARAMS = {
-    "padding": 10,
-    "strokeColor": "black",
-    "cornerRadius": 5,
-    "fillColor": "white",
+STATUS_COLORS = {
+    "identical": "#35607A",
+    "identical (minus 55U/G)": "#639FD3",
+    "correct composition": "#F9BD77",
+    "failed prediction": "#E54A26",
+    "wrong length": "#990000",
+    "no prediction": "#808285",
 }
 
 
@@ -98,13 +77,7 @@ def create_donut_plot(data: pl.DataFrame) -> alt.Chart:
             theta=alt.Theta("count(result):Q", sort=STATUS_ORDER),
             color=alt.Color(
                 "result:N",
-                scale=alt.Scale(
-                    domain=STATUS_ORDER,
-                    range=[
-                        STATUS_COLORS[stat] if STATUS_COLORS.get(stat) else stat
-                        for stat in STATUS_ORDER
-                    ],
-                ),
+                scale=select_scale(order=STATUS_ORDER, colors=STATUS_COLORS),
             ),
             order=alt.Order("order:O", sort="descending"),
             tooltip=["result", "count(result)"],
@@ -138,13 +111,7 @@ def create_stacked_barplot(data: pl.DataFrame, param: str) -> alt.Chart:
             y=alt.Y("count(result):Q", sort=STATUS_ORDER, title="Number of sequences"),
             color=alt.Color(
                 "result:N",
-                scale=alt.Scale(
-                    domain=STATUS_ORDER,
-                    range=[
-                        STATUS_COLORS[stat] if STATUS_COLORS.get(stat) else stat
-                        for stat in STATUS_ORDER
-                    ],
-                ),
+                scale=select_scale(order=STATUS_ORDER, colors=STATUS_COLORS),
                 legend=alt.Legend(
                     **LEGEND_PARAMS,
                     orient="left",
@@ -183,13 +150,7 @@ def create_heatmap(data: pl.DataFrame, param: str) -> alt.Chart:
             alt.Y(f"{param}:N", title=param, sort="descending"),
             alt.Color(
                 "result:N",
-                scale=alt.Scale(
-                    domain=STATUS_ORDER,
-                    range=[
-                        STATUS_COLORS[stat] if STATUS_COLORS.get(stat) else stat
-                        for stat in STATUS_ORDER
-                    ],
-                ),
+                scale=select_scale(order=STATUS_ORDER, colors=STATUS_COLORS),
             ),
             tooltip=["true_sequence", "pred_sequence", param, "result"],
         )
