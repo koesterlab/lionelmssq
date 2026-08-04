@@ -356,6 +356,26 @@ class EvaluationPlotOptions(ddargparse.OptionsBase):
 
 
 @dataclass
+class RunStatisticsPlotOptions(ddargparse.OptionsBase):
+    """Plotting of run statistics."""
+
+    simulation: Path = field(
+        metadata={"help": "Path to TSV file containing statistics for simulations."},
+    )
+    experiment: Path = field(
+        metadata={"help": "Path to TSV file containing statistics for experiments."},
+    )
+    output_path: Path = field(
+        metadata={
+            "help": "Output path for HTML with scatterplot.",
+        },
+    )
+    statistic_criterion: str = field(
+        metadata={"help": "Criterion for statistic to be plotted."},
+    )
+
+
+@dataclass
 class Options(ddargparse.OptionsBase):
     """
     De novo prediction of RNA sequences
@@ -374,3 +394,4 @@ class Options(ddargparse.OptionsBase):
     plot_fragments: FragmentPlotOptions | None
     plot_spectrum: SpectrumPlotOptions | None
     plot_evaluation: EvaluationPlotOptions | None
+    plot_run_statistics: RunStatisticsPlotOptions | None
