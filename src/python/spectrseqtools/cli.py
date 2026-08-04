@@ -2,6 +2,7 @@
 """Module for command-line interface."""
 
 from spectrseqtools.parsers import Options
+from spectrseqtools.plotting.plot_evaluation import plot_evaluation
 from spectrseqtools.plotting.plot_fragments import plot_fragments
 from spectrseqtools.plotting.plot_singletons import plot_singletons
 from spectrseqtools.plotting.plot_spectrum import plot_spectrum
@@ -32,3 +33,7 @@ def main():
     # Plot spectrum
     if options.plot_spectrum is not None:
         plot_spectrum(options=options.plot_spectrum)
+
+    # Plot evaluation results
+    if options.plot_evaluation is not None:
+        plot_evaluation(options=options.plot_evaluation)
