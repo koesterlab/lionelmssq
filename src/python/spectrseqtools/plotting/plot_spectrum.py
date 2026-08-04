@@ -47,14 +47,14 @@ def create_spectra_plot(data_raw: pl.DataFrame, data_pred: pl.DataFrame) -> alt.
 
     Parameters
     ----------
-    data_raw : polars.DataFrame
+    data_raw : pl.DataFrame
         Dataframe containing all raw fragments.
-    data_pred : polars.DataFrame
+    data_pred : pl.DataFrame
         Dataframe containing all fragments used for prediction.
 
     Returns
     -------
-    altair.Chart
+    alt.Chart
         Histogram over fragments (mass vs. intensity).
 
     """

@@ -1,3 +1,6 @@
+# -*- coding: utf-8 -*-
+"""Plotting of overview of (evaluated) prediction results."""
+
 import altair as alt
 import polars as pl
 
@@ -44,6 +47,14 @@ LEGEND_PARAMS = {
 
 
 def plot_evaluation(options: EvaluationPlotOptions) -> None:
+    """Plot evaluated results from prediction.
+
+    Parameters
+    ----------
+    options : EvaluationPlotOptions
+        Options for evaluation plot read by parser.
+
+    """
     results = pl.read_csv(options.input, separator="\t")
 
     donut_chart = create_donut_plot(data=results)
@@ -67,6 +78,19 @@ def plot_evaluation(options: EvaluationPlotOptions) -> None:
 
 
 def create_donut_plot(data: pl.DataFrame) -> alt.Chart:
+    """Create donut plot to represent results.
+
+    Parameters
+    ----------
+    data : pl.DataFrame
+        Evaluation data.
+
+    Returns
+    -------
+    alt.Chart
+        Donut plot over evaluation results.
+
+    """
     return (
         alt.Chart(data)
         .mark_arc(innerRadius=32, outerRadius=50)
@@ -174,7 +198,20 @@ def create_heatmap(data: pl.DataFrame, param: str) -> alt.Chart:
     return heatmap
 
 
-def select_x_axis(param: str):
+def select_x_axis(param: str) -> alt.X:
+    """Select X-axis for Altair plot based on given parameter.
+
+    Parameters
+    ----------
+    param : str
+        Evaluation parameter.
+
+    Returns
+    -------
+    alt.X
+        X-axis for Altair plot.
+
+    """
     match param:
         case "modification_rate":
             return alt.X("modification_rate:N", title="Modification rate")
