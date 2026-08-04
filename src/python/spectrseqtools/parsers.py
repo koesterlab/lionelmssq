@@ -242,6 +242,140 @@ class PredictionOptions(ddargparse.OptionsBase):
 
 
 @dataclass
+class SingletonPlotOptions(ddargparse.OptionsBase):
+    """Plotting of singletons detected during preprocessing."""
+
+    input: Path = field(
+        metadata={"help": "Path to input file in RAW format"},
+    )
+    meta: Path = field(
+        metadata={"help": "Path to YAML with meta information."},
+    )
+    scan_dir: Path = field(
+        metadata={
+            "help": "Output directory for all individual scans.",
+        },
+    )
+    output_path: Path = field(
+        metadata={
+            "help": "Output path for combined HTML of all scans.",
+        },
+    )
+    alphabet: Path | None = field(
+        default=None,
+        metadata={"help": "Path to file containing nucleotide alphabet."},
+    )
+
+
+@dataclass
+class FragmentPlotOptions(ddargparse.OptionsBase):
+    """Plotting of fragments aligned to predicted sequence."""
+
+    fragments: Path = field(
+        metadata={"help": "Path to fragment file in TSV format"},
+    )
+    prediction: Path = field(
+        metadata={"help": "Path to prediction file in FASTA format."},
+    )
+    meta: Path = field(
+        metadata={"help": "Path to YAML with meta information."},
+    )
+    combined_plot: Path = field(
+        metadata={
+            "help": "Output path for combined HTML for fragment of each class.",
+        },
+    )
+    start_fragment_plot: Path = field(
+        metadata={
+            "help": "Output path for HTML for START-fragments, i.e. 5'-fragments.",
+        },
+    )
+    end_fragment_plot: Path = field(
+        metadata={
+            "help": "Output path for HTML for END-fragments, i.e. 3'-fragments.",
+        },
+    )
+    internal_fragment_plot: Path = field(
+        metadata={
+            "help": "Output path for HTML for internal fragments.",
+        },
+    )
+    mixed_fragment_plot: Path = field(
+        metadata={
+            "help": "Output path for HTML for fragments not divided by class.",
+        },
+    )
+    simulation: Path | None = field(
+        default=None,
+        metadata={"help": "Path to file containing simulation data (if applicable)."},
+    )
+    alphabet: Path | None = field(
+        default=None,
+        metadata={"help": "Path to file containing nucleotide alphabet."},
+    )
+
+
+@dataclass
+class SpectrumPlotOptions(ddargparse.OptionsBase):
+    """Plotting of spectrum of preprocessed fragments based on usage in prediction."""
+
+    raw_fragments: Path = field(
+        metadata={"help": "Path to TSV file containing raw fragments."},
+    )
+    predicted_fragments: Path = field(
+        metadata={"help": "Path to TSV file containing fragments used for prediction."},
+    )
+    output_path: Path = field(
+        metadata={
+            "help": "Output path for HTML with spectrum plot.",
+        },
+    )
+
+
+@dataclass
+class EvaluationPlotOptions(ddargparse.OptionsBase):
+    """Plotting of overview of (evaluated) prediction results."""
+
+    input: Path = field(
+        metadata={"help": "Path to TSV file containing evaluation results."},
+    )
+    bar_path: Path = field(
+        metadata={
+            "help": "Output path for HTML with barplot with evaluation results.",
+        },
+    )
+    donut_path: Path = field(
+        metadata={
+            "help": "Output path for HTML with donut plot with evaluation results.",
+        },
+    )
+    evaluation_criterion: str = field(
+        default="default",
+        metadata={"help": "Criterion for differentiation between evaluation results."},
+    )
+
+
+@dataclass
+class RunStatisticsPlotOptions(ddargparse.OptionsBase):
+    """Plotting of run statistics."""
+
+    simulation: Path = field(
+        metadata={"help": "Path to TSV file containing statistics for simulations."},
+    )
+    experiment: Path = field(
+        metadata={"help": "Path to TSV file containing statistics for experiments."},
+    )
+    output_path: Path = field(
+        metadata={
+            "help": "Output path for HTML with scatterplot.",
+        },
+    )
+    statistic_criterion: str = field(
+        metadata={"help": "Criterion for statistic to be plotted."},
+    )
+
+
+@dataclass
 class Options(ddargparse.OptionsBase):
     """
     De novo prediction of RNA sequences
@@ -256,3 +390,8 @@ class Options(ddargparse.OptionsBase):
 
     preprocessing: PreprocessingOptions | None
     prediction: PredictionOptions | None
+    plot_singletons: SingletonPlotOptions | None
+    plot_fragments: FragmentPlotOptions | None
+    plot_spectrum: SpectrumPlotOptions | None
+    plot_evaluation: EvaluationPlotOptions | None
+    plot_run_statistics: RunStatisticsPlotOptions | None
