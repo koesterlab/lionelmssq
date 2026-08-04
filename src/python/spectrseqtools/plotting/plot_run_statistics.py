@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+"""Plotting of run statistics."""
+from typing import List
+
 import altair as alt
 import polars as pl
 
@@ -22,6 +26,14 @@ WIDTH = 850
 
 
 def plot_run_statistics(options: RunStatisticsPlotOptions) -> None:
+    """Plot run statistics.
+
+    Parameters
+    ----------
+    options : RunStatisticsPlotOptions
+        Options for run-statistics plot read by parser.
+
+    """
     mode = options.statistic_criterion
 
     sim_results = pl.read_csv(options.simulation, separator="\t")
@@ -41,7 +53,24 @@ def plot_run_statistics(options: RunStatisticsPlotOptions) -> None:
     chart.save(options.output_path)
 
 
-def create_scatterplot(data: pl.DataFrame, mode: str, size: int = 20):
+def create_scatterplot(data: pl.DataFrame, mode: str, size: int = 20) -> alt.Chart:
+    """Create scatterplot over given parameter.
+
+    Parameters
+    ----------
+    data : pl.DataFrame
+        Statistics data.
+    mode : str
+        Statistic to be plotted.
+    size : int, optional
+        Size of circles in scatterplot.
+
+    Returns
+    -------
+    alt.Chart
+        Scatterplot over given statistic.
+
+    """
     base_chart = (
         alt.Chart(data)
         .encode(
@@ -78,7 +107,20 @@ def create_scatterplot(data: pl.DataFrame, mode: str, size: int = 20):
     return scatterplot
 
 
-def select_y_axis(mode: str):
+def select_y_axis(mode: str) -> alt.Y:
+    """Select Y-axis for Altair plot based on given statistic.
+
+    Parameters
+    ----------
+    mode : str
+        Statistic to be plotted.
+
+    Returns
+    -------
+    alt.Y
+        Y-axis for Altair plot.
+
+    """
     match mode:
         case "runtime":
             return alt.Y(
@@ -100,7 +142,20 @@ def select_y_axis(mode: str):
             )
 
 
-def select_tooltip(mode: str):
+def select_tooltip(mode: str) -> List[str]:
+    """Select tooltip for Altair plot.
+
+    Parameters
+    ----------
+    mode : str
+        Statistic to be plotted.
+
+    Returns
+    -------
+    List[str]
+        List of columns to be used for tooltip in Altair plot.
+
+    """
     match mode:
         case "runtime":
             return ["s", "num_frag"]
