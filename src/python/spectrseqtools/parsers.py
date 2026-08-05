@@ -386,6 +386,38 @@ class PlottingOptions(ddargparse.OptionsBase):
 
 
 @dataclass
+class PredictionPostprocessingOptions(ddargparse.OptionsBase):
+    """Evaluation of prediction results."""
+
+    prediction: list[Path] = field(
+        metadata={"help": "List of paths to prediction files in FASTA format."},
+    )
+    meta: list[Path] = field(
+        metadata={"help": "List of paths to YAML files with meta information."},
+    )
+    output_path: Path = field(
+        metadata={
+            "help": "Output path for evaluation results in TSV format.",
+        },
+    )
+    evaluation_criterion: str = field(
+        default="default",
+        metadata={"help": "Criterion for differentiation between evaluation results."},
+    )
+    config: str | None = field(
+        default=None,
+        metadata={"help": "Configurations for parameter study (if applicable)."},
+    )
+
+
+@dataclass
+class PostprocessingOptions(ddargparse.OptionsBase):
+    """Postprocessing of prediction results."""
+
+    prediction: PredictionPostprocessingOptions | None
+
+
+@dataclass
 class Options(ddargparse.OptionsBase):
     """
     De novo prediction of RNA sequences
@@ -400,4 +432,5 @@ class Options(ddargparse.OptionsBase):
 
     preprocessing: PreprocessingOptions | None
     prediction: PredictionOptions | None
+    postprocessing: PostprocessingOptions | None
     plotting: PlottingOptions | None
