@@ -495,7 +495,7 @@ def generate_singletons_and_fragments(grp_number,
     adduct_types = ", ".join(df_filter["inferred_adduct_type"].unique().to_list())
     min_window_time = df_filter["min_window_time"].min()
     max_window_time = df_filter["max_window_time"].max()
-    intact_mass = df_filter["ms1_mass"].max()
+    intact_mass = df_filter["ms1_mass"].min()
     
     if intact_mass < meta["3_prime_tag"]+meta["5_prime_tag"]:
         return None, None
@@ -544,18 +544,19 @@ def generate_singletons_and_fragments(grp_number,
         )
 
     intact_mass_row = pl.DataFrame({
-        "observed_mass": intact_mass,
-        "is_ms1_mass": True,
-        "ms1_mass_group": grp_number,
-        "adduct_type": adduct_types,
-        "min_window_time": min_window_time,
-        "max_window_time": max_window_time
+        "observed_mass": [intact_mass],
+        "is_ms1_mass": [True],
+        "ms1_mass_group": [grp_number],
+        "adduct_type": [adduct_types],
+        "min_window_time": [min_window_time],
+        "max_window_time": [max_window_time]
     })
 
-    if fragments is None:
-        fragments = intact_mass_row
-    else:
+
+    if fragments is not None:
         fragments = pl.concat([fragments, intact_mass_row], how = "diagonal_relaxed")
+    else:
+        return None, None
 
     return fragments, singletons
 
@@ -637,8 +638,8 @@ def pre_process_multiplexing(
         fragment_list.append(fragments)
         singleton_list.append(singletons)
 
-    fragments = pl.concat(fragment_list, how="diagonal_relaxed")
-    singletons = pl.concat(singleton_list, how="diagonal_relaxed")
+    fragments = pl.concat(fragment_list)#, how="diagonal_relaxed")
+    singletons = pl.concat(singleton_list)#, how="diagonal_relaxed")
 
     return fragments, singletons, meta
 

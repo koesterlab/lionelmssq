@@ -110,11 +110,7 @@ class FileSettings:
     @property
     def file_prefix(self):
         """Return file prefix (not including directory path)."""
-        if isinstance(self.input_path, Path):
-            return self.input_path.stem
-        else:
-            grp_number = self.input_path["ms1_mass_group"].unique()[0]
-            return grp_number
+        return self.input_path.stem
 
 
 @dataclass

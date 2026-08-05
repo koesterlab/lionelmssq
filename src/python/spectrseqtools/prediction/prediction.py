@@ -2,6 +2,7 @@
 """Prediction of sequence and fragments."""
 
 from typing import Set, Tuple
+from pathlib import Path
 import polars as pl
 import yaml
 
@@ -160,8 +161,11 @@ class Predictor:
         fragments.filter_by_intact_mass(seq_info=self.inferrer.seq)
         fragments.filter_with_traceback_matrix(inferrer=self.inferrer)
 
-        # Save SU-fragments
-        fragments.save(output_path=self.file_settings.su_fragment_path)
+        if isinstance(self.file_settings.input_path, Path) and isinstance(self.file_settings.alphabet_path, Path):
+            # Save SU-fragments
+            fragments.save(output_path=self.file_settings.su_fragment_path)
+        elif isinstance(self.file_settings.input_path, pl.DataFrame) and isinstance(self.file_settings.alphabet_path, pl.DataFrame):
+            raw_fragments = fragments.fragments
 
         fragments.index()
 
@@ -176,13 +180,24 @@ class Predictor:
 
         print("Predicted sequence =\t", prediction.sequence)
 
-        # Save prediction results
-        prediction.save(
-            file_settings=self.file_settings,
-            alphabet=self.inferrer.alphabet,
-        )
+        if isinstance(self.file_settings.input_path, Path) and isinstance(self.file_settings.alphabet_path, Path):
+            # Save prediction results
+            prediction.save(
+                file_settings=self.file_settings,
+                alphabet=self.inferrer.alphabet,
+            )
 
-        return prediction
+            return prediction
+        elif isinstance(self.file_settings.input_path, pl.DataFrame) and isinstance(self.file_settings.alphabet_path, pl.DataFrame):
+            prediction_fragments = prediction.fragments.fragments
+            sequence_name = self.file_settings.sequence_header
+
+            fasta_dict = {
+                f">{sequence_name}": "".join(prediction.sequence.sequence),
+                f">{sequence_name}_full": prediction.sequence.fmt(nucleotide_alphabet=self.inferrer.alphabet)
+            }
+
+            return raw_fragments, prediction_fragments, fasta_dict
 
     def predict_sequence(
         self,

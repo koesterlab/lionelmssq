@@ -267,7 +267,7 @@ class Preprocessor:
         return peak_list.to_singletons(
             alphabet_path=self.file_settings.alphabet_path,
             error=self.error,
-        ).drop("mz")
+        )#.drop("mz")
 
     def identify_scans_with_full_singleton_set(
         self, singletons: pl.DataFrame, id_list: List[str]
