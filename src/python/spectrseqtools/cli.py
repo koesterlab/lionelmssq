@@ -13,7 +13,7 @@ from spectrseqtools.preprocessing.preprocessing import Preprocessor
 
 def main():
     """Parse options to select and execute subcommands."""
-    options = Options.parse_args()
+    options = Options.from_cli_args()
 
     # Preprocess raw data
     if options.preprocessing is not None:

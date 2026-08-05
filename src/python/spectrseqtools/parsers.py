@@ -3,7 +3,6 @@
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Tuple
 
 import ddargparse
 
@@ -109,14 +108,14 @@ class PreprocessingOptions(ddargparse.OptionsBase):
             "(used in ms_deisotope package as 'error_tolerance')."
         },
     )
-    ms1_charge_range: Tuple[int, int] | None = field(
+    ms1_charge_range: tuple[int, int] | None = field(
         default=None,
         metadata={
             "help": "Charge range considered for MS1 deconvolution "
             "(used in ms_deisotope package)."
         },
     )
-    ms2_charge_range: Tuple[int, int] | None = field(
+    ms2_charge_range: tuple[int, int] | None = field(
         default=None,
         metadata={
             "help": "Charge range considered for MS2 deconvolution "

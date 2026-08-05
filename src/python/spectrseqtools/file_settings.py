@@ -105,6 +105,7 @@ class FileSettings:
         path = self.input_path.resolve()
         if self.output_dir is None:
             self.output_dir = path.parent
+        self.output_dir = Path(str(self.output_dir))
 
     @property
     def file_prefix(self):
