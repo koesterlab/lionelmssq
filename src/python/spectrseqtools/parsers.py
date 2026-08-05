@@ -375,6 +375,17 @@ class RunStatisticsPlotOptions(ddargparse.OptionsBase):
 
 
 @dataclass
+class PlottingOptions(ddargparse.OptionsBase):
+    """Plotting of (intermediate) results of sequence prediction."""
+
+    singletons: SingletonPlotOptions | None
+    fragments: FragmentPlotOptions | None
+    spectrum: SpectrumPlotOptions | None
+    evaluation: EvaluationPlotOptions | None
+    run_statistics: RunStatisticsPlotOptions | None
+
+
+@dataclass
 class Options(ddargparse.OptionsBase):
     """
     De novo prediction of RNA sequences
@@ -389,8 +400,4 @@ class Options(ddargparse.OptionsBase):
 
     preprocessing: PreprocessingOptions | None
     prediction: PredictionOptions | None
-    plot_singletons: SingletonPlotOptions | None
-    plot_fragments: FragmentPlotOptions | None
-    plot_spectrum: SpectrumPlotOptions | None
-    plot_evaluation: EvaluationPlotOptions | None
-    plot_run_statistics: RunStatisticsPlotOptions | None
+    plotting: PlottingOptions | None

@@ -23,22 +23,19 @@ def main():
     if options.prediction is not None:
         Predictor(options=options.prediction).predict()
 
-    # Plot singletons
-    if options.plot_singletons is not None:
-        plot_singletons(options=options.plot_singletons)
+    # Plot (intermediate) prediction results
+    if options.plotting is not None:
+        if options.plotting.singletons is not None:
+            plot_singletons(options=options.plotting.singletons)
 
-    # Plot fragments
-    if options.plot_fragments is not None:
-        plot_fragments(options=options.plot_fragments)
+        if options.plotting.fragments is not None:
+            plot_fragments(options=options.plotting.fragments)
 
-    # Plot spectrum
-    if options.plot_spectrum is not None:
-        plot_spectrum(options=options.plot_spectrum)
+        if options.plotting.spectrum is not None:
+            plot_spectrum(options=options.plotting.spectrum)
 
-    # Plot evaluation results
-    if options.plot_evaluation is not None:
-        plot_evaluation(options=options.plot_evaluation)
+        if options.plotting.evaluation is not None:
+            plot_evaluation(options=options.plotting.evaluation)
 
-    # Plot run statistics
-    if options.plot_run_statistics is not None:
-        plot_run_statistics(options=options.plot_run_statistics)
+        if options.plotting.run_statistics is not None:
+            plot_run_statistics(options=options.plotting.run_statistics)
