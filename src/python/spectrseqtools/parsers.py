@@ -401,7 +401,6 @@ class PredictionPostprocessingOptions(ddargparse.OptionsBase):
         },
     )
     evaluation_criterion: str = field(
-        default="default",
         metadata={"help": "Criterion for differentiation between evaluation results."},
     )
     config: str | None = field(
@@ -411,10 +410,28 @@ class PredictionPostprocessingOptions(ddargparse.OptionsBase):
 
 
 @dataclass
+class RunStatisticsPostprocessingOptions(ddargparse.OptionsBase):
+    """Evaluation of run statistics for predictions."""
+
+    benchmarks: list[Path] = field(
+        metadata={"help": "List of paths to benchmark files in TSV format."},
+    )
+    fragments: list[Path] = field(
+        metadata={"help": "List to paths to fragment files in TSV format"},
+    )
+    output_path: Path = field(
+        metadata={
+            "help": "Output path for run-statistic results in TSV format.",
+        },
+    )
+
+
+@dataclass
 class PostprocessingOptions(ddargparse.OptionsBase):
     """Postprocessing of prediction results."""
 
     prediction: PredictionPostprocessingOptions | None
+    run_statistics: RunStatisticsPostprocessingOptions | None
 
 
 @dataclass
