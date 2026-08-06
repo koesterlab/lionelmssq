@@ -7,6 +7,7 @@ from spectrseqtools.plotting.plot_fragments import plot_fragments
 from spectrseqtools.plotting.plot_run_statistics import plot_run_statistics
 from spectrseqtools.plotting.plot_singletons import plot_singletons
 from spectrseqtools.plotting.plot_spectrum import plot_spectrum
+from spectrseqtools.postprocessing.evaluate_prediction import evaluate_prediction
 from spectrseqtools.prediction.prediction import Predictor
 from spectrseqtools.preprocessing.preprocessing import Preprocessor
 
@@ -22,6 +23,11 @@ def main():
     # Predict sequence
     if options.prediction is not None:
         Predictor(options=options.prediction).predict()
+
+    # Postprocess prediction results
+    if options.postprocessing is not None:
+        if options.postprocessing.prediction is not None:
+            evaluate_prediction(options=options.postprocessing.prediction)
 
     # Plot (intermediate) prediction results
     if options.plotting is not None:
