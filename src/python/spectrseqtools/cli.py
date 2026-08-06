@@ -15,6 +15,7 @@ from spectrseqtools.prediction.prediction import Predictor
 from spectrseqtools.preprocessing.preprocessing import Preprocessor
 
 
+# TODO: Adapt to linting of Ruff v0.16
 def main():
     """Parse options to select and execute subcommands."""
     options = Options.from_cli_args(args=None)

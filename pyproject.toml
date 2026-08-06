@@ -55,7 +55,7 @@ rust = ">=1.85,<2.0"
 spectrseqtools = { path = ".", editable = true }
 
 [tool.pixi.feature.dev.dependencies]
-ruff = "*"
+ruff = ">=0.15,<0.16"
 pytest = "*"
 pyrefly = "*"
 maturin = "*"
