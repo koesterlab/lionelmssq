@@ -1,3 +1,6 @@
+# -*- coding: utf-8 -*-
+"""Postprocessing of prediction results by evaluation thereof."""
+
 from ast import literal_eval
 from pathlib import Path
 from typing import List
@@ -30,6 +33,14 @@ STATUS_ORDER = [
 
 
 def evaluate_prediction(options: PredictionPostprocessingOptions) -> None:
+    """Evaluate prediction results.
+
+    Parameters
+    ----------
+    options : PredictionPostprocessingOptions
+        Options for prediction evaluation read by parser.
+
+    """
     results = collect_results(
         prediction_files=options.prediction,
         meta_files=options.meta,
@@ -46,7 +57,24 @@ def evaluate_prediction(options: PredictionPostprocessingOptions) -> None:
     results.write_csv(options.output_path, separator="\t")
 
 
-def collect_results(prediction_files: List[Path], meta_files: List[Path]) -> pl.DataFrame:
+def collect_results(
+    prediction_files: List[Path], meta_files: List[Path]
+) -> pl.DataFrame:
+    """Collect results from input files.
+
+    Parameters
+    ----------
+    prediction_files : List[Path]
+        List of paths for prediction results in FASTA format.
+    meta_files : List[Path]
+        List of paths for meta information in YAML format.
+
+    Returns
+    -------
+    pl.DataFrame
+        Polars dataframe containing collected results.
+
+    """
     comp_values = []
     results = []
     true_sequences = []
@@ -92,6 +120,21 @@ def collect_results(prediction_files: List[Path], meta_files: List[Path]) -> pl.
 
 
 def compare_sequences(true_seq: List[str], pred_seq: List[str]) -> str:
+    """Compare true and predicted sequences.
+
+    Parameters
+    ----------
+    true_seq : List[str]
+        True sequence.
+    pred_seq : List[str]
+        Predicted sequence.
+
+    Returns
+    -------
+    str
+        Evaluation result.
+
+    """
     true_seq = [NUC_REPS[nuc] if nuc in NUC_REPS else nuc for nuc in true_seq]
     pred_seq = [NUC_REPS[nuc] if nuc in NUC_REPS else nuc for nuc in pred_seq]
     if len(pred_seq) < 1:
