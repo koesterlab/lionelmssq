@@ -12,6 +12,7 @@ from spectrseqtools.dataclasses import Sequence
 from spectrseqtools.error_calculator import ErrorUnderL1Norm
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
 from spectrseqtools.parsers import PredictionPostprocessingOptions
+from spectrseqtools.plotting.plot_evaluation import STATUS_ORDER
 
 NUCLEOTIDE_DF = NucleotideAlphabet.from_file(error=ErrorUnderL1Norm()).to_dataframe()
 NUC_REPS = {
@@ -21,15 +22,6 @@ NUC_REPS = {
         for nuc in row[NUCLEOTIDE_DF.get_column_index("names")]
     }
 }
-
-STATUS_ORDER = [
-    "identical",
-    "identical (minus 55U/G)",
-    "correct composition",
-    "failed prediction",
-    "wrong length",
-    "no prediction",
-]
 
 
 def evaluate_prediction(options: PredictionPostprocessingOptions) -> None:
