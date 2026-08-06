@@ -1,3 +1,6 @@
+# -*- coding: utf-8 -*-
+"""Postprocessing of prediction results by evaluation of run statistics."""
+
 # from ast import literal_eval
 from pathlib import Path
 from typing import List
@@ -28,6 +31,14 @@ STATUS_ORDER = [
 
 
 def evaluate_run_statistics(options: RunStatisticsPostprocessingOptions) -> None:
+    """Evaluate run statistics.
+
+    Parameters
+    ----------
+    options : RunStatisticsPostprocessingOptions
+        Options for run-statistic evaluation read by parser.
+
+    """
     results = collect_results(
         benchmark_files=options.benchmarks,
         fragment_files=options.fragments,
@@ -47,6 +58,21 @@ def evaluate_run_statistics(options: RunStatisticsPostprocessingOptions) -> None
 def collect_results(
     benchmark_files: List[Path], fragment_files: List[Path]
 ) -> pl.DataFrame:
+    """Collect results from input files.
+
+    Parameters
+    ----------
+    benchmark_files : List[Path]
+        List of paths for benchmarking results in TSV format.
+    fragment_files : List[Path]
+        List of paths for fragment in TSV format.
+
+    Returns
+    -------
+    pl.DataFrame
+        Polars dataframe containing collected results.
+
+    """
     results = []
     for benchmark, fragments in zip(benchmark_files, fragment_files):
         new_data = pl.read_csv(benchmark, separator="\t")
