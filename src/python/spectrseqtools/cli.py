@@ -7,13 +7,18 @@ from spectrseqtools.plotting.plot_fragments import plot_fragments
 from spectrseqtools.plotting.plot_run_statistics import plot_run_statistics
 from spectrseqtools.plotting.plot_singletons import plot_singletons
 from spectrseqtools.plotting.plot_spectrum import plot_spectrum
+from spectrseqtools.postprocessing.evaluate_prediction import evaluate_prediction
+from spectrseqtools.postprocessing.evaluate_run_statistics import (
+    evaluate_run_statistics,
+)
 from spectrseqtools.prediction.prediction import Predictor
 from spectrseqtools.preprocessing.preprocessing import Preprocessor
 
 
+# TODO: Adapt to linting of Ruff v0.16
 def main():
     """Parse options to select and execute subcommands."""
-    options = Options.parse_args()
+    options = Options.from_cli_args(args=None)
 
     # Preprocess raw data
     if options.preprocessing is not None:
@@ -23,22 +28,27 @@ def main():
     if options.prediction is not None:
         Predictor(options=options.prediction).predict()
 
-    # Plot singletons
-    if options.plot_singletons is not None:
-        plot_singletons(options=options.plot_singletons)
+    # Postprocess prediction results
+    if options.postprocessing is not None:
+        if options.postprocessing.prediction is not None:
+            evaluate_prediction(options=options.postprocessing.prediction)
 
-    # Plot fragments
-    if options.plot_fragments is not None:
-        plot_fragments(options=options.plot_fragments)
+        if options.postprocessing.run_statistics is not None:
+            evaluate_run_statistics(options=options.postprocessing.run_statistics)
 
-    # Plot spectrum
-    if options.plot_spectrum is not None:
-        plot_spectrum(options=options.plot_spectrum)
+    # Plot (intermediate) prediction results
+    if options.plotting is not None:
+        if options.plotting.singletons is not None:
+            plot_singletons(options=options.plotting.singletons)
 
-    # Plot evaluation results
-    if options.plot_evaluation is not None:
-        plot_evaluation(options=options.plot_evaluation)
+        if options.plotting.fragments is not None:
+            plot_fragments(options=options.plotting.fragments)
 
-    # Plot run statistics
-    if options.plot_run_statistics is not None:
-        plot_run_statistics(options=options.plot_run_statistics)
+        if options.plotting.spectrum is not None:
+            plot_spectrum(options=options.plotting.spectrum)
+
+        if options.plotting.evaluation is not None:
+            plot_evaluation(options=options.plotting.evaluation)
+
+        if options.plotting.run_statistics is not None:
+            plot_run_statistics(options=options.plotting.run_statistics)

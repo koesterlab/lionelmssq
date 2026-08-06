@@ -3,7 +3,6 @@
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Tuple
 
 import ddargparse
 
@@ -109,14 +108,14 @@ class PreprocessingOptions(ddargparse.OptionsBase):
             "(used in ms_deisotope package as 'error_tolerance')."
         },
     )
-    ms1_charge_range: Tuple[int, int] | None = field(
+    ms1_charge_range: tuple[int, int] | None = field(
         default=None,
         metadata={
             "help": "Charge range considered for MS1 deconvolution "
             "(used in ms_deisotope package)."
         },
     )
-    ms2_charge_range: Tuple[int, int] | None = field(
+    ms2_charge_range: tuple[int, int] | None = field(
         default=None,
         metadata={
             "help": "Charge range considered for MS2 deconvolution "
@@ -376,6 +375,66 @@ class RunStatisticsPlotOptions(ddargparse.OptionsBase):
 
 
 @dataclass
+class PlottingOptions(ddargparse.OptionsBase):
+    """Plotting of (intermediate) results of sequence prediction."""
+
+    singletons: SingletonPlotOptions | None
+    fragments: FragmentPlotOptions | None
+    spectrum: SpectrumPlotOptions | None
+    evaluation: EvaluationPlotOptions | None
+    run_statistics: RunStatisticsPlotOptions | None
+
+
+@dataclass
+class PredictionPostprocessingOptions(ddargparse.OptionsBase):
+    """Evaluation of prediction results."""
+
+    prediction: list[Path] = field(
+        metadata={"help": "List of paths to prediction files in FASTA format."},
+    )
+    meta: list[Path] = field(
+        metadata={"help": "List of paths to YAML files with meta information."},
+    )
+    output_path: Path = field(
+        metadata={
+            "help": "Output path for evaluation results in TSV format.",
+        },
+    )
+    evaluation_criterion: str = field(
+        metadata={"help": "Criterion for differentiation between evaluation results."},
+    )
+    config: str | None = field(
+        default=None,
+        metadata={"help": "Configurations for parameter study (if applicable)."},
+    )
+
+
+@dataclass
+class RunStatisticsPostprocessingOptions(ddargparse.OptionsBase):
+    """Evaluation of run statistics for predictions."""
+
+    benchmarks: list[Path] = field(
+        metadata={"help": "List of paths to benchmark files in TSV format."},
+    )
+    fragments: list[Path] = field(
+        metadata={"help": "List to paths to fragment files in TSV format"},
+    )
+    output_path: Path = field(
+        metadata={
+            "help": "Output path for run-statistic results in TSV format.",
+        },
+    )
+
+
+@dataclass
+class PostprocessingOptions(ddargparse.OptionsBase):
+    """Postprocessing of prediction results."""
+
+    prediction: PredictionPostprocessingOptions | None
+    run_statistics: RunStatisticsPostprocessingOptions | None
+
+
+@dataclass
 class Options(ddargparse.OptionsBase):
     """
     De novo prediction of RNA sequences
@@ -390,8 +449,5 @@ class Options(ddargparse.OptionsBase):
 
     preprocessing: PreprocessingOptions | None
     prediction: PredictionOptions | None
-    plot_singletons: SingletonPlotOptions | None
-    plot_fragments: FragmentPlotOptions | None
-    plot_spectrum: SpectrumPlotOptions | None
-    plot_evaluation: EvaluationPlotOptions | None
-    plot_run_statistics: RunStatisticsPlotOptions | None
+    postprocessing: PostprocessingOptions | None
+    plotting: PlottingOptions | None
