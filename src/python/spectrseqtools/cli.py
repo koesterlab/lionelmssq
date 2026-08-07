@@ -13,12 +13,18 @@ from spectrseqtools.postprocessing.evaluate_run_statistics import (
 )
 from spectrseqtools.prediction.prediction import Predictor
 from spectrseqtools.preprocessing.preprocessing import Preprocessor
+from spectrseqtools.simulation.simulate_fragments import simulate_fragments
 
 
 # TODO: Adapt to linting of Ruff v0.16
 def main():
     """Parse options to select and execute subcommands."""
     options = Options.from_cli_args(args=None)
+
+    # Simulate preprocessed data
+    if options.simulation is not None:
+        if options.simulation.fragments is not None:
+            simulate_fragments(options=options.simulation.fragments)
 
     # Preprocess raw data
     if options.preprocessing is not None:
