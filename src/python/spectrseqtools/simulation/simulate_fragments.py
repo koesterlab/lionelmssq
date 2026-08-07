@@ -1,6 +1,9 @@
+# -*- coding: utf-8 -*-
+"""Simulation of random fragments."""
+
 from ast import literal_eval
 from pathlib import Path
-from typing import List
+from typing import List, Tuple
 
 import numpy as np
 import polars as pl
@@ -15,7 +18,14 @@ NO_FRAGMENTATION_PROBABILITY = 0.05
 
 
 def simulate_fragments(options: FragmentSimulationOptions) -> None:
-    """Simulate mass-spectrometry data via Snakemake."""
+    """Simulate fragments.
+
+    Parameters
+    ----------
+    options : FragmentSimulationOptions
+        Options for fragment simulation read by parser.
+
+    """
     if options.output_dir is None:
         seed = 0
     else:
@@ -94,6 +104,25 @@ def select_singletons(
     nucleosides: pl.DataFrame,
     max_singletons: int = 15,
 ) -> pl.DataFrame:
+    """Select singletons.
+
+    Parameters
+    ----------
+    rng : np.random.Generator
+        Random number generator.
+    seq : List[str]
+        True sequence.
+    nucleosides : pl.DataFrame
+        Nucleotide alphabet.
+    max_singletons : int
+        Maximum number of singletons.
+
+    Returns
+    -------
+    pl.DataFrame
+        Singleton alphabet.
+
+    """
     # Select true nucleotides
     true_nucs = list(set(seq))
 
@@ -124,6 +153,25 @@ def build_extra_mass_dict(
     start_tag: float,
     end_tag: float,
 ) -> dict:
+    """Build dictionary with fragmentation-related masses.
+
+    Parameters
+    ----------
+    fragmentation_type : str
+        Fragmentation type.
+    element_mass_path : Path
+        Path to file containing element masses.
+    start_tag : float
+        Mass of 5'-tag.
+    end_tag : float
+        Mass of 3'-tag.
+
+    Returns
+    -------
+    dict
+        Dictionary of fragmentation-related masses.
+
+    """
     # Build dict of elemental masses
     element_masses = pl.read_csv(element_mass_path, separator="\t")
     element_masses = {
@@ -184,7 +232,22 @@ def build_extra_mass_dict(
     return extra_mass_dict
 
 
-def get_seq_weight(seq: list, masses: dict) -> float:
+def get_seq_weight(seq: List[str], masses: pl.DataFrame) -> float:
+    """Get sequence weight.
+
+    Parameters
+    ----------
+    seq : List[str]
+        Sequence.
+    masses : pl.DataFrame
+        Nucleotide alphabet.
+
+    Returns
+    -------
+    float
+        Sequence mass.
+
+    """
     seq_df = pl.DataFrame(data=seq, schema=["name"])
     seq_df = seq_df.with_columns(
         pl.col("name")
@@ -211,6 +274,33 @@ def simulate(
     noise_dist: str,
     extra_mass_dict: dict,
 ) -> pl.DataFrame:
+    """Simulate fragments.
+
+    Parameters
+    ----------
+    rng : np.random.Generator
+        Random number generator.
+    true_sequence : List[str]
+        True sequence.
+    nucleoside_masses : pl.DataFrame
+        Nucleotide alphabet.
+    num_replicates : int
+        Number of replicates.
+    phantom_rate : float
+        Phantom rate.
+    noise_rate : float
+        Noise rate.
+    noise_dist : str
+        Noise distribution.
+    extra_mass_dict : dict
+        Dictionary with fragmentation-related masses.
+
+    Returns
+    -------
+    pl.DataFrame
+        Polars Dataframe containing simulated fragments.
+
+    """
     # Sample random fragments from true sequence
     seq_len = len(true_sequence)
     frag_sites = [
@@ -361,6 +451,21 @@ def simulate(
 # observed in experimental data (exponential distribution with many small and
 # few larger fragments, which gets sharper with increasing sequence length)
 def select_num_sites(seq_len: int, rng: np.random.Generator) -> int:
+    """Select number of fragmentation sites.
+
+    Parameters
+    ----------
+    seq_len : int
+        Sequence length.
+    rng : np.random.Generator
+        Random number generator.
+
+    Returns
+    -------
+    int
+        Number of fragmentation sites.
+
+    """
     if rng.random() < NO_FRAGMENTATION_PROBABILITY:
         return 0
     # Note that p = factor/seq_len with factor = seq_len/alpha
@@ -373,6 +478,23 @@ def select_num_sites(seq_len: int, rng: np.random.Generator) -> int:
 def select_fragmentation_sites(
     num_sites: int, seq_len: int, rng: np.random.Generator
 ) -> List[int]:
+    """Select fragmentation sites.
+
+    Parameters
+    ----------
+    num_sites : int
+        Number of fragmentation sites.
+    seq_len : int
+        Sequence length.
+    rng : np.random.Generator
+        Random number generator.
+
+    Returns
+    -------
+    List[int]
+        List of fragmentation sites (by index).
+
+    """
     # Ensure there is a positive number of parts (i.e. number of sites + 1)
     if num_sites < 0:
         raise ValueError("The number of parts cannot be less than one!")
@@ -395,7 +517,22 @@ def select_fragmentation_sites(
     )
 
 
-def compute_fragment_tuples(frag_sites, seq_len):
+def compute_fragment_tuples(frag_sites: List[int], seq_len: int) -> Tuple[int, int]:
+    """Compute tuples of start and end index for fragments.
+
+    Parameters
+    ----------
+    frag_sites : List[int]
+        Fragmentation sites.
+    seq_len : int
+        Sequence length.
+
+    Returns
+    -------
+    Tuple[int, int]
+        Fragment tuple.
+
+    """
     tuples = []
 
     # Generate tuples of start and end index for each fragments
@@ -413,6 +550,25 @@ def compute_fragment_tuples(frag_sites, seq_len):
 def induce_noise(
     rng: np.random.Generator, distribution_method: str, noise_rate: float, mass: float
 ) -> float:
+    """Induce noise in fragment.
+
+    Parameters
+    ----------
+    rng : np.random.Generator
+        Random number generator.
+    distribution_method : str
+        Noise distribution method.
+    noise_rate : float
+        Noise rate.
+    mass : float
+        Fragment mass.
+
+    Returns
+    -------
+    float
+        Fragment mass with noise.
+
+    """
     match distribution_method:
         case "normal":
             noise = rng.normal(scale=noise_rate)
@@ -426,7 +582,28 @@ def induce_noise(
     return max(mass * (1 + noise), 0.0)
 
 
-def add_backbone_mass(fragment, mass, seq_len, mass_dict):
+def add_backbone_mass(
+    fragment: dict, mass: float, seq_len: int, mass_dict: dict
+) -> float:
+    """Add backbone mass to fragment mass.
+
+    Parameters
+    ----------
+    fragment : dict
+        Fragment information.
+    mass : float
+        Fragment mass.
+    seq_len : int
+        Sequence length.
+    mass_dict : dict
+        Dictionary with fragmentation-related masses.
+
+    Returns
+    -------
+    float
+        Fragment mass with added backbone.
+
+    """
     # Turn nucleoside mass into the one of the corresponding standard units
     mass += (fragment["right"] - fragment["left"]) * mass_dict["to_standard_unit"]
 
