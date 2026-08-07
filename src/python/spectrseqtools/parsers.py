@@ -15,6 +15,58 @@ from spectrseqtools.enums import (
 
 
 @dataclass
+class FragmentSimulationOptions(ddargparse.OptionsBase):
+    """Simulation of random fragments."""
+
+    elements: Path = field(
+        metadata={"help": "Path to file with element-mass information in CSV format."},
+    )
+    fragments: Path = field(
+        metadata={"help": "Path to file with simulated fragments in TSV format."},
+    )
+    singletons: Path = field(
+        metadata={"help": "Path to file with simulated singleton information."},
+    )
+    meta: Path = field(
+        metadata={"help": "Path to YAML with meta information for simulation results."},
+    )
+    true_seq: str = field(
+        metadata={"help": "Underlying true sequence."},
+    )
+    num_replicates: int = field(
+        metadata={"help": "Number of copies of true sequence used for fragmentation."},
+    )
+    max_singletons: int = field(
+        metadata={
+            "help": "Maximum number of singletons reported (if true amount "
+            "does not exceed it)."
+        },
+    )
+    phantom_rate: float = field(
+        metadata={"help": "Rate of noise fragments introduced during simulation."},
+    )
+    noise_rate: float = field(
+        metadata={"help": "Noise (in ppm) induced on each simulated fragment."},
+    )
+    config: str = field(
+        metadata={"help": "Configurations for parameters outside of comparison study."},
+    )
+    output_dir: Path | None = field(
+        default=None,
+        metadata={
+            "help": "Output directory (to get seed).",
+        },
+    )
+
+
+@dataclass
+class SimulationOptions(ddargparse.OptionsBase):
+    """Simulation of random data imitating preprocessing results."""
+
+    fragments: FragmentSimulationOptions | None
+
+
+@dataclass
 class PreprocessingOptions(ddargparse.OptionsBase):
     """Preprocessing of raw data into fragments"""
 
@@ -447,6 +499,7 @@ class Options(ddargparse.OptionsBase):
 
     """
 
+    simulation: SimulationOptions | None
     preprocessing: PreprocessingOptions | None
     prediction: PredictionOptions | None
     postprocessing: PostprocessingOptions | None
