@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/spectrseq/spectrseqtools/compare/v0.2.0...v0.2.1) (2026-07-25)
+
+
+### Bug Fixes
+
+* streamline build process ([#70](https://github.com/spectrseq/spectrseqtools/issues/70)) ([eaeca8f](https://github.com/spectrseq/spectrseqtools/commit/eaeca8f2d26291b09f14e371b367db68ff930df8))
+
 ## [0.2.0](https://github.com/spectrseq/spectrseqtools/compare/v0.1.3...v0.2.0) (2026-07-19)
 
 

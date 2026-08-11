@@ -1,0 +1,196 @@
+# -*- coding: utf-8 -*-
+"""Plotting of overview of (evaluated) prediction results."""
+
+import altair as alt
+import polars as pl
+
+from spectrseqtools.parsers import EvaluationPlotOptions
+from spectrseqtools.plotting import LEGEND_PARAMS, select_scale
+
+STATUS_ORDER = [
+    "identical",
+    "identical (minus 55U/G)",
+    "correct composition",
+    "failed prediction",
+    "wrong length",
+    "no prediction",
+]
+STATUS_COLORS = {
+    "identical": "#35607A",
+    "identical (minus 55U/G)": "#639FD3",
+    "correct composition": "#F9BD77",
+    "failed prediction": "#E54A26",
+    "wrong length": "#990000",
+    "no prediction": "#808285",
+}
+
+
+def plot_evaluation(options: EvaluationPlotOptions) -> None:
+    """Plot evaluated results from prediction.
+
+    Parameters
+    ----------
+    options : EvaluationPlotOptions
+        Options for evaluation plot read by parser.
+
+    """
+    results = pl.read_csv(options.input, separator="\t")
+
+    donut_chart = create_donut_plot(data=results)
+    donut_chart.save(options.donut_path)
+
+    layer = create_stacked_barplot(
+        data=results,
+        param=options.evaluation_criterion
+        if options.evaluation_criterion != "default"
+        else "",
+    )
+
+    layer |= create_heatmap(
+        data=results,
+        param=options.evaluation_criterion
+        if options.evaluation_criterion != "default"
+        else "true_len",
+    )
+
+    layer.save(options.bar_path)
+
+
+def create_donut_plot(data: pl.DataFrame) -> alt.Chart:
+    """Create donut plot to represent results.
+
+    Parameters
+    ----------
+    data : pl.DataFrame
+        Evaluation data.
+
+    Returns
+    -------
+    alt.Chart
+        Donut plot over evaluation results.
+
+    """
+    return (
+        alt.Chart(data)
+        .mark_arc(innerRadius=32, outerRadius=50)
+        .encode(
+            theta=alt.Theta("count(result):Q", sort=STATUS_ORDER),
+            color=alt.Color(
+                "result:N",
+                scale=select_scale(order=STATUS_ORDER, colors=STATUS_COLORS),
+            ),
+            order=alt.Order("order:O", sort="descending"),
+            tooltip=["result", "count(result)"],
+        )
+    )
+
+
+def create_stacked_barplot(data: pl.DataFrame, param: str) -> alt.Chart:
+    """Create stacked barplot over prediction status.
+
+    Parameters
+    ----------
+    data : polars.Dataframe
+        Dataframe containing prediction status data.
+    param: str
+        Column name for studied parameter.
+
+    Returns
+    -------
+    altair.Chart
+        Stacked barplot over prediction status.
+
+    """
+    chart = (
+        alt.Chart(
+            data,  # title="Status Assessment"
+        )
+        .mark_bar()
+        .encode(
+            x=select_x_axis(param=param),
+            y=alt.Y("count(result):Q", sort=STATUS_ORDER, title="Number of sequences"),
+            color=alt.Color(
+                "result:N",
+                scale=select_scale(order=STATUS_ORDER, colors=STATUS_COLORS),
+                legend=alt.Legend(
+                    **LEGEND_PARAMS,
+                    orient="left",
+                    title="",  # title="Prediction status"
+                ),
+                sort=STATUS_ORDER,
+            ),
+            order=alt.Order("order:O", sort="descending"),
+            tooltip=["result", "count(result)"],
+        )
+    )
+    return chart
+
+
+def create_heatmap(data: pl.DataFrame, param: str) -> alt.Chart:
+    """Create heatmaps over given column.
+
+    Parameters
+    ----------
+    data : polars.Dataframe
+        Dataframe containing prediction data.
+    param : str
+        Column name of chosen parameter.
+
+    Returns
+    -------
+    altair.Chart
+        Heatmap layer over chosen column.
+
+    """
+    heatmap = (
+        alt.Chart(data)
+        .mark_rect()
+        .encode(
+            alt.X("true_sequence:N", title="Sequence"),
+            alt.Y(f"{param}:N", title=param, sort="descending"),
+            alt.Color(
+                "result:N",
+                scale=select_scale(order=STATUS_ORDER, colors=STATUS_COLORS),
+            ),
+            tooltip=["true_sequence", "pred_sequence", param, "result"],
+        )
+    )
+
+    return heatmap
+
+
+def select_x_axis(param: str) -> alt.X:
+    """Select X-axis for Altair plot based on given parameter.
+
+    Parameters
+    ----------
+    param : str
+        Evaluation parameter.
+
+    Returns
+    -------
+    alt.X
+        X-axis for Altair plot.
+
+    """
+    match param:
+        case "modification_rate":
+            return alt.X("modification_rate:N", title="Modification rate")
+        case "num_replicates":
+            return alt.X("num_replicates:N", title="Number of sequence replicates")
+        case "max_singletons":
+            return alt.X(
+                "max_singletons:N", title="Maximum number of false positive singletons"
+            )
+        case "phantom_rate":
+            return alt.X("phantom_rate:N", title="Phantom rate")
+        case "noise_rate":
+            return alt.X("noise_rate:N", title="Noise rate")
+        case "intensity_cutoff":
+            return alt.X("intensity_cutoff:N", title="Intensity cutoff percentile")
+        case "lp_timeout_long":
+            return alt.X("lp_timeout_long:N", title="Timeout (full LP) ")
+        case "lp_timeout_short":
+            return alt.X("lp_timeout_short:N", title="Timeout (reduced LP) ")
+        case _:
+            return alt.X("true_len:N", title="Sequence length")

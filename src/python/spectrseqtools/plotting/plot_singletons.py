@@ -1,4 +1,6 @@
-from pathlib import Path
+# -*- coding: utf-8 -*-
+"""Plotting of singletons detected during preprocessing."""
+
 from typing import Set
 
 import altair as alt
@@ -8,23 +10,27 @@ import yaml
 from spectrseqtools.dataclasses import Sequence
 from spectrseqtools.file_settings import load_alphabet
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
-from spectrseqtools.parsers import PreprocessingOptions
+from spectrseqtools.parsers import PreprocessingOptions, SingletonPlotOptions
+from spectrseqtools.plotting import HISTOGRAM_WIDTH
 from spectrseqtools.preprocessing.preprocessing import Preprocessor
 
-HISTOGRAM_WIDTH = 850
 
-
-def plot_singletons(
-    preprocessing_options: PreprocessingOptions, scan_dir: Path
-) -> pl.DataFrame:
+def plot_singletons(options: SingletonPlotOptions) -> None:
     """Plot singletons in all scans that contain all matches.
 
     Returns
     -------
-    scan_dir : Path
+    options : SingletonPlotOptions
+        Options for singleton plot read by parser.
 
     """
-    preprocessor = Preprocessor(options=preprocessing_options)
+    preprocessor = Preprocessor(
+        options=PreprocessingOptions(
+            input=options.input,
+            meta=options.meta,
+            alphabet=options.alphabet,
+        )
+    )
     alphabet = NucleotideAlphabet.from_file(
         error=preprocessor.error, input_path=preprocessor.file_settings.alphabet_path
     ).to_dataframe()
@@ -62,12 +68,33 @@ def plot_singletons(
     for scan_idx, scan_data in enumerate(valid_scans):
         scan_plot = plot_scan(data=scan_data, true_nucs=true_nucleosides, masses=masses)
         total_plot &= scan_plot
-        scan_plot.configure_view(strokeWidth=0).save(scan_dir / f"scan_{scan_idx}.html")
+        scan_plot.configure_view(strokeWidth=0).save(
+            options.scan_dir / f"scan_{scan_idx}.html"
+        )
 
-    return total_plot.configure_view(strokeWidth=0)
+    total_plot.configure_view(strokeWidth=0).save(options.output_path)
 
 
-def plot_scan(data: pl.DataFrame, true_nucs: Set[str], masses):
+def plot_scan(
+    data: pl.DataFrame, true_nucs: Set[str], masses: pl.DataFrame
+) -> alt.Chart:
+    """Plot scan containing all detected singletons.
+
+    Parameters
+    ----------
+    data : pl.DataFrame
+        Polars dataframe containing scan data.
+    true_nucs : Set[str]
+        Set of names of all nucleotides truly contained in underlying sequence.
+    masses : pl.DataFrame
+        Polars dataframe containing nucleotides.
+
+    Returns
+    -------
+    alt.Chart
+        Combined Altair plot of all histograms with singletons marked by category.
+
+    """
     # Select highest measured intensity peak
     max_intensity = data["intensity"].max()
 
@@ -138,6 +165,23 @@ def plot_scan(data: pl.DataFrame, true_nucs: Set[str], masses):
 
 
 def plot_histogram(data: pl.DataFrame, color: str, singleton: bool) -> alt.Chart:
+    """Plot histogram with one category of singletons marked.
+
+    Parameters
+    ----------
+    data : pl.DataFrame
+        Polars dataframe containing scan data.
+    color : str
+        Name of color for marks.
+    singleton : bool
+        Flag whether current data contains singletons to mark.
+
+    Returns
+    -------
+    alt.Chart
+        Altair histogram with one singleton category marked.
+
+    """
     # Create histogram for scan data
     chart = (
         alt.Chart(data)
