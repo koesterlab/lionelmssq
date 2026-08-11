@@ -15,6 +15,28 @@ from spectrseqtools.enums import (
 
 
 @dataclass
+class CustomMetadataSimulationOptions(ddargparse.OptionsBase):
+    """Simulation of meta information for custom sequence."""
+
+    sequence: str = field(
+        metadata={"help": "Underlying custom sequence."},
+    )
+    output_dir: Path = field(
+        metadata={
+            "help": "Output directory.",
+        },
+    )
+    start_tag: float = field(
+        default=555.1294,
+        metadata={"help": "Mass of 5'-tag of sequence."},
+    )
+    end_tag: float = field(
+        default=455.1491,
+        metadata={"help": "Mass of 3'-tag of sequence."},
+    )
+
+
+@dataclass
 class FragmentSimulationOptions(ddargparse.OptionsBase):
     """Simulation of random fragments."""
 
@@ -63,6 +85,7 @@ class FragmentSimulationOptions(ddargparse.OptionsBase):
 class SimulationOptions(ddargparse.OptionsBase):
     """Simulation of random data imitating preprocessing results."""
 
+    custom: CustomMetadataSimulationOptions | None
     fragments: FragmentSimulationOptions | None
 
 
