@@ -38,14 +38,10 @@ def simulate_fragments(options: FragmentSimulationOptions) -> None:
     # Initialize config dict
     config = literal_eval(options.config)
 
-    # Build meta dict
-    true_sequence = Sequence.from_str(options.true_seq).sequence
-    meta = {
-        "identity": "simulated data",
-        "3_prime_tag": config["3_prime_tag"],
-        "5_prime_tag": config["5_prime_tag"],
-        "true_sequence": "".join(true_sequence),
-    }
+    # Read metadata
+    with open(options.input, "r", encoding="utf-8") as f:
+        meta = yaml.safe_load(f)
+    true_sequence = Sequence.from_str(meta["true_sequence"]).sequence
 
     # Build dict with extra masses
     extra_mass_dict = build_extra_mass_dict(

@@ -43,6 +43,9 @@ class FragmentSimulationOptions(ddargparse.OptionsBase):
     elements: Path = field(
         metadata={"help": "Path to file with element-mass information in CSV format."},
     )
+    input: Path = field(
+        metadata={"help": "Path to YAML with meta information."},
+    )
     fragments: Path = field(
         metadata={"help": "Path to file with simulated fragments in TSV format."},
     )
@@ -50,7 +53,7 @@ class FragmentSimulationOptions(ddargparse.OptionsBase):
         metadata={"help": "Path to file with simulated singleton information."},
     )
     meta: Path = field(
-        metadata={"help": "Path to YAML with meta information for simulation results."},
+        metadata={"help": "Path to YAML with updated meta information."},
     )
     true_seq: str = field(
         metadata={"help": "Underlying true sequence."},
