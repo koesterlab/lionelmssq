@@ -145,7 +145,7 @@ def initialize_parsers(file_path):
             )
     return options, error, ms1_deconvoluter, ms2_deconvoluter
 
-def identify_tic_peaks(raw_file_read):
+def identify_tic_peaks(raw_file_read, start_time, end_time):
     raw_file_read.reset()
     raw_file_read.make_iterator(grouped=False)
 
@@ -167,16 +167,21 @@ def identify_tic_peaks(raw_file_read):
     max_idx, _ = find_peaks(total_intensities)
 
     peak_times = scan_times[max_idx]
-    return peak_times
+    if start_time is not None and end_time is not None:
+        return peak_times[(peak_times >= start_time) & (peak_times <= end_time)]
+    else:
+        return peak_times
 
 def generate_ms1_windows(raw_file_read, 
                          options, 
                          ms1_deconvoluter, 
-                         delta_time_window = 0.4
+                         delta_time_window = 0.4,
+                         start_time = None,
+                         end_time = None
                          ):
     
     ms1_to_ms2_idx = ms1_to_ms2_dict(raw_file_read)
-    peak_times = identify_tic_peaks(raw_file_read)
+    peak_times = identify_tic_peaks(raw_file_read, start_time, end_time)
 
     raw_file_read.reset()
     raw_file_read.make_iterator(grouped=True)
@@ -575,7 +580,9 @@ def pre_process_multiplexing(
         file_path,
         three_prime_tag,
         five_prime_tag,
-        delta_time_window
+        delta_time_window,
+        start_time = None,
+        end_time = None
         ):
 
     raw_file_read = initialize_raw_file_iterator(str(file_path))
@@ -601,7 +608,9 @@ def pre_process_multiplexing(
         raw_file_read, 
         options, 
         ms1_deconvoluter, 
-        delta_time_window
+        delta_time_window,
+        start_time,
+        end_time
     )
 
     df_window_info = adduct_detection(
