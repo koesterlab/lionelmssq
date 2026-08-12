@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.0](https://github.com/spectrseq/spectrseqtools/compare/v0.2.1...v0.3.0) (2026-08-12)
+
+
+### Features
+
+* add subcommands for plotting ([#72](https://github.com/spectrseq/spectrseqtools/issues/72)) ([cdf7ca0](https://github.com/spectrseq/spectrseqtools/commit/cdf7ca0f808febce3e4e0e9c33e996f30a0df582))
+* add subcommands for postprocessing ([#74](https://github.com/spectrseq/spectrseqtools/issues/74)) ([7b6a7e0](https://github.com/spectrseq/spectrseqtools/commit/7b6a7e0aa62b4d869a4d31efc83281687f284dcb))
+* add subcommands for simulation ([#75](https://github.com/spectrseq/spectrseqtools/issues/75)) ([0fcd406](https://github.com/spectrseq/spectrseqtools/commit/0fcd4065928ce8a92b41184f8c1bee62337085e5))
+
 ## [0.2.1](https://github.com/spectrseq/spectrseqtools/compare/v0.2.0...v0.2.1) (2026-07-25)
 
 
