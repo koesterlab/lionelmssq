@@ -93,17 +93,8 @@ def ms1_to_ms2_dict(raw_file_read):
     
     return ms1_to_ms2_idx
 
-def initialize_parsers(file_path):
-    options = PreprocessingOptions(
-            input=file_path,
-            meta = None,
-            output_dir=None,
-            alphabet=None,
-            ms1_charge_range=None,
-            ms2_charge_range=None,
-            min_intensity=None
-        )
-
+def initialize_parsers(options):
+    
     error = ErrorCalculator.with_metric(
                 tolerance=options.tolerance,
                 decimal_places=options.num_decimal_places,
@@ -577,7 +568,7 @@ def metafile_dict(
     }
 
 def pre_process_multiplexing(
-        file_path,
+        options,
         three_prime_tag,
         five_prime_tag,
         delta_time_window,
@@ -585,6 +576,7 @@ def pre_process_multiplexing(
         end_time = None
         ):
 
+    file_path = options.preprocessing.input
     raw_file_read = initialize_raw_file_iterator(str(file_path))
     sample_name = file_path.stem
 
@@ -599,7 +591,7 @@ def pre_process_multiplexing(
         error, 
         ms1_deconvoluter, 
         ms2_deconvoluter
-     ) = initialize_parsers(file_path)
+     ) = initialize_parsers(options.preprocessing)
 
     (
         df_window_info, 
