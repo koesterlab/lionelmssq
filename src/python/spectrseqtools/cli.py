@@ -16,6 +16,7 @@ from spectrseqtools.preprocessing.preprocessing import Preprocessor
 from spectrseqtools.simulation.simulate_fragments import simulate_fragments
 from spectrseqtools.simulation.simulate_metadata import (
     simulate_metadata_for_custom_sequence,
+    simulate_metadata_for_random_sequences,
 )
 
 
@@ -28,6 +29,8 @@ def main():
     if options.simulation is not None:
         if options.simulation.custom is not None:
             simulate_metadata_for_custom_sequence(options=options.simulation.custom)
+        if options.simulation.random is not None:
+            simulate_metadata_for_random_sequences(options=options.simulation.random)
         if options.simulation.fragments is not None:
             simulate_fragments(options=options.simulation.fragments)
 
