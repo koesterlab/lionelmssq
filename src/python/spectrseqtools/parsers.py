@@ -55,9 +55,6 @@ class FragmentSimulationOptions(ddargparse.OptionsBase):
     meta: Path = field(
         metadata={"help": "Path to YAML with updated meta information."},
     )
-    true_seq: str = field(
-        metadata={"help": "Underlying true sequence."},
-    )
     num_replicates: int = field(
         metadata={"help": "Number of copies of true sequence used for fragmentation."},
     )
@@ -75,12 +72,6 @@ class FragmentSimulationOptions(ddargparse.OptionsBase):
     )
     config: str = field(
         metadata={"help": "Configurations for parameters outside of comparison study."},
-    )
-    output_dir: Path | None = field(
-        default=None,
-        metadata={
-            "help": "Output directory (to get seed).",
-        },
     )
 
 

@@ -26,22 +26,17 @@ def simulate_fragments(options: FragmentSimulationOptions) -> None:
         Options for fragment simulation read by parser.
 
     """
-    if options.output_dir is None:
-        seed = 0
-    else:
-        with open(options.output_dir / "seed.txt", "r", encoding="utf-8") as seed_file:
-            seed = int(seed_file.readline().rstrip("\n"))
+    # Read metadata
+    with open(options.input, "r", encoding="utf-8") as f:
+        meta = yaml.safe_load(f)
+    true_sequence = Sequence.from_str(meta["true_sequence"]).sequence
+    seed = meta.get("seed", 0)
 
     # Initialize random-number generator
     rng = np.random.default_rng(seed=seed)
 
     # Initialize config dict
     config = literal_eval(options.config)
-
-    # Read metadata
-    with open(options.input, "r", encoding="utf-8") as f:
-        meta = yaml.safe_load(f)
-    true_sequence = Sequence.from_str(meta["true_sequence"]).sequence
 
     # Build dict with extra masses
     extra_mass_dict = build_extra_mass_dict(
