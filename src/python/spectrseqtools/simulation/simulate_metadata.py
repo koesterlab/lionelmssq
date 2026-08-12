@@ -1,7 +1,11 @@
+# -*- coding: utf-8 -*-
+"""Simulation of metadata for random and custom sequences."""
+
 import random
+from pathlib import Path
+from typing import Tuple
 
 import yaml
-from pathlib import Path
 
 from spectrseqtools.parsers import (
     CustomMetadataSimulationOptions,
@@ -9,7 +13,17 @@ from spectrseqtools.parsers import (
 )
 
 
-def simulate_metadata_for_custom_sequence(options: CustomMetadataSimulationOptions):
+def simulate_metadata_for_custom_sequence(
+    options: CustomMetadataSimulationOptions,
+) -> None:
+    """Simulate metadata for given custom sequence.
+
+    Parameters
+    ----------
+    options : CustomMetadataSimulationOptions
+        Options for metadata simulation read by parser.
+
+    """
     # Initialize metadata
     seq = options.sequence
     meta = {
@@ -25,7 +39,17 @@ def simulate_metadata_for_custom_sequence(options: CustomMetadataSimulationOptio
         yaml.safe_dump(meta, f)
 
 
-def simulate_metadata_for_random_sequences(options: RandomMetadataSimulationOptions):
+def simulate_metadata_for_random_sequences(
+    options: RandomMetadataSimulationOptions,
+) -> None:
+    """Simulate metadata for random sequences.
+
+    Parameters
+    ----------
+    options : RandomMetadataSimulationOptions
+        Options for metadata simulation read by parser.
+
+    """
     random.seed(options.global_seed)
     sequences = [
         generate_random_sequence_and_seed_pair(
@@ -56,7 +80,26 @@ def simulate_metadata_for_random_sequences(options: RandomMetadataSimulationOpti
 
 def generate_random_sequence_and_seed_pair(
     seq_len: int, modification_rate: float, modifications: Path | None
-):
+) -> Tuple[str, int]:
+    """Generate pairs of random sequences and seeds.
+
+    Parameters
+    ----------
+    seq_len : int
+        Length of sequence to generate.
+    modification_rate : float
+        Modification rate to use for sequence generation.
+    modifications : Path | None
+        Path to nucleotide alphabet to be used for generation.
+
+    Returns
+    -------
+    str
+        Randomly generated sequence.
+    int
+        Randomly generated seed.
+
+    """
     # If no modifications are given, simulate over unmodified bases only
     if modifications is None:
         return "".join(
@@ -64,7 +107,7 @@ def generate_random_sequence_and_seed_pair(
         ), random.choice(range(10000))
 
     # Read modifications from file
-    with open(modifications, "r") as file:
+    with open(modifications, "r", encoding="utf-8") as file:
         lines = file.readlines()[1:]
     modified_nucleoside_names = [
         line.split("\t")[0]
