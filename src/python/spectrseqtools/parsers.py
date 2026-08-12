@@ -37,6 +37,44 @@ class CustomMetadataSimulationOptions(ddargparse.OptionsBase):
 
 
 @dataclass
+class RandomMetadataSimulationOptions(ddargparse.OptionsBase):
+    """Simulation of meta information for random sequences."""
+
+    num_sequences: int = field(
+        metadata={"help": "Number of sequences for which to generate metadata."},
+    )
+    output_dir: Path = field(
+        metadata={
+            "help": "Output directory.",
+        },
+    )
+    start_tag: float = field(
+        default=555.1294,
+        metadata={"help": "Mass of 5'-tag of sequence."},
+    )
+    end_tag: float = field(
+        default=455.1491,
+        metadata={"help": "Mass of 3'-tag of sequence."},
+    )
+    sequence_length: int = field(
+        default=-1,
+        metadata={"help": "Desired sequence length (random if set to -1)."},
+    )
+    modification_rate: float = field(
+        default=0.1,
+        metadata={"help": "Number of sequences for which to generate metadata."},
+    )
+    alphabet: Path | None = field(
+        default=None,
+        metadata={"help": "Path to file containing nucleotide alphabet."},
+    )
+    global_seed: int | None = field(
+        default=None,
+        metadata={"help": "Global random seed used to generate all random values."},
+    )
+
+
+@dataclass
 class FragmentSimulationOptions(ddargparse.OptionsBase):
     """Simulation of random fragments."""
 
@@ -80,6 +118,7 @@ class SimulationOptions(ddargparse.OptionsBase):
     """Simulation of random data imitating preprocessing results."""
 
     custom: CustomMetadataSimulationOptions | None
+    random: RandomMetadataSimulationOptions | None
     fragments: FragmentSimulationOptions | None
 
 
