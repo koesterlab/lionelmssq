@@ -517,7 +517,7 @@ class RawFragments:
 
         return cls(fragments=fragments)
 
-    #TODO: Combine this with the from_file function above
+    # TODO: Combine this with the from_file function above
     @classmethod
     def from_dataframe(cls, fragments: pl.DataFrame) -> Self:
         """

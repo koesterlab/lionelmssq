@@ -162,7 +162,7 @@ class NucleotideAlphabet:
             ],
         )
 
-    #TODO: Combine this with the from_file function above
+    # TODO: Combine this with the from_file function above
     @classmethod
     def from_dataframe(
         cls,
