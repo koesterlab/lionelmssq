@@ -98,71 +98,10 @@ class NucleotideAlphabet:
         # Read nucleoside masses from file
         masses = load_alphabet(input_path=input_path)
 
-        # Set mass for phosphate link between bases
-        phosphate_link = (
-            ELEMENT_MASSES["P"] + 2 * ELEMENT_MASSES["O"] - ELEMENT_MASSES["H+"]
+        return cls.from_dataframe(
+            modification_rate=modification_rate, error=error, masses=masses
         )
 
-        # Rename monoisotopic mass to nucleoside mass
-        masses = masses.rename({"monoisotopic_mass": "nucleoside_mass"})
-
-        # Add phosphate backbone to gain nucleotide masses
-        masses = masses.with_columns(
-            pl.col("nucleoside_mass").add(phosphate_link).alias("nucleotide_mass")
-        )
-
-        # Add new columns for singleton m/z values (subtract one proton
-        # from nucleotide) and integer masses for the DP algorithm
-        masses = masses.with_columns(
-            pl.col("nucleotide_mass").add(-ELEMENT_MASSES["H+"]).alias("singleton_mz"),
-            (pl.col("nucleotide_mass") / error.precision)
-            .round(0)
-            .cast(pl.Int64)
-            .alias("integer_mass"),
-        )
-
-        # Round masses
-        masses = masses.with_columns(
-            pl.col("nucleoside_mass").round(error.decimal_places),
-            pl.col("nucleotide_mass").round(error.decimal_places),
-            pl.col("singleton_mz").round(error.decimal_places),
-        )
-
-        # Group nucleotides by their mass, select a representative for each
-        # group, and aggregate them into a list of equal-mass nucleotides
-        masses = masses.group_by("integer_mass", maintain_order=True).agg(
-            pl.col("id").first().alias("representative"),
-            pl.col("nucleoside_mass").max(),
-            pl.col("nucleotide_mass").max(),
-            pl.col("singleton_mz").max(),
-            pl.col("id").unique().alias("id_list"),
-            pl.col("modification_rate").max(),
-            pl.col("is_modification").all(),
-        )
-
-        # Adapt individual modification rates to global one (and update columns)
-        new_df = (
-            masses.sort("integer_mass")
-            .rename({"id_list": "names"})
-            .drop("representative")
-            .with_columns(
-                pl.when(pl.col("is_modification"))
-                .then(pl.col("modification_rate").clip(upper_bound=modification_rate))
-                .otherwise(pl.col("modification_rate"))
-            )
-        )
-
-        # Return alphabet over all nucleotides that can occur in a sequence
-        return cls(
-            alphabet=[
-                NucleotideMass(**row)
-                for row in new_df.filter(pl.col("modification_rate") > 0).rows(
-                    named=True
-                )
-            ],
-        )
-
-    # TODO: Combine this with the from_file function above
     @classmethod
     def from_dataframe(
         cls,
@@ -183,7 +122,6 @@ class NucleotideAlphabet:
             Dataframe with nucleoside information.
 
         """
-
         # Set mass for phosphate link between bases
         phosphate_link = (
             ELEMENT_MASSES["P"] + 2 * ELEMENT_MASSES["O"] - ELEMENT_MASSES["H+"]

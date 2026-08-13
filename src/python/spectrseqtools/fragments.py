@@ -504,32 +504,19 @@ class RawFragments:
         # Read raw fragments from file
         fragments = pl.read_csv(input_path, separator="\t")
 
-        # If no intensity is given, set it to -1 by default
-        if "intensity" not in fragments.columns:
-            fragments = fragments.with_columns(pl.lit(-1).alias("intensity"))
+        return cls.from_dataframe(fragments=fragments)
 
-        # Rename 'neutral_mass' values from deisotoping to 'observed_mass'
-        if "neutral_mass" in fragments.columns:
-            fragments = fragments.rename({"neutral_mass": "observed_mass"})
-
-        # Index fragments
-        fragments = fragments.with_row_index("fragment_index")
-
-        return cls(fragments=fragments)
-
-    # TODO: Combine this with the from_file function above
     @classmethod
     def from_dataframe(cls, fragments: pl.DataFrame) -> Self:
         """
-        Initialize raw fragments from a dataframe.
+        Initialize raw fragments from dataframe.
 
         Parameters
         ----------
         fragments : pl.DataFrame
-            Path to input fragments as a dataframe.
+            Dataframe containing raw fragments.
 
         """
-
         # If no intensity is given, set it to -1 by default
         if "intensity" not in fragments.columns:
             fragments = fragments.with_columns(pl.lit(-1).alias("intensity"))
