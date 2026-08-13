@@ -4,8 +4,8 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import polars as pl
 import ddargparse
+import polars as pl
 
 from spectrseqtools.enums import (
     AveragineBackbone,

@@ -1,32 +1,29 @@
+from collections import defaultdict
+from dataclasses import dataclass
+from pathlib import Path
+
+import altair as alt
 import ms_deisotope as ms_ditp
 import numpy as np
 import polars as pl
 import tqdm as tqdm
 from clr_loader import get_mono
-from dataclasses import dataclass
-from pathlib import Path
+from pyxdameraulevenshtein import normalized_damerau_levenshtein_distance_seqs
+from scipy.signal import find_peaks
 
+from spectrseqtools.error_calculator import ErrorCalculator
+from spectrseqtools.file_settings import PreprocessingFileSettings
+from spectrseqtools.parsers import PreprocessingOptions
+from spectrseqtools.preprocessing.deconvolution import MS1Deconvoluter, MS2Deconvoluter
 from spectrseqtools.preprocessing.preprocessing import (
     Preprocessor,
-    set_averagine,
     initialize_raw_file_iterator,
+    set_averagine,
 )
-from spectrseqtools.preprocessing.deconvolution import MS1Deconvoluter, MS2Deconvoluter
 from spectrseqtools.preprocessing.singleton_identification import (
     RawPeakList,
     SingletonBoundaries,
 )
-from spectrseqtools.parsers import PreprocessingOptions
-from spectrseqtools.file_settings import PreprocessingFileSettings
-from spectrseqtools.error_calculator import ErrorCalculator
-
-from collections import defaultdict
-
-from pyxdameraulevenshtein import normalized_damerau_levenshtein_distance_seqs
-
-from scipy.signal import find_peaks
-
-import altair as alt
 
 rt = get_mono()
 

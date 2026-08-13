@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """Prediction of sequence and fragments."""
 
-from typing import Set, Tuple
 from pathlib import Path
+from typing import Set, Tuple
+
 import polars as pl
 import yaml
 

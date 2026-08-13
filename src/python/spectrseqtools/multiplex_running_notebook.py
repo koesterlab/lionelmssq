@@ -1,28 +1,24 @@
 # %%
-import tqdm as tqdm
-import polars as pl
-
-import spectrseqtools.multiplexing as multiplexing
-from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
-from spectrseqtools.parsers import Options, PreprocessingOptions, PredictionOptions
-from spectrseqtools.prediction.prediction import Predictor
-from spectrseqtools.error_calculator import ErrorCalculator
-from spectrseqtools.file_settings import DEFAULT_ALPHABET_PATH
-from spectrseqtools.enums import SolverType
-from spectrseqtools.dataclasses import Sequence
-
-from loguru import logger
+import os
 from pathlib import Path
 
-import numpy as np
-
-import yaml
-import os
-
-from Bio import SeqIO
-from pyxdameraulevenshtein import normalized_damerau_levenshtein_distance_seqs
-import numpy as np
 import altair as alt
+import numpy as np
+import polars as pl
+import tqdm as tqdm
+import yaml
+from Bio import SeqIO
+from loguru import logger
+from pyxdameraulevenshtein import normalized_damerau_levenshtein_distance_seqs
+
+import spectrseqtools.multiplexing as multiplexing
+from spectrseqtools.dataclasses import Sequence
+from spectrseqtools.enums import SolverType
+from spectrseqtools.error_calculator import ErrorCalculator
+from spectrseqtools.file_settings import DEFAULT_ALPHABET_PATH
+from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
+from spectrseqtools.parsers import Options, PredictionOptions, PreprocessingOptions
+from spectrseqtools.prediction.prediction import Predictor
 
 # %%
 # REFERENCE SEQUENCE INPUT
