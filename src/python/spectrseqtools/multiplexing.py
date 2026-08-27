@@ -1,16 +1,20 @@
+import os
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Tuple
 
 import ms_deisotope as ms_ditp
 import numpy as np
 import polars as pl
 import tqdm as tqdm
+import yaml
 from clr_loader import get_mono
 from scipy.signal import find_peaks
 
 from spectrseqtools.error_calculator import ErrorCalculator
 from spectrseqtools.file_settings import PreprocessingFileSettings
+from spectrseqtools.parsers import MixturePreprocessingOptions
 from spectrseqtools.preprocessing.deconvolution import MS1Deconvoluter, MS2Deconvoluter
 from spectrseqtools.preprocessing.preprocessing import (
     Preprocessor,
@@ -510,32 +514,21 @@ def generate_singletons_and_fragments(
     return fragments, singletons
 
 
-def metafile_dict(sample_name, three_prime_tag, five_prime_tag):
-    return {
-        "identity": sample_name,
-        "3_prime_tag": three_prime_tag,
-        "5_prime_tag": five_prime_tag,
-    }
-
-
 def pre_process_multiplexing(
-    options,
-    three_prime_tag,
-    five_prime_tag,
-    delta_time_window,
-    start_time=None,
-    end_time=None,
-):
-
-    file_path = options.preprocessing.input
+    options: MixturePreprocessingOptions,
+) -> Tuple[pl.DataFrame, pl.DataFrame, dict]:
+    start_time = options.min_time
+    end_time = options.max_time
+    delta_time_window = options.window_size
+    file_path = options.input
     raw_file_read = initialize_raw_file_iterator(str(file_path))
-    sample_name = file_path.stem
 
-    meta = metafile_dict(sample_name, three_prime_tag, five_prime_tag)
+    with open(options.meta, "r", encoding="utf-8") as f:
+        meta = yaml.safe_load(f)
+        if "true_sequence" not in meta:
+            meta["true_sequence"] = "".join(meta["true_sequences"])
 
-    (options, error, ms1_deconvoluter, ms2_deconvoluter) = initialize_parsers(
-        options.preprocessing
-    )
+    (options, error, ms1_deconvoluter, ms2_deconvoluter) = initialize_parsers(options)
 
     (df_window_info, ms2_scan_cache) = generate_ms1_windows(
         raw_file_read,
@@ -545,13 +538,12 @@ def pre_process_multiplexing(
         start_time,
         end_time,
     )
-
     df_window_info = adduct_detection(df_window_info, error, detect_adducts=True)
+
+    default_singletons = generate_global_singletons(options, error)
 
     fragment_list = []
     singleton_list = []
-
-    default_singletons = generate_global_singletons(options, error)
 
     for grp_number in tqdm.tqdm(
         df_window_info["ms1_mass_group"].unique(),
@@ -576,195 +568,18 @@ def pre_process_multiplexing(
     fragments = pl.concat(fragment_list)  # , how="diagonal_relaxed")
     singletons = pl.concat(singleton_list)  # , how="diagonal_relaxed")
 
+    # Save all pre-processing files in preprocessing.output_dir
+    if not os.path.exists(options.output_dir):
+        os.makedirs(options.output_dir)
+
+    singletons.write_csv(
+        options.output_dir / "fragments.singletons.tsv",
+        separator="\t",
+    )
+    fragments.write_csv(options.output_dir / "fragments.tsv", separator="\t")
+    with open(
+        options.output_dir / "fragments.preprocessed.meta.yaml", "w", encoding="utf-8"
+    ) as f:
+        yaml.dump(meta, f)
+
     return fragments, singletons, meta
-
-
-# #POST PROCESSING
-# def targ_pred_pairing(x):
-#     if x[0] in x[1]:
-#         return (x[0], x[0])
-#     else:
-#         return (x[0], x[1][0])
-
-# def compare_prediction_to_target(prediction_raw, target_sequence, is_backward = False):
-#     if is_backward:
-#         prediction_raw = prediction_raw[::-1]
-#     prediction_len = len(prediction_raw)
-#     prediction_string = "".join(masses.filter(pl.col("id") == n).select("encoding").item() for n in prediction_raw)
-
-#     target_strings = []
-
-#     for i in range(len(target_sequence)-prediction_len+1):
-#         target_sequence_window = target_sequence[i:i+prediction_len]
-#         targ_string = ""
-
-#         for p in zip(prediction_raw, target_sequence_window):
-#             pair = targ_pred_pairing(p)
-#             targ_string += masses.filter(pl.col("id") == pair[1])["encoding"].item()
-#         target_strings.append(targ_string)
-
-#     distances = normalized_damerau_levenshtein_distance_seqs(prediction_string, target_strings)
-#     min_distance_idx = np.argmin(distances)
-
-#     min_distance = distances[min_distance_idx]
-#     start_pos = min_distance_idx
-#     end_pos = min_distance_idx + prediction_len
-
-#     return (prediction_string, target_strings[min_distance_idx], min_distance, start_pos, end_pos, is_backward)
-
-# def align_prediction_results(prediction_vals, target_sequence, alignment_score_threshold = 0):
-
-#     alignment_vals = []
-
-#     for i in tqdm.tqdm(prediction_vals, desc = "Calculating alignment scores"):
-
-#         prediction_raw = i[2]
-
-#         if len(prediction_raw) == 0:
-#             continue
-
-#         forward_comparison = compare_prediction_to_target(prediction_raw, target_sequence, is_backward = False)
-#         backward_comparison = compare_prediction_to_target(prediction_raw, target_sequence, is_backward = True)
-
-#         final_comparison = forward_comparison if forward_comparison[2] <= backward_comparison[2] else backward_comparison
-
-#         if final_comparison[2] > alignment_score_threshold:
-#             continue
-
-#         alignment_vals.append(final_comparison+(i[0], i[1], i[3], i[4]))
-
-#     df_alignment = pl.DataFrame(alignment_vals, schema = ["predicted_string", "best_matching_target_string", "normalized_damerau_levenshtein_distance", "target_start_pos", "target_end_pos", "is_backward", "group", "intact_mass", "min_scan_time", "max_scan_time"], orient = "row")
-
-#     return df_alignment
-
-# def interpret_alignment_results(df_alignment, target_sequence):
-
-#     match_rows = []
-
-#     for r in df_alignment.iter_rows(named = True):
-#         pred_string = r["predicted_string"]
-#         # if r["is_backward"]:
-#         #     pred_string = pred_string[::-1]
-#         target_string = r["best_matching_target_string"]
-#         start_pos = r["target_start_pos"]
-#         intact_mass = r["intact_mass"]
-#         min_scan_time = r["min_scan_time"]
-#         max_scan_time = r["max_scan_time"]
-
-#         for i, (p, t) in enumerate(zip(pred_string, target_string)):
-#             if p == t:
-#                 status = "match"
-#             else:
-#                 status = "mismatch"
-#             match_rows.append({"group": r["group"],
-#                             "score": r["normalized_damerau_levenshtein_distance"],
-#                             "target_position": start_pos+i,
-#                             "predicted_base": p,
-#                             "target_base": t,
-#                             "status": status,
-#                             "intact_mass": intact_mass,
-#                             "min_scan_time": min_scan_time,
-#                             "max_scan_time": max_scan_time})
-
-#     for b in range(len(target_sequence)):
-#         targ_base = masses.filter(pl.col("id") == target_sequence[b][0])["encoding"].item()
-#         match_rows.append({"group": -1,
-#                             "score": 0,
-#                             "target_position": b,
-#                             "predicted_base": targ_base,
-#                             "target_base": targ_base,
-#                             "status": "match",
-#                             "intact_mass": np.nan,
-#                             "min_scan_time": np.nan,
-#                             "max_scan_time": np.nan})
-
-#     df_expanded_alignment = pl.DataFrame(match_rows)
-
-#     df_expanded_alignment = df_expanded_alignment.sort(["group", "target_position"])
-
-#     df_expanded_alignment = df_expanded_alignment.with_columns([
-#         pl.col("status").shift(-1).over("group").alias("next_status"),
-#         pl.col("predicted_base").shift(-1).over("group").alias("next_pred"),
-#         pl.col("target_base").shift(-1).over("group").alias("next_target"),
-#     ])
-
-#     df_expanded_alignment = df_expanded_alignment.with_columns(
-#         (
-#             (pl.col("status") == "mismatch") &
-#             (pl.col("next_status") == "mismatch") &
-#             (pl.col("predicted_base") == pl.col("next_target")) &
-#             (pl.col("next_pred") == pl.col("target_base"))
-#         ).alias("is_swap_start")
-#     )
-
-#     df_expanded_alignment = df_expanded_alignment.with_columns(
-#         (
-#             pl.col("is_swap_start") |
-#             pl.col("is_swap_start").shift(1).over("group")
-#         ).alias("is_swap")
-#     )
-
-#     df_expanded_alignment = df_expanded_alignment.with_columns(
-#         pl.when(pl.col("is_swap"))
-#         .then(pl.lit("swap"))
-#         .otherwise(pl.col("status"))
-#         .alias("status")
-#     )
-
-#     df_expanded_alignment = df_expanded_alignment.drop([
-#         "next_status",
-#         "next_pred",
-#         "next_target",
-#         "is_swap_start",
-#         "is_swap"
-#     ])
-
-#     df_expanded_alignment = df_expanded_alignment.join(
-#         masses.select(["encoding", "canonical_name"]),
-#         left_on="predicted_base",
-#         right_on="encoding",
-#         how="left"
-#     )
-
-#     df_expanded_alignment = df_expanded_alignment.sort(["score", "group", "target_position"])
-#     group_to_pos = {group: i for i,group in enumerate(df_expanded_alignment["group"].unique(maintain_order = True).to_list())}
-#     df_expanded_alignment = df_expanded_alignment.with_columns(pos = pl.col("group").replace(group_to_pos))
-
-#     return df_expanded_alignment
-
-# def plot_interpreted_alignment(df_expanded_alignment):
-
-#     color_scale = alt.Scale(
-#         domain=["match", "mismatch", "swap"],
-#         range=["black", "red", "gold"]
-#     )
-
-#     chart = alt.Chart(df_expanded_alignment).mark_text(
-#         fontSize=14,
-#         font="monospace"
-#     ).encode(
-#         x=alt.X("target_position:Q", title="Base position", scale=alt.Scale(
-#                 domain=[df_expanded_alignment["target_position"].min() - 1, df_expanded_alignment["target_position"].max() + 1],
-#                 padding=0
-#             ),),
-#         y=alt.Y("pos:N"),
-#         text="predicted_base:N",
-#         color=alt.Color("status:N", scale=color_scale),
-#         tooltip=["group", "target_position", "score", "predicted_base", "target_base", "status", "canonical_name", "intact_mass", "min_scan_time", "max_scan_time"]
-#     ).properties(
-#         width=850,
-#         height=400
-#     )
-
-#     return chart
-
-# def post_processing_alignment(prediction_vals, sample_name, target_sequence, alignment_score_threshold = 0, save_file = False):
-
-#     df_alignment = align_prediction_results(prediction_vals, target_sequence, alignment_score_threshold)
-#     df_expanded_alignment = interpret_alignment_results(df_alignment, target_sequence)
-#     chart = plot_interpreted_alignment(df_expanded_alignment)
-#     chart.show()
-#     if save_file:
-#         chart.save(sample_name + '_output.html')
-
-#     return df_expanded_alignment

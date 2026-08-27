@@ -6,18 +6,20 @@ import altair as alt
 import numpy as np
 import polars as pl
 import tqdm as tqdm
-import yaml
 from Bio import SeqIO
 from loguru import logger
 from pyxdameraulevenshtein import normalized_damerau_levenshtein_distance_seqs
 
-import spectrseqtools.multiplexing as multiplexing
 from spectrseqtools.dataclasses import Sequence
 from spectrseqtools.enums import SolverType
 from spectrseqtools.error_calculator import ErrorCalculator
 from spectrseqtools.file_settings import DEFAULT_ALPHABET_PATH
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
-from spectrseqtools.parsers import Options, PredictionOptions, PreprocessingOptions
+from spectrseqtools.parsers import (
+    Options,
+    PredictionOptions,
+    PreprocessingOptions,
+)
 from spectrseqtools.prediction.prediction import Predictor
 
 # %%
@@ -119,34 +121,7 @@ options = Options(
     postprocessing=None,
     plotting=None,
 )
-# %%
-# PRE-PROCESSING CELL
-(fragments, singletons, meta) = multiplexing.pre_process_multiplexing(
-    options=options,
-    three_prime_tag=three_prime_tag,
-    five_prime_tag=five_prime_tag,
-    delta_time_window=delta_time_window,
-    start_time=start_time,
-    end_time=end_time,
-)
 
-# Save all pre-processing files in preprocessing.output_dir
-if not os.path.exists(options.preprocessing.output_dir):
-    os.makedirs(options.preprocessing.output_dir)
-
-singletons.write_csv(
-    str(options.preprocessing.output_dir) + "preprocessed.singletons.tsv",
-    separator="\t",
-)
-fragments.write_csv(
-    str(options.preprocessing.output_dir) + "preprocessed.fragments.tsv", separator="\t"
-)
-with open(
-    str(options.preprocessing.output_dir) + "preprocessed.meta.yaml",
-    "w",
-    encoding="utf-8",
-) as f:
-    yaml.dump(meta, f)
 
 # %%
 # PREDICTION CELL
