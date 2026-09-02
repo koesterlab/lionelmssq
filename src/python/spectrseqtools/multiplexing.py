@@ -2,7 +2,7 @@ import os
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Tuple
+from typing import List, Tuple
 
 import ms_deisotope as ms_ditp
 import numpy as np
@@ -10,11 +10,13 @@ import polars as pl
 import tqdm as tqdm
 import yaml
 from clr_loader import get_mono
+from loguru import logger
 from scipy.signal import find_peaks
 
 from spectrseqtools.error_calculator import ErrorCalculator
 from spectrseqtools.file_settings import PreprocessingFileSettings
-from spectrseqtools.parsers import MixturePreprocessingOptions
+from spectrseqtools.parsers import MixturePreprocessingOptions, PredictionOptions
+from spectrseqtools.prediction.prediction import Predictor
 from spectrseqtools.preprocessing.deconvolution import MS1Deconvoluter, MS2Deconvoluter
 from spectrseqtools.preprocessing.preprocessing import (
     Preprocessor,
@@ -583,3 +585,76 @@ def pre_process_multiplexing(
         yaml.dump(meta, f)
 
     return fragments, singletons, meta
+
+
+def predict_multiplexing(options: PredictionOptions) -> List[str]:
+    # Load fragments and singletons
+    fragments = pl.read_csv(options.fragments, separator="\t")
+    singletons = pl.read_csv(options.alphabet, separator="\t")
+    sample_name = options.sequence_name
+
+    # Generate list of MS1 group numbers (number of peaks with fragments)
+    grp_number_fragments = set(fragments["ms1_mass_group"].unique().to_list())
+    grp_number_singletons = set(singletons["ms1_mass_group"].unique().to_list())
+
+    # Check if fragments and singletons contain the same group numbers
+    if grp_number_fragments == grp_number_singletons:
+        grp_numbers = grp_number_fragments
+    else:
+        raise Exception("MS1 mass groups in fragments and singletons are not equal!")
+
+    # Main prediction loop
+    all_raw_fragments = []
+    all_prediction_fragments = []
+    all_fasta_dicts = {}
+
+    for grp_number in tqdm.tqdm(grp_numbers, desc="Performing prediction"):
+        fragments_i = fragments.filter(pl.col("ms1_mass_group") == grp_number)
+        alphabet_i = singletons.filter(pl.col("ms1_mass_group") == grp_number)
+
+        # Update prediction options
+        options.fragments = fragments_i
+        options.alphabet = alphabet_i
+        options.sequence_name = f"{sample_name}.{grp_number}"
+
+        print(f"\n\n--- Group {grp_number} -----------------------\n")
+
+        # Main prediction function
+        logger.disable("spectrseqtools.fragments")
+        try:
+            raw_fragments, prediction_fragments, fasta_dict = Predictor(
+                options
+            ).predict()
+            prediction_fragments = prediction_fragments.with_columns(
+                pl.lit(grp_number).alias("ms1_mass_group")
+            )
+        except NotImplementedError:
+            continue
+
+        all_raw_fragments.append(raw_fragments)
+        all_prediction_fragments.append(prediction_fragments)
+        all_fasta_dicts.update(fasta_dict)
+
+    # Collect and concatenate prediction fragments
+    raw_fragments = pl.concat(all_raw_fragments)
+    prediction_fragments = pl.concat(all_prediction_fragments)
+
+    # Save all prediction files in output_dir
+    if not os.path.exists(options.output_dir):
+        os.makedirs(options.output_dir)
+
+    sequences = []
+    with open(str(options.sequence_prediction), "w") as f:
+        for header, sequence in all_fasta_dicts.items():
+            sequences.append(sequence)
+            f.write(f"{header}\n")
+            f.write(f"{sequence}\n")
+
+    raw_fragments.write_csv(
+        options.output_dir / "fragments.standard_unit_fragments.tsv",
+        separator="\t",
+    )
+
+    prediction_fragments.write_csv(options.fragment_predictions, separator="\t")
+
+    return sequences
