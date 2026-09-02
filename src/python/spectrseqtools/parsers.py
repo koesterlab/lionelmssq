@@ -689,6 +689,7 @@ class MixtureOptions(ddargparse.OptionsBase):
     """Analysis of complex mixtures."""
 
     preprocessing: MixturePreprocessingOptions | None
+    prediction: PredictionOptions | None
 
 
 @dataclass
