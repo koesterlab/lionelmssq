@@ -14,3 +14,4 @@ true_sequences:
   - "UAGCGUUUGAUGAUC"
 skip_preprocessing: True
 skip_prediction: True
+skip_postprocessing: True

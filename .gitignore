@@ -6,6 +6,9 @@ poetry.lock
 *gurobi.log
 *.code-workspace
 tests/self_test*
+tests/*testcases/*/alignment.html
+tests/*testcases/*/df_alignment.csv
+tests/*testcases/*/df_expanded_alignment.csv
 tests/*testcases/*/fragments.plot.html
 tests/*testcases/*/fragments.plot.end.html
 tests/*testcases/*/fragments.plot.internal.html

@@ -8,9 +8,19 @@ from clr_loader import get_mono
 from spectrseqtools.dataclasses import Sequence
 from spectrseqtools.enums import SolverType
 from spectrseqtools.error_calculator import ErrorCalculator
-from spectrseqtools.multiplexing import pre_process_multiplexing, predict_multiplexing
+from spectrseqtools.multiplexing import (
+    evaluate_multiplexing,
+    plot_multiplexing,
+    pre_process_multiplexing,
+    predict_multiplexing,
+)
 from spectrseqtools.nucleotide_alphabet import NucleotideAlphabet
-from spectrseqtools.parsers import MixturePreprocessingOptions, PredictionOptions
+from spectrseqtools.parsers import (
+    MixturePlottingOptions,
+    MixturePostprocessingOptions,
+    MixturePreprocessingOptions,
+    PredictionOptions,
+)
 
 rt = get_mono()
 
@@ -120,3 +130,38 @@ def test_predict_mixture(testcase):
 
     # Assert whether the sequences match
     assert prediction.sequence == true_seq
+
+
+@pytest.mark.parametrize(
+    "testcase",
+    [tc for tc in _TESTCASES.iterdir()],
+    ids=[tc.name for tc in _TESTCASES.iterdir()],
+)
+def test_evaluate_mixture(testcase):
+    # Read additional parameter from meta file
+    base_path = Path(_TESTCASES / f"{testcase}")
+    with open(base_path / "fragments.meta.yaml", "r") as f:
+        meta = yaml.safe_load(f)
+        if "true_sequence" not in meta:
+            meta["true_sequence"] = "".join(meta["true_sequences"])
+
+    if meta.get("skip_postprocessing"):
+        pytest.skip("Testcase is marked as skipped in meta.yaml")
+
+    evaluate_multiplexing(
+        MixturePostprocessingOptions(
+            prediction=base_path / "fragments.prediction.fasta",
+            fragments=base_path / "fragments.tsv",
+            meta=base_path / "fragments.meta.yaml",
+            output_path=base_path,
+        )
+    )
+
+    plot_multiplexing(
+        MixturePlottingOptions(
+            input=base_path / "df_expanded_alignment.csv",
+            output_path=base_path / "alignment.html",
+        )
+    )
+
+    assert 2 == 1
