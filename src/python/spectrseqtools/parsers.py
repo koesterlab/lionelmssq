@@ -705,12 +705,27 @@ class MixturePostprocessingOptions(ddargparse.OptionsBase):
 
 
 @dataclass
+class MixturePlottingOptions(ddargparse.OptionsBase):
+    """Plotting of predicted sequences in complex mixture."""
+
+    input: Path = field(
+        metadata={"help": "Path to TSV file containing evaluation results."},
+    )
+    output_path: Path = field(
+        metadata={
+            "help": "Output path for HTML with plotted evaluation results.",
+        },
+    )
+
+
+@dataclass
 class MixtureOptions(ddargparse.OptionsBase):
     """Analysis of complex mixtures."""
 
     preprocessing: MixturePreprocessingOptions | None
     prediction: PredictionOptions | None
     postprocessing: MixturePostprocessingOptions | None
+    plotting: MixturePlottingOptions | None
 
 
 @dataclass
