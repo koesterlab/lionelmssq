@@ -685,11 +685,32 @@ class MixturePreprocessingOptions(ddargparse.OptionsBase):
 
 
 @dataclass
+class MixturePostprocessingOptions(ddargparse.OptionsBase):
+    """Evaluation of prediction results of mixtures."""
+
+    prediction: Path = field(
+        metadata={"help": "Path to prediction file in FASTA format."},
+    )
+    fragments: Path = field(
+        metadata={"help": "Path to fragment file in TSV format"},
+    )
+    meta: Path = field(
+        metadata={"help": "Path to YAML file with meta information."},
+    )
+    output_path: Path = field(
+        metadata={
+            "help": "Output path for evaluation results in CSV format.",
+        },
+    )
+
+
+@dataclass
 class MixtureOptions(ddargparse.OptionsBase):
     """Analysis of complex mixtures."""
 
     preprocessing: MixturePreprocessingOptions | None
     prediction: PredictionOptions | None
+    postprocessing: MixturePostprocessingOptions | None
 
 
 @dataclass
