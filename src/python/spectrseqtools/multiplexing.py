@@ -19,6 +19,7 @@ from spectrseqtools.dataclasses import Sequence
 from spectrseqtools.error_calculator import ErrorCalculator
 from spectrseqtools.file_settings import PreprocessingFileSettings, load_alphabet
 from spectrseqtools.parsers import (
+    MixturePlottingOptions,
     MixturePostprocessingOptions,
     MixturePreprocessingOptions,
     PredictionOptions,
@@ -980,3 +981,46 @@ def evaluate_multiplexing(options: MixturePostprocessingOptions) -> None:
         options.output_path / "df_expanded_alignment.csv", separator=","
     )
     return df_expanded_alignment
+
+
+def plot_multiplexing(options: MixturePlottingOptions) -> None:
+    df_expanded_alignment = pl.read_csv(options.input, separator=",")
+    color_scale = alt.Scale(
+        domain=["match", "mismatch", "swap"], range=["black", "red", "gold"]
+    )
+    chart = (
+        alt.Chart(df_expanded_alignment)
+        .mark_text(fontSize=14, font="monospace")
+        .encode(
+            x=alt.X(
+                "target_position:Q",
+                title="Base position",
+                scale=alt.Scale(
+                    domain=[
+                        df_expanded_alignment["target_position"].min() - 1,
+                        df_expanded_alignment["target_position"].max() + 1,
+                    ],
+                    padding=0,
+                ),
+            ),
+            y=alt.Y("pos:N"),
+            text="predicted_base:N",
+            color=alt.Color("status:N", scale=color_scale),
+            tooltip=[
+                "group",
+                "target_position",
+                "score",
+                "predicted_base",
+                "target_base",
+                "status",
+                "canonical_name",
+                "intact_mass",
+                "min_window_time",
+                "max_window_time",
+                "adduct_type",
+            ],
+        )
+        .properties(width=850, height=400)
+    )
+
+    chart.save(options.output_path)

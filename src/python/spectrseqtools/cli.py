@@ -3,6 +3,7 @@
 
 from spectrseqtools.multiplexing import (
     evaluate_multiplexing,
+    plot_multiplexing,
     pre_process_multiplexing,
     predict_multiplexing,
 )
@@ -80,3 +81,5 @@ def main():
             predict_multiplexing(options=options.mixture.prediction)
         if options.mixture.postprocessing is not None:
             evaluate_multiplexing(options=options.mixture.postprocessing)
+        if options.mixture.plotting is not None:
+            plot_multiplexing(options=options.mixture.plotting)
