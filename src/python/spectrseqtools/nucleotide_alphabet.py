@@ -98,6 +98,30 @@ class NucleotideAlphabet:
         # Read nucleoside masses from file
         masses = load_alphabet(input_path=input_path)
 
+        return cls.from_dataframe(
+            modification_rate=modification_rate, error=error, masses=masses
+        )
+
+    @classmethod
+    def from_dataframe(
+        cls,
+        error: ErrorCalculator,
+        masses: pl.DataFrame,
+        modification_rate: float = 0.5,
+    ) -> Self:
+        """
+        Initialize nucleotide alphabet from file.
+
+        Parameters
+        ----------
+        modification_rate : float
+            Maximum percentage of modification in sequence.
+        error : ErrorCalculator
+            Error calculator.
+        masses : pl.DataFrame | None
+            Dataframe with nucleoside information.
+
+        """
         # Set mass for phosphate link between bases
         phosphate_link = (
             ELEMENT_MASSES["P"] + 2 * ELEMENT_MASSES["O"] - ELEMENT_MASSES["H+"]

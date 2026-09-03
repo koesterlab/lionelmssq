@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import ddargparse
+import polars as pl
 
 from spectrseqtools.enums import (
     AveragineBackbone,
@@ -250,7 +251,7 @@ class PreprocessingOptions(ddargparse.OptionsBase):
 class PredictionOptions(ddargparse.OptionsBase):
     """Prediction of sequence based on preprocessed fragments"""
 
-    fragments: Path = field(
+    fragments: Path | pl.DataFrame = field(
         metadata={"help": "Path to TSV table of observed fragments"},
     )
     meta: Path = field(
@@ -269,7 +270,7 @@ class PredictionOptions(ddargparse.OptionsBase):
     sequence_name: str = field(
         metadata={"help": "Header in FASTA output file."},
     )
-    alphabet: Path | None = field(
+    alphabet: Path | pl.DataFrame | None = field(
         default=None,
         metadata={
             "help": "Path to file containing nucleotide alphabet. If preprocessing was "
@@ -543,6 +544,191 @@ class PostprocessingOptions(ddargparse.OptionsBase):
 
 
 @dataclass
+class MixturePreprocessingOptions(ddargparse.OptionsBase):
+    """Preprocessing for complex mixtures."""
+
+    input: Path = field(
+        metadata={"help": "Path to input file in RAW format"},
+    )
+    meta: Path = field(
+        metadata={"help": "Path to YAML with meta information."},
+    )
+    output_dir: Path = field(
+        metadata={
+            "help": "Output directory.",
+        },
+    )
+    alphabet: Path | None = field(
+        default=None,
+        metadata={"help": "Path to file containing nucleotide alphabet."},
+    )
+    window_size: float = field(
+        default=0.2,
+        metadata={
+            "help": "Window size to consider for peak selection.",
+        },
+    )
+    min_time: float | None = field(
+        default=None,
+        metadata={
+            "help": "First time point to consider for peak selection (optional).",
+        },
+    )
+    max_time: float | None = field(
+        default=None,
+        metadata={
+            "help": "Last time point to consider for peak selection (optional).",
+        },
+    )
+    min_intensity: float | None = field(
+        default=None,
+        metadata={
+            "help": "Minimum intensity required for peak consideration "
+            "(used in ms_deisotope package as 'minimum_intensity')."
+        },
+    )
+    tolerance: float = field(
+        default=10e-6,
+        metadata={"help": "Error tolerance to consider masses identical."},
+    )
+    num_decimal_places: int = field(
+        default=3,
+        metadata={"help": "Number of considered decimal places for precision."},
+    )
+    boundary_factor: int = field(
+        default=2,
+        metadata={"help": "Factor for scaling theoretical singleton boundaries."},
+    )
+    min_precursor_charge: int = field(
+        default=3,
+        metadata={"help": "Minimum MS1 charge to consider associated MS2 scans."},
+    )
+    isotopic_shift_factor: int = field(
+        default=10,
+        metadata={"help": "Factor for scaling isotopic shift for precursors."},
+    )
+    intact_mass_cutoff_factor: float = field(
+        default=0.4,
+        metadata={
+            "help": "Factor for maximum mass to function as lower bound on intact mass."
+        },
+    )
+    envelope_min_score: float = field(
+        default=150.0,
+        metadata={
+            "help": "Minimum accepted score during envelope fitting "
+            "(used in ms_deisotope package as 'minimum_score')."
+        },
+    )
+    envelope_error_tol: float = field(
+        default=0.02,
+        metadata={
+            "help": "Error tolerance for envelopes during fitting "
+            "(used in ms_deisotope package as 'mass_error_tolerance')."
+        },
+    )
+    averagine_backbone: AveragineBackbone = field(
+        default=AveragineBackbone.PHOSPHATE,
+        metadata={
+            "help": "Backbone considered in Averagine model "
+            "(used in ms_deisotope package)."
+        },
+    )
+    max_missed_peaks: int = field(
+        default=0,
+        metadata={
+            "help": "Maximum number of missed peaks tolerated in envelope fitting "
+            "(used in ms_deisotope package)."
+        },
+    )
+    scale_method: str = field(
+        default="sum",
+        metadata={
+            "help": "Scale method for intensity values (used in ms_deisotope package)."
+        },
+    )
+    peak_error_tol: float = field(
+        default=2e-5,
+        metadata={
+            "help": "Error tolerance for each individual peak "
+            "(used in ms_deisotope package as 'error_tolerance')."
+        },
+    )
+    ms1_charge_range: tuple[int, int] | None = field(
+        default=None,
+        metadata={
+            "help": "Charge range considered for MS1 deconvolution "
+            "(used in ms_deisotope package)."
+        },
+    )
+    ms2_charge_range: tuple[int, int] | None = field(
+        default=None,
+        metadata={
+            "help": "Charge range considered for MS2 deconvolution "
+            "(used in ms_deisotope package)."
+        },
+    )
+    ms1_truncate_after: float = field(
+        default=0.95,
+        metadata={
+            "help": "Percentage of included isotopic patterns for MS1 scans "
+            "(used in ms_deisotope package)."
+        },
+    )
+    ms2_truncate_after: float = field(
+        default=0.9,
+        metadata={
+            "help": "Percentage of included isotopic patterns for MS2 scans "
+            "(used in ms_deisotope package)."
+        },
+    )
+
+
+@dataclass
+class MixturePostprocessingOptions(ddargparse.OptionsBase):
+    """Evaluation of prediction results of mixtures."""
+
+    prediction: Path = field(
+        metadata={"help": "Path to prediction file in FASTA format."},
+    )
+    fragments: Path = field(
+        metadata={"help": "Path to fragment file in TSV format"},
+    )
+    meta: Path = field(
+        metadata={"help": "Path to YAML file with meta information."},
+    )
+    output_path: Path = field(
+        metadata={
+            "help": "Output path for evaluation results in CSV format.",
+        },
+    )
+
+
+@dataclass
+class MixturePlottingOptions(ddargparse.OptionsBase):
+    """Plotting of predicted sequences in complex mixture."""
+
+    input: Path = field(
+        metadata={"help": "Path to TSV file containing evaluation results."},
+    )
+    output_path: Path = field(
+        metadata={
+            "help": "Output path for HTML with plotted evaluation results.",
+        },
+    )
+
+
+@dataclass
+class MixtureOptions(ddargparse.OptionsBase):
+    """Analysis of complex mixtures."""
+
+    preprocessing: MixturePreprocessingOptions | None
+    prediction: PredictionOptions | None
+    postprocessing: MixturePostprocessingOptions | None
+    plotting: MixturePlottingOptions | None
+
+
+@dataclass
 class Options(ddargparse.OptionsBase):
     """
     De novo prediction of RNA sequences
@@ -560,3 +746,4 @@ class Options(ddargparse.OptionsBase):
     prediction: PredictionOptions | None
     postprocessing: PostprocessingOptions | None
     plotting: PlottingOptions | None
+    mixture: MixtureOptions | None

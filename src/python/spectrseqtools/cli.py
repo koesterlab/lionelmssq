@@ -1,6 +1,12 @@
 # -*- coding: utf-8 -*-
 """Module for command-line interface."""
 
+from spectrseqtools.multiplexing import (
+    evaluate_multiplexing,
+    plot_multiplexing,
+    pre_process_multiplexing,
+    predict_multiplexing,
+)
 from spectrseqtools.parsers import Options
 from spectrseqtools.plotting.plot_evaluation import plot_evaluation
 from spectrseqtools.plotting.plot_fragments import plot_fragments
@@ -66,3 +72,14 @@ def main():
 
         if options.plotting.run_statistics is not None:
             plot_run_statistics(options=options.plotting.run_statistics)
+
+    # Analyze mixtures
+    if options.mixture is not None:
+        if options.mixture.preprocessing is not None:
+            pre_process_multiplexing(options=options.mixture.preprocessing)
+        if options.mixture.prediction is not None:
+            predict_multiplexing(options=options.mixture.prediction)
+        if options.mixture.postprocessing is not None:
+            evaluate_multiplexing(options=options.mixture.postprocessing)
+        if options.mixture.plotting is not None:
+            plot_multiplexing(options=options.mixture.plotting)

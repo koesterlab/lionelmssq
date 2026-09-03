@@ -1,0 +1,17 @@
+identity: 2026-04-24_SJH_RNAmix_10_1,1,_ms2_17,20,25
+3_prime_tag: 455.1491
+5_prime_tag: 555.1294
+true_sequences:
+  - "GAUUGUCGUG"
+  - "GCGUAUCCGGCGAGGUGACG"
+  - "AUGAUGAUGAUGAUGAUGAU"
+  - "UGCCUCACCAC9AUCAUCCUG"
+  - "UGCCAUUAUACAUGA"
+  - "CCA0AGUGCUAA0UAAAUUGCC"
+  - "UUUCAAGGGAGUUACUUCAG"
+  - "UUAGCCCG0GA"
+  - "GAU0CUAGAUC"
+  - "UAGCGUUUGAUGAUC"
+skip_preprocessing: True
+skip_prediction: True
+skip_postprocessing: False

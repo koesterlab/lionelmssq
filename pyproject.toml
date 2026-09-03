@@ -34,6 +34,7 @@ dependencies = [
     "tqdm >=4.67.1,<5.0",
     "scikit-learn >=1.7.2,<2.0",
     "dbscan1d >=0.2.3,<0.3",
+    "pyxDamerauLevenshtein >=1.10.0,<1.11",
 ]
 
 [project.scripts]

@@ -96,13 +96,14 @@ def set_matrix_path(num_places: int, compression_rate: int) -> Path:
 class FileSettings:
     """Class for file-related settings."""
 
-    input_path: Path
+    input_path: Path | pl.DataFrame
     meta_path: Path
-    alphabet_path: Path | None = None
+    alphabet_path: Path | pl.DataFrame | None = None
     output_dir: Path | None = None
 
     def __post_init__(self):
-        path = self.input_path.resolve()
+        if isinstance(self.input_path, Path):
+            path = self.input_path.resolve()
         if self.output_dir is None:
             self.output_dir = path.parent
 

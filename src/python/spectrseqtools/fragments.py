@@ -504,6 +504,19 @@ class RawFragments:
         # Read raw fragments from file
         fragments = pl.read_csv(input_path, separator="\t")
 
+        return cls.from_dataframe(fragments=fragments)
+
+    @classmethod
+    def from_dataframe(cls, fragments: pl.DataFrame) -> Self:
+        """
+        Initialize raw fragments from dataframe.
+
+        Parameters
+        ----------
+        fragments : pl.DataFrame
+            Dataframe containing raw fragments.
+
+        """
         # If no intensity is given, set it to -1 by default
         if "intensity" not in fragments.columns:
             fragments = fragments.with_columns(pl.lit(-1).alias("intensity"))
